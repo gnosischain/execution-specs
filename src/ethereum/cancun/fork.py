@@ -18,6 +18,7 @@ from typing import List, Optional, Tuple
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
+from eth_abi import decode, encode
 
 from ethereum.crypto.hash import Hash32, keccak256
 from ethereum.exceptions import (
@@ -86,6 +87,7 @@ SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 MAX_BLOB_GAS_PER_BLOCK = U64(786432)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
@@ -815,29 +817,33 @@ def process_transaction(
     block_output.block_logs += tx_output.logs
 
 
-def process_withdrawals(
+def process_block_rewards(
     block_env: vm.BlockEnvironment,
-    block_output: vm.BlockOutput,
-    withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
-    Increase the balance of the withdrawing account.
+    Call BlockRewardAuRaBase contract reward function
+    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
 
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=DEPOSIT_CONTRACT_ADDRESS,
+        # reward(address[],uint16[]) with empty lists
+        data=bytes.fromhex(
+            "f91c2898"
+            "0000000000000000000000000000000000000000000000000000000000000020"
+            "0000000000000000000000000000000000000000000000000000000000000040"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        ),
+    )
+    rewards_addresses, rewards_amounts = decode(['address[]','uint256[]'], out.return_data)
+
     def increase_recipient_balance(recipient: Account) -> None:
-        recipient.balance += wd.amount * U256(10**9)
+        recipient.balance += amount * U256(10**9)
 
-    for i, wd in enumerate(withdrawals):
-        trie_set(
-            block_output.withdrawals_trie,
-            rlp.encode(Uint(i)),
-            rlp.encode(wd),
-        )
-
-        modify_state(block_env.state, wd.address, increase_recipient_balance)
-
-        if account_exists_and_is_empty(block_env.state, wd.address):
-            destroy_account(block_env.state, wd.address)
+    for address, amount in zip(rewards_addresses, rewards_amounts):
+        modify_state(block_env.state, address, increase_recipient_balance)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
