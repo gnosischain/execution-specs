@@ -87,6 +87,9 @@ SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
+DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 MAX_BLOB_GAS_PER_BLOCK = U64(786432)
@@ -815,6 +818,29 @@ def process_transaction(
     )
 
     block_output.block_logs += tx_output.logs
+
+
+def process_withdrawals(
+    block_env: vm.BlockEnvironment,
+    withdrawals: Tuple[Withdrawal, ...],
+) -> None:
+    """
+    Make a system call to the deposit contract to process withdrawals
+    """
+    amounts = []
+    addresses = []
+    for w in withdrawals:
+        amounts.append(int(w.amount))
+        addresses.append(w.address)
+    payload = encode(
+        ["uint256", "uint64[]", "address[]"],
+        [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
+    )
+    process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=DEPOSIT_CONTRACT_ADDRESS,
+        data=bytes.fromhex("79d0c0bc") + payload
+    )
 
 
 def process_block_rewards(
