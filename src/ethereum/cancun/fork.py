@@ -90,6 +90,9 @@ BEACON_ROOTS_ADDRESS = hex_to_address(
 DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
 )
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 MAX_BLOB_GAS_PER_BLOCK = U64(786432)
@@ -853,7 +856,7 @@ def process_block_rewards(
 
     out = process_unchecked_system_transaction(
         block_env=block_env,
-        target_address=DEPOSIT_CONTRACT_ADDRESS,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         # reward(address[],uint16[]) with empty lists
         data=bytes.fromhex(
             "f91c2898"
