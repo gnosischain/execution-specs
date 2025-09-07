@@ -742,12 +742,6 @@ def apply_body(
 
     process_unchecked_system_transaction(
         block_env=block_env,
-        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
-        data=abi.encode(withdrawals),
-    )
-
-    process_unchecked_system_transaction(
-        block_env=block_env,
         target_address=BEACON_ROOTS_ADDRESS,
         data=block_env.parent_beacon_block_root,
     )
