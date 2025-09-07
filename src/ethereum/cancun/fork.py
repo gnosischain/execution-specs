@@ -842,7 +842,7 @@ def process_withdrawals(
     process_unchecked_system_transaction(
         block_env=block_env,
         target_address=DEPOSIT_CONTRACT_ADDRESS,
-        data=bytes.fromhex("79d0c0bc") + payload
+        data=bytes.fromhex("79d0c0bc") + payload,
     )
 
 
@@ -866,7 +866,9 @@ def process_block_rewards(
             "0000000000000000000000000000000000000000000000000000000000000000"
         ),
     )
-    rewards_addresses, rewards_amounts = decode(['address[]','uint256[]'], out.return_data)
+    rewards_addresses, rewards_amounts = decode(
+        ["address[]", "uint256[]"], out.return_data
+    )
 
     def increase_recipient_balance(recipient: Account) -> None:
         recipient.balance += amount * U256(10**9)
