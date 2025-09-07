@@ -15,10 +15,10 @@ Entry point for the Ethereum specification.
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from eth_abi import decode, encode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
-from eth_abi import decode, encode
 
 from ethereum.crypto.hash import Hash32, keccak256
 from ethereum.exceptions import (
