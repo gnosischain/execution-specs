@@ -467,6 +467,9 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
+    # TODO: Copy function from cancun once correct
+    process_block_rewards(block_env)
+
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 

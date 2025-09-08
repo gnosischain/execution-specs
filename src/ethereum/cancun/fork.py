@@ -661,6 +661,8 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
+    process_block_rewards(block_env)
+
     process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BEACON_ROOTS_ADDRESS,
@@ -670,7 +672,7 @@ def apply_body(
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 
-    process_withdrawals(block_env, block_output, withdrawals)
+    process_withdrawals(block_env, withdrawals)
 
     return block_output
 
