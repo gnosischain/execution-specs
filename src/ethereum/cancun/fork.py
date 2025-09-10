@@ -93,6 +93,9 @@ DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
 BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
 )
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 MAX_BLOB_GAS_PER_BLOCK = U64(786432)
@@ -802,6 +805,18 @@ def process_transaction(
         )
     elif account_exists_and_is_empty(block_env.state, block_env.coinbase):
         destroy_account(block_env.state, block_env.coinbase)
+
+    fee_collector_balance_after = get_account(
+        block_env.state, FEE_COLLECTOR_ADDRESS
+    ).balance + U256(tx.gas * block_env.base_fee_per_gas)
+    if fee_collector_balance_after != 0:
+        set_account_balance(
+            block_env.state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance_after,
+        )
+    elif account_exists_and_is_empty(block_env.state, FEE_COLLECTOR_ADDRESS):
+        destroy_account(block_env.state, FEE_COLLECTOR_ADDRESS)
 
     for address in tx_output.accounts_to_delete:
         destroy_account(block_env.state, address)
