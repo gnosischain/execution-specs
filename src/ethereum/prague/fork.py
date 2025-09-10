@@ -109,6 +109,9 @@ CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS = hex_to_address(
 HISTORY_STORAGE_ADDRESS = hex_to_address(
     "0x0000F90827F1C53a10cb7A02335B175320002935"
 )
+BLOB_FEE_COLLECTOR = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
 HISTORY_SERVE_WINDOW = 8192
 
 
@@ -879,6 +882,10 @@ def process_transaction(
     set_account_balance(
         block_env.state, sender, U256(sender_balance_after_gas_fee)
     )
+
+    def increase_collector_balance(recipient: Account) -> None:
+        recipient.balance += blob_gas_fee
+    modify_state(block_env.state, BLOB_FEE_COLLECTOR, increase_collector_balance)
 
     access_list_addresses = set()
     access_list_storage_keys = set()
