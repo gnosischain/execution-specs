@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted-ghr, size-xl-x64]
+    runs-on: "ubuntu-latest"
     strategy:
       matrix:
         py: [ "3.11", "pypy3.11" ]
