@@ -9,6 +9,12 @@ Introduction
 ------------
 
 Entry point for the Ethereum specification.
+
+Gnosis diff
+-----------
+
+   - Added logic to collect base fee into a collector address
+   - Added system call into block rewards contract that may mint tokens
 """
 
 from dataclasses import dataclass
@@ -700,6 +706,17 @@ def process_transaction(
         block_env.coinbase,
         coinbase_balance_after_mining_fee,
     )
+
+    # transfer base fee to fee collector address
+    fee_collector_balance_after = get_account(
+        block_env.state, FEE_COLLECTOR_ADDRESS
+    ).balance + U256(tx.gas * block_env.base_fee_per_gas)
+    if fee_collector_balance_after != 0:
+        set_account_balance(
+            block_env.state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance_after,
+        )
 
     for address in tx_output.accounts_to_delete:
         destroy_account(block_env.state, address)
