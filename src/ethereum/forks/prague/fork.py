@@ -9,6 +9,14 @@ Introduction
 ------------
 
 Entry point for the Ethereum specification.
+
+Gnosis diff
+-----------
+
+   - Added logic to collect base fee into a collector address
+   - Added system call into block rewards contract that may mint tokens
+   - Modified withdrawals processing to make a system call
+   - Added logic to collect blob fee into a collector address
 """
 
 from dataclasses import dataclass
@@ -96,6 +104,9 @@ DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
 )
 BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
 )
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
@@ -976,6 +987,27 @@ def process_transaction(
         block_env.state,
         block_env.coinbase,
         coinbase_balance_after_mining_fee,
+    )
+
+    # transfer base fee to fee collector address
+    fee_collector_balance_after = get_account(
+        block_env.state, FEE_COLLECTOR_ADDRESS
+    ).balance + U256(tx.gas * block_env.base_fee_per_gas)
+    if fee_collector_balance_after != 0:
+        set_account_balance(
+            block_env.state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance_after,
+        )
+
+    # transfer blob fee to fee collector address
+    blob_fee_collector_balance_after = get_account(
+        block_env.state, BLOB_FEE_COLLECTOR
+    ).balance + U256(blob_gas_fee)
+    set_account_balance(
+        block_env.state,
+        BLOB_FEE_COLLECTOR,
+        blob_fee_collector_balance_after,
     )
 
     for address in tx_output.accounts_to_delete:
