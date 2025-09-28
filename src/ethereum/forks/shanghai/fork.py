@@ -14,6 +14,7 @@ Entry point for the Ethereum specification.
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from eth_abi import decode, encode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
@@ -28,7 +29,10 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 
-from ..cancun.fork import process_block_rewards, process_withdrawals
+from ..cancun.fork import (
+    MAX_FAILED_WITHDRAWALS_TO_PROCESS,
+    encode_block_rewards_system_call
+)
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
 from .bloom import logs_bloom
@@ -58,13 +62,28 @@ from .transactions import (
 )
 from .trie import root, trie_set
 from .utils.message import prepare_message
-from .vm.interpreter import process_message_call
+from .utils.hexadecimal import hex_to_address
+from .vm import Message
+from .vm.interpreter import MessageCallOutput, process_message_call
 
 BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
 GAS_LIMIT_ADJUSTMENT_FACTOR = Uint(1024)
 GAS_LIMIT_MINIMUM = Uint(5000)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
+SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
+DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
+
 
 
 @dataclass
@@ -449,6 +468,100 @@ def make_receipt(
     return encode_receipt(tx, receipt)
 
 
+def process_system_transaction(
+    block_env: vm.BlockEnvironment,
+    target_address: Address,
+    system_contract_code: Bytes,
+    data: Bytes,
+) -> MessageCallOutput:
+    """
+    Process a system transaction with the given code.
+
+    Prefer calling `process_unchecked_system_transaction` unless the contract
+    code has already been read from the state.
+
+    Parameters
+    ----------
+    block_env :
+        The block scoped environment.
+    target_address :
+        Address of the contract to call.
+    system_contract_code :
+        Code of the contract to call.
+    data :
+        Data to pass to the contract.
+
+    Returns
+    -------
+    system_tx_output : `MessageCallOutput`
+        Output of processing the system transaction.
+    """
+    tx_env = vm.TransactionEnvironment(
+        origin=SYSTEM_ADDRESS,
+        gas_price=block_env.base_fee_per_gas,
+        gas=SYSTEM_TRANSACTION_GAS,
+        access_list_addresses=set(),
+        access_list_storage_keys=set(),
+        index_in_block=None,
+        tx_hash=None,
+    )
+
+    system_tx_message = Message(
+        block_env=block_env,
+        tx_env=tx_env,
+        caller=SYSTEM_ADDRESS,
+        target=target_address,
+        gas=SYSTEM_TRANSACTION_GAS,
+        value=U256(0),
+        data=data,
+        code=system_contract_code,
+        depth=Uint(0),
+        current_target=target_address,
+        code_address=target_address,
+        should_transfer_value=False,
+        is_static=False,
+        accessed_addresses=set(),
+        accessed_storage_keys=set(),
+        parent_evm=None,
+    )
+
+    system_tx_output = process_message_call(system_tx_message)
+
+    return system_tx_output
+
+
+def process_unchecked_system_transaction(
+    block_env: vm.BlockEnvironment,
+    target_address: Address,
+    data: Bytes,
+) -> MessageCallOutput:
+    """
+    Process a system transaction without checking if the contract contains code
+    or if the transaction fails.
+
+    Parameters
+    ----------
+    block_env :
+        The block scoped environment.
+    target_address :
+        Address of the contract to call.
+    data :
+        Data to pass to the contract.
+
+    Returns
+    -------
+    system_tx_output : `MessageCallOutput`
+        Output of processing the system transaction.
+    """
+    system_contract_code = get_account(block_env.state, target_address).code
+    return process_system_transaction(
+        block_env,
+        target_address,
+        system_contract_code,
+        data,
+    )
+
+
 def apply_body(
     block_env: vm.BlockEnvironment,
     transactions: Tuple[LegacyTransaction | Bytes, ...],
@@ -626,6 +739,53 @@ def process_transaction(
     )
 
     block_output.block_logs += tx_output.logs
+
+
+def process_withdrawals(
+    block_env: vm.BlockEnvironment,
+    withdrawals: Tuple[Withdrawal, ...],
+) -> None:
+    """
+    Make a system call to the deposit contract to process withdrawals
+    """
+    amounts = []
+    addresses = []
+    for w in withdrawals:
+        amounts.append(int(w.amount))
+        addresses.append(w.address)
+    payload = encode(
+        ["uint256", "uint64[]", "address[]"],
+        [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
+    )
+    process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=DEPOSIT_CONTRACT_ADDRESS,
+        data=bytes.fromhex("79d0c0bc") + payload,
+    )
+
+
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Call BlockRewardAuRaBase contract reward function
+    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    """
+
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        data=encode_block_rewards_system_call()
+    )
+    addresses, amounts = decode(
+        ["address[]", "uint256[]"], out.return_data
+    )
+
+    for address, amount in zip(addresses, amounts, strict=False):
+        balance_after = get_account(
+            block_env.state, address
+        ).balance + U256(amount)
+        set_account_balance(block_env.state, address, balance_after)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
