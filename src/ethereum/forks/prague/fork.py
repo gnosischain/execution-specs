@@ -28,6 +28,7 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 
+from ..cancun.fork import process_block_rewards, process_withdrawals
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
 from .bloom import logs_bloom
@@ -41,7 +42,7 @@ from .exceptions import (
     PriorityFeeGreaterThanMaxFeeError,
     TransactionTypeContractCreationError,
 )
-from .fork_types import Account, Address, Authorization, VersionedHash
+from .fork_types import Address, Authorization, VersionedHash
 from .requests import (
     CONSOLIDATION_REQUEST_TYPE,
     DEPOSIT_REQUEST_TYPE,
@@ -55,7 +56,6 @@ from .state import (
     destroy_account,
     get_account,
     increment_nonce,
-    modify_state,
     set_account_balance,
     state_root,
 )
@@ -891,9 +891,12 @@ def process_transaction(
         block_env.state, sender, U256(sender_balance_after_gas_fee)
     )
 
-    def increase_collector_balance(recipient: Account) -> None:
-        recipient.balance += blob_gas_fee
-    modify_state(block_env.state, BLOB_FEE_COLLECTOR, increase_collector_balance)
+    collector_balance_after = get_account(
+        block_env.state, BLOB_FEE_COLLECTOR
+    ).balance + U256(blob_gas_fee)
+    set_account_balance(
+        block_env.state, BLOB_FEE_COLLECTOR, collector_balance_after
+    )
 
     access_list_addresses = set()
     access_list_storage_keys = set()
