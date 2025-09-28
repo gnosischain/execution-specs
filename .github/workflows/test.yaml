@@ -33,7 +33,7 @@ jobs:
         run: tox -e static
 
   py3:
-    runs-on: [self-hosted-ghr, size-xl-x64]
+    runs-on: ubuntu-latest
     needs: static
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +48,7 @@ jobs:
         run: tox -e py3
 
   pypy3:
-    runs-on: [self-hosted-ghr, size-xl-x64]
+    runs-on: ubuntu-latest
     needs: static
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +65,7 @@ jobs:
           PYPY_GC_MAX: "10G"
 
   json_infra:
-    runs-on: [self-hosted-ghr, size-xl-x64]
+    runs-on: ubuntu-latest
     needs: static
     steps:
       - uses: actions/checkout@v4
@@ -86,7 +86,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   optimized:
-    runs-on: [self-hosted-ghr, size-xl-x64]
+    runs-on: ubuntu-latest
     needs: static
     steps:
       - uses: actions/checkout@v4
