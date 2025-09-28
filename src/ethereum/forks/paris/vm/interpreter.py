@@ -14,7 +14,7 @@ A straightforward interpreter that executes EVM code.
 from dataclasses import dataclass
 from typing import Optional, Set, Tuple
 
-from ethereum_types.bytes import Bytes0
+from ethereum_types.bytes import Bytes, Bytes0
 from ethereum_types.numeric import U256, Uint, ulen
 
 from ethereum.exceptions import EthereumException
@@ -81,8 +81,8 @@ class MessageCallOutput:
     refund_counter: U256
     logs: Tuple[Log, ...]
     accounts_to_delete: Set[Address]
-    output: bytes
     error: Optional[EthereumException]
+    return_data: Bytes
 
 
 def process_message_call(message: Message) -> MessageCallOutput:
@@ -109,7 +109,8 @@ def process_message_call(message: Message) -> MessageCallOutput:
         ) or account_has_storage(block_env.state, message.current_target)
         if is_collision:
             return MessageCallOutput(
-                Uint(0), U256(0), tuple(), set(), b"", AddressCollision()
+                Uint(0), U256(0), tuple(), set(), AddressCollision(),
+                Bytes(b""),
             )
         else:
             evm = process_create_message(message)
@@ -134,8 +135,8 @@ def process_message_call(message: Message) -> MessageCallOutput:
         refund_counter=refund_counter,
         logs=logs,
         accounts_to_delete=accounts_to_delete,
-        output=evm.output,
         error=evm.error,
+        return_data=evm.output,
     )
 
 
