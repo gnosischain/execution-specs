@@ -82,9 +82,6 @@ GAS_LIMIT_MINIMUM = Uint(5000)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
-BEACON_ROOTS_ADDRESS = hex_to_address(
-    "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
-)
 DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
 )
@@ -95,6 +92,9 @@ FEE_COLLECTOR_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
 )
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
+BEACON_ROOTS_ADDRESS = hex_to_address(
+    "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
+)
 MAX_BLOB_GAS_PER_BLOCK = U64(786432)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
 
@@ -886,7 +886,7 @@ def process_block_rewards(
         data=data,
     )
     addresses, amounts = decode(
-        ["address[]", "uint256[]"], out.output
+        ["address[]", "uint256[]"], out.return_data
     )
 
     for address, amount in zip(addresses, amounts, strict=False):

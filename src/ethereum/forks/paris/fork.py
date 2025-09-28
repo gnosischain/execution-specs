@@ -744,7 +744,7 @@ def process_block_rewards(
         data=data,
     )
     addresses, amounts = decode(
-        ["address[]", "uint256[]"], out.output
+        ["address[]", "uint256[]"], out.return_data
     )
 
     for address, amount in zip(addresses, amounts, strict=False):
