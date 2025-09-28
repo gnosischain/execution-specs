@@ -14,6 +14,7 @@ Entry point for the Ethereum specification.
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from eth_abi import decode, encode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
@@ -28,6 +29,12 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 
+from ..cancun.fork import (
+    MAX_FAILED_WITHDRAWALS_TO_PROCESS,
+    DEPOSIT_CONTRACT_ADDRESS,
+    BLOCK_REWARDS_CONTRACT_ADDRESS,
+    encode_block_rewards_system_call
+)
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
 from .bloom import logs_bloom
@@ -56,7 +63,6 @@ from .state import (
     destroy_account,
     get_account,
     increment_nonce,
-    modify_state,
     set_account_balance,
     state_root,
 )
@@ -777,7 +783,7 @@ def apply_body(
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 
-    process_withdrawals(block_env, block_output, withdrawals)
+    process_withdrawals(block_env, withdrawals)
 
     process_general_purpose_requests(
         block_env=block_env,
@@ -999,24 +1005,49 @@ def process_transaction(
 
 def process_withdrawals(
     block_env: vm.BlockEnvironment,
-    block_output: vm.BlockOutput,
     withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
-    Increase the balance of the withdrawing account.
+    Make a system call to the deposit contract to process withdrawals
+    """
+    amounts = []
+    addresses = []
+    for w in withdrawals:
+        amounts.append(int(w.amount))
+        addresses.append(w.address)
+    payload = encode(
+        ["uint256", "uint64[]", "address[]"],
+        [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
+    )
+    process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=DEPOSIT_CONTRACT_ADDRESS,
+        data=bytes.fromhex("79d0c0bc") + payload,
+    )
+
+
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Call BlockRewardAuRaBase contract reward function
+    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
 
-    def increase_recipient_balance(recipient: Account) -> None:
-        recipient.balance += wd.amount * U256(10**9)
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        data=encode_block_rewards_system_call()
+    )
+    addresses, amounts = decode(
+        ["address[]", "uint256[]"], out.return_data
+    )
 
-    for i, wd in enumerate(withdrawals):
-        trie_set(
-            block_output.withdrawals_trie,
-            rlp.encode(Uint(i)),
-            rlp.encode(wd),
-        )
-
-        modify_state(block_env.state, wd.address, increase_recipient_balance)
+    for address, amount in zip(addresses, amounts, strict=False):
+        balance_after = get_account(
+            block_env.state, address
+        ).balance + U256(amount)
+        set_account_balance(block_env.state, address, balance_after)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
