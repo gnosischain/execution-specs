@@ -84,6 +84,16 @@ SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
+DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 MAX_BLOB_GAS_PER_BLOCK = U64(786432)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
@@ -660,6 +670,8 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
+    process_block_rewards(block_env)
+
     process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BEACON_ROOTS_ADDRESS,
@@ -669,7 +681,7 @@ def apply_body(
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 
-    process_withdrawals(block_env, block_output, withdrawals)
+    process_withdrawals(block_env, withdrawals)
 
     return block_output
 
@@ -797,6 +809,16 @@ def process_transaction(
         coinbase_balance_after_mining_fee,
     )
 
+    fee_collector_balance_after = get_account(
+        block_env.state, FEE_COLLECTOR_ADDRESS
+    ).balance + U256(tx.gas * block_env.base_fee_per_gas)
+    if fee_collector_balance_after != 0:
+        set_account_balance(
+            block_env.state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance_after,
+        )
+
     for address in tx_output.accounts_to_delete:
         destroy_account(block_env.state, address)
 
@@ -825,20 +847,53 @@ def process_withdrawals(
     withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
-    Increase the balance of the withdrawing account.
+    Make a system call to the deposit contract to process withdrawals
+    """
+    amounts = []
+    addresses = []
+    for w in withdrawals:
+        amounts.append(int(w.amount))
+        addresses.append(w.address)
+    payload = encode(
+        ["uint256", "uint64[]", "address[]"],
+        [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
+    )
+    process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=DEPOSIT_CONTRACT_ADDRESS,
+        data=bytes.fromhex("79d0c0bc") + payload,
+    )
+
+
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Call BlockRewardAuRaBase contract reward function
+    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
 
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        # reward(address[],uint16[]) with empty lists
+        data=bytes.fromhex(
+            "f91c2898"
+            "0000000000000000000000000000000000000000000000000000000000000020"
+            "0000000000000000000000000000000000000000000000000000000000000040"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        ),
+    )
+    rewards_addresses, rewards_amounts = decode(
+        ["address[]", "uint256[]"], out.return_data
+    )
+
     def increase_recipient_balance(recipient: Account) -> None:
-        recipient.balance += wd.amount * U256(10**9)
+        recipient.balance += amount * U256(10**9)
 
-    for i, wd in enumerate(withdrawals):
-        trie_set(
-            block_output.withdrawals_trie,
-            rlp.encode(Uint(i)),
-            rlp.encode(wd),
-        )
-
-        modify_state(block_env.state, wd.address, increase_recipient_balance)
+    for address, amount in zip(rewards_addresses, rewards_amounts):
+        modify_state(block_env.state, address, increase_recipient_balance)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:

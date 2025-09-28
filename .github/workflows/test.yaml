@@ -63,7 +63,7 @@ jobs:
           uvx --from actionlint-py actionlint
 
   py3:
-    runs-on: [self-hosted-ghr, size-xl-x64]
+    runs-on: ubuntu-latest
     needs: static
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
@@ -84,7 +84,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   pypy3:
-    runs-on: [self-hosted-ghr, size-xl-x64]
+    runs-on: ubuntu-latest
     needs: static
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
@@ -102,7 +102,7 @@ jobs:
           PYPY_GC_MIN: "1G"
 
   json_infra:
-    runs-on: [self-hosted-ghr, size-xl-x64]
+    runs-on: ubuntu-latest
     needs: static
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
@@ -120,7 +120,7 @@ jobs:
         run: tox -e json_infra -- --file-list="${{ steps.get-changed-files.outputs.file_list }}"
 
   optimized:
-    runs-on: [self-hosted-ghr, size-xl-x64]
+    runs-on: ubuntu-latest
     needs: static
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
