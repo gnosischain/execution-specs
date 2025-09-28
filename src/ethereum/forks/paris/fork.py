@@ -14,7 +14,7 @@ Entry point for the Ethereum specification.
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from eth_abi import decode, encode
+from eth_abi import decode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
@@ -29,12 +29,6 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 
-from ..cancun.fork import (
-    encode_block_rewards_system_call,
-    SYSTEM_ADDRESS,
-    SYSTEM_TRANSACTION_GAS,
-    BLOCK_REWARDS_CONTRACT_ADDRESS,
-)
 from . import vm
 from .blocks import Block, Header, Log, Receipt, encode_receipt
 from .bloom import logs_bloom
@@ -63,6 +57,7 @@ from .transactions import (
     validate_transaction,
 )
 from .trie import root, trie_set
+from .utils.hexadecimal import hex_to_address
 from .utils.message import prepare_message
 from .vm import Message
 from .vm.interpreter import MessageCallOutput, process_message_call
@@ -72,6 +67,18 @@ ELASTICITY_MULTIPLIER = Uint(2)
 GAS_LIMIT_ADJUSTMENT_FACTOR = Uint(1024)
 GAS_LIMIT_MINIMUM = Uint(5000)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
+SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
+DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 
 
 @dataclass
@@ -723,10 +730,18 @@ def process_block_rewards(
     https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
 
+    # reward(address[],uint16[]) with empty lists
+    data = bytes.fromhex(
+        "f91c2898"
+        "0000000000000000000000000000000000000000000000000000000000000020"
+        "0000000000000000000000000000000000000000000000000000000000000040"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+    )
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
-        data=encode_block_rewards_system_call()
+        data=data,
     )
     addresses, amounts = decode(
         ["address[]", "uint256[]"], out.output
@@ -737,6 +752,7 @@ def process_block_rewards(
             block_env.state, address
         ).balance + U256(amount)
         set_account_balance(block_env.state, address, balance_after)
+
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
