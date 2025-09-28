@@ -81,6 +81,7 @@ GAS_LIMIT_ADJUSTMENT_FACTOR = Uint(1024)
 GAS_LIMIT_MINIMUM = Uint(5000)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
@@ -94,7 +95,6 @@ FEE_COLLECTOR_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
 )
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
-SYSTEM_TRANSACTION_GAS = Uint(30000000)
 MAX_BLOB_GAS_PER_BLOCK = U64(786432)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
 
@@ -864,6 +864,17 @@ def process_withdrawals(
     )
 
 
+def encode_block_rewards_system_call() -> Bytes:
+    # reward(address[],uint16[]) with empty lists
+    return bytes.fromhex(
+        "f91c2898"
+        "0000000000000000000000000000000000000000000000000000000000000020"
+        "0000000000000000000000000000000000000000000000000000000000000040"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+    )
+
+
 def process_block_rewards(
     block_env: vm.BlockEnvironment,
 ) -> None:
@@ -875,14 +886,7 @@ def process_block_rewards(
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
-        # reward(address[],uint16[]) with empty lists
-        data=bytes.fromhex(
-            "f91c2898"
-            "0000000000000000000000000000000000000000000000000000000000000020"
-            "0000000000000000000000000000000000000000000000000000000000000040"
-            "0000000000000000000000000000000000000000000000000000000000000000"
-            "0000000000000000000000000000000000000000000000000000000000000000"
-        ),
+        data=encode_block_rewards_system_call()
     )
     addresses, amounts = decode(
         ["address[]", "uint256[]"], out.return_data
