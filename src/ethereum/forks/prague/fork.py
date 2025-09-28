@@ -107,7 +107,9 @@ CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS = hex_to_address(
 HISTORY_STORAGE_ADDRESS = hex_to_address(
     "0x0000F90827F1C53a10cb7A02335B175320002935"
 )
-
+BLOB_FEE_COLLECTOR = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
 
 @dataclass
 class BlockChain:
@@ -747,6 +749,9 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
+    # TODO: Copy function from cancun once correct
+    process_block_rewards(block_env)
+
     process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BEACON_ROOTS_ADDRESS,
@@ -762,7 +767,8 @@ def apply_body(
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 
-    process_withdrawals(block_env, block_output, withdrawals)
+    # TODO: Copy function from cancun once correct
+    process_withdrawals(block_env, withdrawals)
 
     process_general_purpose_requests(
         block_env=block_env,
@@ -885,6 +891,10 @@ def process_transaction(
         block_env.state, sender, U256(sender_balance_after_gas_fee)
     )
 
+    def increase_collector_balance(recipient: Account) -> None:
+        recipient.balance += blob_gas_fee
+    modify_state(block_env.state, BLOB_FEE_COLLECTOR, increase_collector_balance)
+
     access_list_addresses = set()
     access_list_storage_keys = set()
     access_list_addresses.add(block_env.coinbase)
@@ -980,28 +990,6 @@ def process_transaction(
     )
 
     block_output.block_logs += tx_output.logs
-
-
-def process_withdrawals(
-    block_env: vm.BlockEnvironment,
-    block_output: vm.BlockOutput,
-    withdrawals: Tuple[Withdrawal, ...],
-) -> None:
-    """
-    Increase the balance of the withdrawing account.
-    """
-
-    def increase_recipient_balance(recipient: Account) -> None:
-        recipient.balance += wd.amount * U256(10**9)
-
-    for i, wd in enumerate(withdrawals):
-        trie_set(
-            block_output.withdrawals_trie,
-            rlp.encode(Uint(i)),
-            rlp.encode(wd),
-        )
-
-        modify_state(block_env.state, wd.address, increase_recipient_balance)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
