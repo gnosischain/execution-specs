@@ -28,6 +28,7 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 
+from ..cancun.fork import process_block_rewards, process_withdrawals
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
 from .bloom import logs_bloom
@@ -35,13 +36,12 @@ from .exceptions import (
     InsufficientMaxFeePerGasError,
     PriorityFeeGreaterThanMaxFeeError,
 )
-from .fork_types import Account, Address
+from .fork_types import Address
 from .state import (
     State,
     destroy_account,
     get_account,
     increment_nonce,
-    modify_state,
     set_account_balance,
     state_root,
 )
