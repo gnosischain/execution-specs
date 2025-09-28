@@ -14,6 +14,7 @@ Entry point for the Ethereum specification.
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from eth_abi import decode, encode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
@@ -40,14 +41,13 @@ from .exceptions import (
     PriorityFeeGreaterThanMaxFeeError,
     TransactionTypeContractCreationError,
 )
-from .fork_types import Account, Address, VersionedHash
+from .fork_types import Address, VersionedHash
 from .state import (
     State,
     TransientStorage,
     destroy_account,
     get_account,
     increment_nonce,
-    modify_state,
     set_account_balance,
     state_root,
 )
@@ -843,7 +843,6 @@ def process_transaction(
 
 def process_withdrawals(
     block_env: vm.BlockEnvironment,
-    block_output: vm.BlockOutput,
     withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
@@ -885,15 +884,15 @@ def process_block_rewards(
             "0000000000000000000000000000000000000000000000000000000000000000"
         ),
     )
-    rewards_addresses, rewards_amounts = decode(
+    addresses, amounts = decode(
         ["address[]", "uint256[]"], out.return_data
     )
 
-    def increase_recipient_balance(recipient: Account) -> None:
-        recipient.balance += amount * U256(10**9)
-
-    for address, amount in zip(rewards_addresses, rewards_amounts):
-        modify_state(block_env.state, address, increase_recipient_balance)
+    for address, amount in zip(addresses, amounts, strict=False):
+        balance_after = get_account(
+            block_env.state, address
+        ).balance + U256(amount)
+        set_account_balance(block_env.state, address, balance_after)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
