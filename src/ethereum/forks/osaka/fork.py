@@ -29,12 +29,6 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 
-from ..cancun.fork import (
-    MAX_FAILED_WITHDRAWALS_TO_PROCESS,
-    DEPOSIT_CONTRACT_ADDRESS,
-    BLOCK_REWARDS_CONTRACT_ADDRESS,
-    encode_block_rewards_system_call
-)
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
 from .bloom import logs_bloom
@@ -49,7 +43,7 @@ from .exceptions import (
     PriorityFeeGreaterThanMaxFeeError,
     TransactionTypeContractCreationError,
 )
-from .fork_types import Account, Address, Authorization, VersionedHash
+from .fork_types import Address, Authorization, VersionedHash
 from .requests import (
     CONSOLIDATION_REQUEST_TYPE,
     DEPOSIT_REQUEST_TYPE,
@@ -120,6 +114,16 @@ MAX_BLOCK_SIZE = 10_485_760
 SAFETY_MARGIN = 2_097_152
 MAX_RLP_BLOCK_SIZE = MAX_BLOCK_SIZE - SAFETY_MARGIN
 BLOB_COUNT_LIMIT = 6
+DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 
 
 @dataclass
@@ -1036,13 +1040,21 @@ def process_block_rewards(
     https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
 
+    # reward(address[],uint16[]) with empty lists
+    data = bytes.fromhex(
+        "f91c2898"
+        "0000000000000000000000000000000000000000000000000000000000000020"
+        "0000000000000000000000000000000000000000000000000000000000000040"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+    )
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
-        data=encode_block_rewards_system_call()
+        data=data,
     )
     addresses, amounts = decode(
-        ["address[]", "uint256[]"], out.return_data
+        ["address[]", "uint256[]"], out.output
     )
 
     for address, amount in zip(addresses, amounts, strict=False):
