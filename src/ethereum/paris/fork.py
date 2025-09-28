@@ -29,6 +29,7 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 
+from ..cancun.fork import process_block_rewards
 from . import vm
 from .blocks import Block, Header, Log, Receipt, encode_receipt
 from .bloom import logs_bloom
