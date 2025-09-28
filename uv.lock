@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -513,6 +513,7 @@ source = { editable = "." }
 dependencies = [
     { name = "coincurve" },
     { name = "cryptography" },
+    { name = "eth-abi" },
     { name = "ethereum-rlp" },
     { name = "ethereum-types" },
     { name = "py-ecc" },
@@ -586,6 +587,7 @@ requires-dist = [
     { name = "colorlog", marker = "extra == 'fill'", specifier = ">=6.7.0,<7" },
     { name = "cryptography", specifier = ">=45.0.1,<46" },
     { name = "docc", marker = "extra == 'doc'", specifier = ">=0.3.0,<0.4.0" },
+    { name = "eth-abi", specifier = ">=4,<6" },
     { name = "eth-abi", marker = "extra == 'fill'", specifier = ">=5.2.0" },
     { name = "ethash", marker = "extra == 'optimized'", specifier = ">=1.1.0,<2" },
     { name = "ethereum-hive", marker = "extra == 'fill'", specifier = ">=0.1.0a1,<1.0.0" },
