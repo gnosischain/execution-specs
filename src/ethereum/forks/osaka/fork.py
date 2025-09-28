@@ -92,13 +92,22 @@ GAS_LIMIT_ADJUSTMENT_FACTOR = Uint(1024)
 GAS_LIMIT_MINIMUM = Uint(5000)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
+DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
-SYSTEM_TRANSACTION_GAS = Uint(30000000)
 MAX_BLOB_GAS_PER_BLOCK = U64(1179648)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
-
+BLOB_FEE_COLLECTOR = hex_to_address(
+    "0xfffffffffffffffffffffffffffffffffffffffe"
+)
 WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS = hex_to_address(
     "0x00000961Ef480Eb55e80D19ad83579A64c007002"
 )
@@ -112,16 +121,9 @@ MAX_BLOCK_SIZE = 10_485_760
 SAFETY_MARGIN = 2_097_152
 MAX_RLP_BLOCK_SIZE = MAX_BLOCK_SIZE - SAFETY_MARGIN
 BLOB_COUNT_LIMIT = 6
-DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
-    "0xfffffffffffffffffffffffffffffffffffffffe"
-)
-BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
-    "0xfffffffffffffffffffffffffffffffffffffffe"
-)
 FEE_COLLECTOR_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
 )
-MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 
 
 @dataclass
@@ -1052,7 +1054,7 @@ def process_block_rewards(
         data=data,
     )
     addresses, amounts = decode(
-        ["address[]", "uint256[]"], out.output
+        ["address[]", "uint256[]"], out.return_data
     )
 
     for address, amount in zip(addresses, amounts, strict=False):
