@@ -132,9 +132,6 @@ MAX_BLOCK_SIZE = 10_485_760
 SAFETY_MARGIN = 2_097_152
 MAX_RLP_BLOCK_SIZE = MAX_BLOCK_SIZE - SAFETY_MARGIN
 BLOB_COUNT_LIMIT = 6
-FEE_COLLECTOR_ADDRESS = hex_to_address(
-    "0xfffffffffffffffffffffffffffffffffffffffe"
-)
 
 
 @dataclass
