@@ -864,17 +864,6 @@ def process_withdrawals(
     )
 
 
-def encode_block_rewards_system_call() -> Bytes:
-    # reward(address[],uint16[]) with empty lists
-    return bytes.fromhex(
-        "f91c2898"
-        "0000000000000000000000000000000000000000000000000000000000000020"
-        "0000000000000000000000000000000000000000000000000000000000000040"
-        "0000000000000000000000000000000000000000000000000000000000000000"
-        "0000000000000000000000000000000000000000000000000000000000000000"
-    )
-
-
 def process_block_rewards(
     block_env: vm.BlockEnvironment,
 ) -> None:
@@ -883,10 +872,18 @@ def process_block_rewards(
     https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
 
+    # reward(address[],uint16[]) with empty lists
+    data = bytes.fromhex(
+        "f91c2898"
+        "0000000000000000000000000000000000000000000000000000000000000020"
+        "0000000000000000000000000000000000000000000000000000000000000040"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+    )
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
-        data=encode_block_rewards_system_call()
+        data=data,
     )
     addresses, amounts = decode(
         ["address[]", "uint256[]"], out.output
