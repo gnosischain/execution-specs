@@ -483,10 +483,14 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
+    # TODO: Copy function from cancun once correct
+    process_block_rewards(block_env)
+
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 
-    process_withdrawals(block_env, block_output, withdrawals)
+    # TODO: Copy function from cancun once correct
+    process_withdrawals(block_env, withdrawals)
 
     return block_output
 
@@ -622,28 +626,6 @@ def process_transaction(
     )
 
     block_output.block_logs += tx_output.logs
-
-
-def process_withdrawals(
-    block_env: vm.BlockEnvironment,
-    block_output: vm.BlockOutput,
-    withdrawals: Tuple[Withdrawal, ...],
-) -> None:
-    """
-    Increase the balance of the withdrawing account.
-    """
-
-    def increase_recipient_balance(recipient: Account) -> None:
-        recipient.balance += wd.amount * U256(10**9)
-
-    for i, wd in enumerate(withdrawals):
-        trie_set(
-            block_output.withdrawals_trie,
-            rlp.encode(Uint(i)),
-            rlp.encode(wd),
-        )
-
-        modify_state(block_env.state, wd.address, increase_recipient_balance)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
