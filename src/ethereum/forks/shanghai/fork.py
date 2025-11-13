@@ -758,7 +758,7 @@ def process_withdrawals(
     withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
-    Make a system call to the deposit contract to process withdrawals
+    Make a system call to the deposit contract to process withdrawals.
     """
     amounts = []
     addresses = []
@@ -781,9 +781,8 @@ def process_block_rewards(
 ) -> None:
     """
     Call BlockRewardAuRaBase contract reward function
-    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20.
     """
-
     # reward(address[],uint16[]) with empty lists
     data = bytes.fromhex(
         "f91c2898"
