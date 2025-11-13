@@ -58,6 +58,11 @@ class ForkLoad:
     def process_unchecked_system_transaction(self) -> Any:
         """process_unchecked_system_transaction function of the given fork."""
         return self._module("fork").process_unchecked_system_transaction
+    
+    @property
+    def process_block_rewards(self) -> Any:
+        """process_block_rewards function of the given fork."""
+        return self._module("fork").process_block_rewards
 
     @property
     def process_block_rewards(self) -> Any:
