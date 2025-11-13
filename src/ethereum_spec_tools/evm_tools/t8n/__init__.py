@@ -266,6 +266,9 @@ class T8N(Load):
                 data=block_env.parent_beacon_block_root,
             )
 
+        if self.fork.is_after_fork("ethereum.paris"):
+            self.fork.process_block_rewards(block_env)
+
         for i, tx in zip(
             self.txs.successfully_parsed,
             self.txs.transactions,
@@ -291,7 +294,7 @@ class T8N(Load):
 
         if self.fork.is_after_fork("shanghai"):
             self.fork.process_withdrawals(
-                block_env, block_output, self.env.withdrawals
+                block_env, self.env.withdrawals
             )
 
         if self.fork.is_after_fork("prague"):
