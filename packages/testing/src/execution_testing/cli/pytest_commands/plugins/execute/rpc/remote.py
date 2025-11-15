@@ -1,6 +1,7 @@
 """Pytest plugin to run the execute in remote-rpc-mode."""
 
 from pathlib import Path
+from typing import Mapping
 
 import pytest
 
@@ -141,6 +142,15 @@ def pytest_configure(config: pytest.Config) -> None:
         pytest.exit(
             f"Failed to query the latest block from the remote RPC endpoint: {exc}."
             " Please verify connectivity or provide --chain-id consistent with the node."
+        )
+
+    if latest_block is None:
+        pytest.exit("Latest block response is null or empty.")
+
+    if not isinstance(latest_block, Mapping):
+        pytest.exit(
+            f"Latest block response has an unexpected type: "
+            f"{type(latest_block).__name__} (expected a mapping)."
         )
 
     gas_limit_hex = latest_block.get("gasLimit")

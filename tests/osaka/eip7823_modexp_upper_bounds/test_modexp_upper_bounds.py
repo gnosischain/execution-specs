@@ -18,6 +18,7 @@ from execution_testing import (
     Transaction,
     keccak256,
 )
+from execution_testing.base_types import HexNumber
 
 from ...byzantium.eip198_modexp_precompile.helpers import ModExpInput
 from ..eip7883_modexp_gas_increase.spec import Spec
@@ -267,7 +268,7 @@ def test_modexp_upper_bounds(
     pre: Alloc,
 ) -> None:
     """Test the MODEXP precompile input bounds."""
-    tx.gas_limit = Spec7823.tx_gas_limit_cap
+    tx.gas_limit = HexNumber(Spec7823.tx_gas_limit_cap)
     state_test(pre=pre, tx=tx, post=post)
 
 
