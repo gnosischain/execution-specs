@@ -38,6 +38,9 @@ on:
         description: "Amount to seed"
         required: true
         default: "10000"
+  push:
+    branches:
+      - migrate-eests
 
 jobs:
   run-remote-execution:
