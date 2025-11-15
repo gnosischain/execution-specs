@@ -38,9 +38,6 @@ on:
         description: "Amount to seed"
         required: true
         default: "10000"
-  push:
-    branches:
-      - migrate-eests 
 
 jobs:
   run-remote-execution:
@@ -64,27 +61,6 @@ jobs:
       - name: Prepare report directory
         run: |
           mkdir -p "$(dirname "${{ inputs.html_report }}")"
-      
-      - name: Debug inputs
-        run: |
-          echo "RPC endpoint: '${{ inputs.rpc_endpoint }}'"
-          echo "From key exists: '${{ secrets.DEVNET_TREASURY_PRIVATE_KEY != '' }}'"
-          echo "To key exists: '${{ secrets.DEVNET_FROM_PUBLIC_KEY != '' }}'"
-          echo "Chain ID: '${{ inputs.chain_id }}'"
-          echo "RPC Chain ID: '${{ inputs.rpc_chain_id }}'"
-          echo "Seed amount: '${{ inputs.seed_amount }}'"
-          echo "Test target: '${{ inputs.test_target }}'"
-          echo "HTML report: '${{ inputs.html_report }}'"
-          echo "Extra args: '${{ inputs.extra_args }}'"
-          echo "Fork: '${{ inputs.fork }}'"
-          echo "RPC seed key: '${{ inputs.rpc_seed_key }}'"
-          echo "Seed amount: '${{ inputs.seed_amount }}'"
-          echo "Test target: '${{ inputs.test_target }}'"
-          echo "HTML report: '${{ inputs.html_report }}'"
-          echo "Extra args: '${{ inputs.extra_args }}'"
-          echo "Fork: '${{ inputs.fork }}'"
-          echo "RPC seed key: '${{ inputs.rpc_seed_key }}'"
-          echo "Seed amount: '${{ inputs.seed_amount }}'"
 
       - name: Update seed account balance
         uses: dmitriy-b/ethereum-testing-tools/.github/actions/transfer-eth@main
