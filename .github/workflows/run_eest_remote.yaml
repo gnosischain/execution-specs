@@ -64,6 +64,27 @@ jobs:
       - name: Prepare report directory
         run: |
           mkdir -p "$(dirname "${{ inputs.html_report }}")"
+      
+      - name: Debug inputs
+        run: |
+          echo "RPC endpoint: '${{ inputs.rpc_endpoint }}'"
+          echo "From key exists: '${{ secrets.DEVNET_TREASURY_PRIVATE_KEY != '' }}'"
+          echo "To key exists: '${{ secrets.DEVNET_FROM_PUBLIC_KEY != '' }}'"
+          echo "Chain ID: '${{ inputs.chain_id }}'"
+          echo "RPC Chain ID: '${{ inputs.rpc_chain_id }}'"
+          echo "Seed amount: '${{ inputs.seed_amount }}'"
+          echo "Test target: '${{ inputs.test_target }}'"
+          echo "HTML report: '${{ inputs.html_report }}'"
+          echo "Extra args: '${{ inputs.extra_args }}'"
+          echo "Fork: '${{ inputs.fork }}'"
+          echo "RPC seed key: '${{ inputs.rpc_seed_key }}'"
+          echo "Seed amount: '${{ inputs.seed_amount }}'"
+          echo "Test target: '${{ inputs.test_target }}'"
+          echo "HTML report: '${{ inputs.html_report }}'"
+          echo "Extra args: '${{ inputs.extra_args }}'"
+          echo "Fork: '${{ inputs.fork }}'"
+          echo "RPC seed key: '${{ inputs.rpc_seed_key }}'"
+          echo "Seed amount: '${{ inputs.seed_amount }}'"
 
       - name: Update seed account balance
         uses: dmitriy-b/ethereum-testing-tools/.github/actions/transfer-eth@main
@@ -71,7 +92,7 @@ jobs:
           rpc_url: ${{ inputs.rpc_endpoint }}
           from_key: ${{ secrets.DEVNET_TREASURY_PRIVATE_KEY }}
           to: ${{ secrets.DEVNET_FROM_PUBLIC_KEY }}
-          amount: ${{ inputs.seed_amount || '10000' }}
+          amount: ${{ inputs.seed_amount }}
 
       - name: Execute remote
         env:
