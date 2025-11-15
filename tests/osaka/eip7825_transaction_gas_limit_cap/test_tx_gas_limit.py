@@ -38,7 +38,7 @@ REFERENCE_SPEC_VERSION = ref_spec_7825.version
 
 
 def effective_tx_gas_limit_cap(fork: Fork) -> int | None:
-    """Return the fork transaction gas cap clamped by the current environment gas limit."""
+    """Return the fork tx gas cap, clamped by the current env gas limit."""
     tx_cap = fork.transaction_gas_limit_cap()
     if tx_cap is None:
         return None
@@ -418,7 +418,7 @@ def test_tx_gas_limit_cap_contract_creation(
 ) -> None:
     """Test the transaction gas limit cap behavior for contract creation."""
     intrinsic_cost = fork.transaction_intrinsic_cost_calculator()
-    tx_gas_limit_cap =  effective_tx_gas_limit_cap(fork)
+    tx_gas_limit_cap = effective_tx_gas_limit_cap(fork)
     assert tx_gas_limit_cap is not None, (
         "Fork does not have a transaction gas limit cap"
     )
