@@ -104,7 +104,7 @@ DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
 )
 BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
-    "0xfffffffffffffffffffffffffffffffffffffffe"
+    "0x2000000000000000000000000000000000000001"
 )
 FEE_COLLECTOR_ADDRESS = hex_to_address(
     "0xfffffffffffffffffffffffffffffffffffffffe"
@@ -1060,14 +1060,13 @@ def process_block_rewards(
 ) -> None:
     """
     Call BlockRewardAuRaBase contract reward function
-    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20.
     """
-
     # reward(address[],uint16[]) with empty lists
     data = bytes.fromhex(
         "f91c2898"
-        "0000000000000000000000000000000000000000000000000000000000000020"
         "0000000000000000000000000000000000000000000000000000000000000040"
+        "0000000000000000000000000000000000000000000000000000000000000060"
         "0000000000000000000000000000000000000000000000000000000000000000"
         "0000000000000000000000000000000000000000000000000000000000000000"
     )
