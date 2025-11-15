@@ -1420,6 +1420,44 @@ class Paris(
         """From Paris, payloads can be sent through the engine API."""
         del block_number, timestamp
         return 1
+    
+    @classmethod
+    def system_contracts(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> List[Address]:
+        """Paris introduces the system contract for block rewards."""
+        del block_number, timestamp
+        return [
+            Address(
+                0x2000000000000000000000000000000000000001,
+                label="BLOCK_REWARDS_CONTRACT_ADDRESS",
+            )
+        ]
+
+    @classmethod
+    def pre_allocation_blockchain(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> Mapping:
+        """
+        Paris requires pre-allocation of the block rewards contract
+        on blockchain type tests.
+        """
+        del block_number, timestamp
+        
+        new_allocation = {}
+        with open(
+            CURRENT_FOLDER / "contracts" / "block_reward_contract.bin", mode="rb"
+        ) as f:
+            new_allocation.update(
+                {
+                    0x2000000000000000000000000000000000000001: {
+                        "nonce": 1,
+                        "code": f.read(),
+                    }
+                }
+            )
+
+        return new_allocation | super(Paris, cls).pre_allocation_blockchain()  # type: ignore
 
 
 class Shanghai(Paris):
