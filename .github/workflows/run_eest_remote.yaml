@@ -71,7 +71,7 @@ jobs:
           rpc_url: ${{ inputs.rpc_endpoint }}
           from_key: ${{ secrets.DEVNET_TREASURY_PRIVATE_KEY }}
           to: ${{ secrets.DEVNET_FROM_PUBLIC_KEY }}
-          amount: ${{ inputs.seed_amount }}
+          amount: ${{ inputs.seed_amount || '10000' }}
 
       - name: Execute remote
         env:
