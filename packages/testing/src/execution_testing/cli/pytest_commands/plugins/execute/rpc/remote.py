@@ -6,6 +6,7 @@ import pytest
 
 from execution_testing.forks import Fork
 from execution_testing.rpc import EngineRPC, EthRPC
+from execution_testing.test_types.block_types import EnvironmentDefaults
 from execution_testing.test_types.chain_config_types import (
     ChainConfigDefaults,
 )
@@ -131,6 +132,25 @@ def pytest_configure(config: pytest.Config) -> None:
             f"the configured chain ID ({ChainConfigDefaults.chain_id})."
             "Please check if the chain ID is correctly configured with the --chain-id flag."
         )
+    # Set the transaction gas limit to the block gas limit if not set or if set higher than
+    try:
+        latest_block = eth_rpc.get_block_by_number("latest", full_txs=False)
+    except Exception as exc:  # pragma: no cover - RPC availability depends on the remote node
+        pytest.exit(
+            f"Failed to query the latest block from the remote RPC endpoint: {exc}."
+            " Please verify connectivity or provide --chain-id consistent with the node."
+        )
+
+    gas_limit_hex = latest_block.get("gasLimit")
+    if gas_limit_hex is not None:
+        remote_block_gas_limit = int(gas_limit_hex, 16)
+        if remote_block_gas_limit > 0:
+            configured_limit = config.getoption("transaction_gas_limit")
+            if configured_limit is None or configured_limit > remote_block_gas_limit:
+                config.option.transaction_gas_limit = remote_block_gas_limit
+            EnvironmentDefaults.gas_limit = min(
+                EnvironmentDefaults.gas_limit, remote_block_gas_limit
+            )
     engine_endpoint = config.getoption("engine_endpoint")
     engine_rpc = None
     if engine_endpoint is not None:

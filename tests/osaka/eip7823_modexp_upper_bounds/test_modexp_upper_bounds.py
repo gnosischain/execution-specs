@@ -21,6 +21,7 @@ from execution_testing import (
 
 from ...byzantium.eip198_modexp_precompile.helpers import ModExpInput
 from ..eip7883_modexp_gas_increase.spec import Spec
+from .spec import Spec as Spec7823
 from .spec import ref_spec_7823
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_7823.git_path
@@ -266,6 +267,7 @@ def test_modexp_upper_bounds(
     pre: Alloc,
 ) -> None:
     """Test the MODEXP precompile input bounds."""
+    tx.gas_limit = Spec7823.tx_gas_limit_cap
     state_test(pre=pre, tx=tx, post=post)
 
 
