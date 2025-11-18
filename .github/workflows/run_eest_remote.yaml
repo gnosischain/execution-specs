@@ -10,6 +10,13 @@ on:
       rpc_endpoint:
         description: "Execution RPC endpoint"
         required: true
+<<<<<<< HEAD
+=======
+      rpc_chain_id:
+        description: "Chain ID for the RPC endpoint"
+        required: true
+        default: "10209"
+>>>>>>> fa03a1a83 (chore: add remote eest workflow (#4))
       chain_id:
         description: "Chain ID passed to --chain-id"
         required: true
@@ -74,6 +81,10 @@ jobs:
           uv run execute remote \
             --fork="${{ inputs.fork }}" \
             --rpc-endpoint="${{ inputs.rpc_endpoint }}" \
+<<<<<<< HEAD
+=======
+            --rpc-chain-id="${{ inputs.rpc_chain_id }}" \
+>>>>>>> fa03a1a83 (chore: add remote eest workflow (#4))
             --chain-id="${{ inputs.chain_id }}" \
             --rpc-seed-key="${SEED}" \
             "${{ inputs.test_target }}" \
