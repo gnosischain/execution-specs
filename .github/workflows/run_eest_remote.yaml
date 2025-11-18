@@ -1,0 +1,92 @@
+name: Run Remote EEST Fixture
+
+on:
+  workflow_dispatch:
+    inputs:
+      fork:
+        description: "Fork passed to --fork"
+        required: true
+        default: "Osaka"
+      rpc_endpoint:
+        description: "Execution RPC endpoint"
+        required: true
+      rpc_chain_id:
+        description: "Chain ID for the RPC endpoint"
+        required: true
+        default: "10209"
+      chain_id:
+        description: "Chain ID passed to --chain-id"
+        required: true
+        default: "10209"
+      rpc_seed_key:
+        description: "Private key used for remote execution (fallback if secret not set)"
+        required: false
+        default: ""
+      test_target:
+        description: "Pytest test to execute"
+        required: true
+        default: "./tests/osaka/eip7825_transaction_gas_limit_cap/test_tx_gas_limit.py::test_transaction_gas_limit_cap[fork_Osaka-tx_gas_limit_cap_none0-state_test]"
+      html_report:
+        description: "Path for the generated HTML report"
+        required: true
+        default: "./execution_results/index.html"
+      extra_args:
+        description: "Additional arguments appended to the execute command"
+        required: false
+        default: ""
+      seed_amount:
+        description: "Amount to seed"
+        required: true
+        default: "10000"
+
+jobs:
+  run-remote-execution:
+    name: Run remote execute command
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          version: ${{ vars.UV_VERSION || 'latest' }}
+          python-version: ${{ vars.DEFAULT_PYTHON_VERSION || '3.11' }}
+
+      - name: Sync project dependencies
+        run: uv sync --all-extras
+
+      - name: Prepare report directory
+        run: |
+          mkdir -p "$(dirname "${{ inputs.html_report }}")"
+
+      - name: Update seed account balance
+        uses: dmitriy-b/ethereum-testing-tools/.github/actions/transfer-eth@main
+        with:
+          rpc_url: ${{ inputs.rpc_endpoint }}
+          from_key: ${{ secrets.DEVNET_TREASURY_PRIVATE_KEY }}
+          to: ${{ secrets.DEVNET_FROM_PUBLIC_KEY }}
+          amount: ${{ inputs.seed_amount }}
+
+      - name: Execute remote
+        env:
+          RPC_SEED_KEY: ${{ secrets.DEVNET_FROM_PRIVATE_KEY }}
+        run: |
+          SEED="${RPC_SEED_KEY:-${{ inputs.rpc_seed_key }}}"
+          uv run execute remote \
+            --fork="${{ inputs.fork }}" \
+            --rpc-endpoint="${{ inputs.rpc_endpoint }}" \
+            --rpc-chain-id="${{ inputs.rpc_chain_id }}" \
+            --chain-id="${{ inputs.chain_id }}" \
+            --rpc-seed-key="${SEED}" \
+            "${{ inputs.test_target }}" \
+            --html="${{ inputs.html_report }}" \
+            ${{ inputs.extra_args }}
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-report
+          path: ${{ inputs.html_report }}
