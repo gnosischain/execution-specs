@@ -2,6 +2,8 @@
 Tests for [EIP-4895: Beacon chain withdrawals](https://eips.ethereum.org/EIPS/eip-4895).
 """
 
+from typing import Any, Dict
+
 import pytest
 from execution_testing import (
     Account,
@@ -34,7 +36,7 @@ def get_minimal_deposit_contract_code() -> bytes:
     - Check arrays have same length
     - Return success
     """
-    return (
+    return bytes(
         # Check msg.sender == SYSTEM_ADDRESS (0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE)  # noqa: E501
         Op.PUSH20(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE)
         + Op.CALLER
@@ -59,7 +61,7 @@ def get_minimal_deposit_contract_code() -> bytes:
 def test_withdrawal_system_call_succeeds(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test that the system call to deposit contract succeeds.
     Verifies the withdrawal mechanism works without testing contract internals.
@@ -106,7 +108,7 @@ def test_withdrawal_system_call_succeeds(
 def test_withdrawal_index_order(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test that withdrawal indices are sequential.
     Verifies proper ordering of withdrawals.
@@ -135,7 +137,7 @@ def test_withdrawal_index_order(
 def test_withdrawal_system_call_with_revert(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test behavior when deposit contract reverts.
 
@@ -161,7 +163,7 @@ def test_withdrawal_system_call_with_revert(
         ),
     ]
 
-    post = {}
+    post: Dict[str, Any] = {}
 
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
@@ -169,7 +171,7 @@ def test_withdrawal_system_call_with_revert(
 def test_withdrawal_system_call_out_of_gas(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test behavior when deposit contract runs out of gas.
     """
@@ -192,7 +194,7 @@ def test_withdrawal_system_call_out_of_gas(
         ),
     ]
 
-    post = {}
+    post: Dict[str, Any] = {}
 
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
@@ -200,7 +202,7 @@ def test_withdrawal_system_call_out_of_gas(
 def test_multiple_withdrawals_same_validator(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test multiple withdrawals to the same validator in one block.
     Verifies the contract can handle multiple calls correctly.
@@ -239,7 +241,7 @@ def test_multiple_withdrawals_same_validator(
 def test_empty_withdrawals_list(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test that empty withdrawals list is valid.
     System call should still be made (with empty arrays).
@@ -270,7 +272,7 @@ def test_empty_withdrawals_list(
 def test_withdrawal_contract_not_deployed(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test what happens if deposit contract is not deployed.
     System call to non-existent contract should handle gracefully.
@@ -292,7 +294,7 @@ def test_withdrawal_contract_not_deployed(
     ]
 
     # Call to non-existent contract succeeds but does nothing
-    post = {}
+    post: Dict[str, Any] = {}
 
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
@@ -300,7 +302,7 @@ def test_withdrawal_contract_not_deployed(
 def test_withdrawal_zero_amount(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test withdrawal with zero amount.
     Edge case: system call with zero-value withdrawal.
@@ -326,7 +328,7 @@ def test_withdrawal_zero_amount(
 def test_withdrawal_max_amount(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test withdrawal with maximum uint64 amount.
     Ensures no overflow in amount handling.
@@ -352,7 +354,7 @@ def test_withdrawal_max_amount(
 def test_withdrawal_only_system_address_can_call(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
-):
+) -> None:
     """
     Test that only SYSTEM_ADDRESS can call the deposit contract.
     Regular transactions should not be able to trigger withdrawals.
