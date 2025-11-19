@@ -88,7 +88,6 @@ FEE_COLLECTOR_ADDRESS = hex_to_address(
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 
 
-
 @dataclass
 class BlockChain:
     """
@@ -498,6 +497,7 @@ def process_system_transaction(
     -------
     system_tx_output : `MessageCallOutput`
         Output of processing the system transaction.
+
     """
     tx_env = vm.TransactionEnvironment(
         origin=SYSTEM_ADDRESS,
@@ -555,6 +555,7 @@ def process_unchecked_system_transaction(
     -------
     system_tx_output : `MessageCallOutput`
         Output of processing the system transaction.
+
     """
     system_contract_code = get_account(block_env.state, target_address).code
     return process_system_transaction(
@@ -796,14 +797,12 @@ def process_block_rewards(
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         data=data,
     )
-    addresses, amounts = decode(
-        ["address[]", "uint256[]"], out.return_data
-    )
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
 
     for address, amount in zip(addresses, amounts, strict=False):
-        balance_after = get_account(
-            block_env.state, address
-        ).balance + U256(amount)
+        balance_after = get_account(block_env.state, address).balance + U256(
+            amount
+        )
         set_account_balance(block_env.state, address, balance_after)
 
 

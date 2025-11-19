@@ -1043,7 +1043,7 @@ def process_withdrawals(
     withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
-    Make a system call to the deposit contract to process withdrawals
+    Make a system call to the deposit contract to process withdrawals.
     """
     amounts = []
     addresses = []
@@ -1081,14 +1081,12 @@ def process_block_rewards(
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         data=data,
     )
-    addresses, amounts = decode(
-        ["address[]", "uint256[]"], out.return_data
-    )
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
 
     for address, amount in zip(addresses, amounts, strict=False):
-        balance_after = get_account(
-            block_env.state, address
-        ).balance + U256(amount)
+        balance_after = get_account(block_env.state, address).balance + U256(
+            amount
+        )
         set_account_balance(block_env.state, address, balance_after)
 
 
