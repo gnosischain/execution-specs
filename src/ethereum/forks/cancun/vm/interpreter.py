@@ -110,7 +110,11 @@ def process_message_call(message: Message) -> MessageCallOutput:
         ) or account_has_storage(block_env.state, message.current_target)
         if is_collision:
             return MessageCallOutput(
-                Uint(0), U256(0), tuple(), set(), AddressCollision(),
+                Uint(0),
+                U256(0),
+                tuple(),
+                set(),
+                AddressCollision(),
                 Bytes(b""),
             )
         else:
