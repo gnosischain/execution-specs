@@ -293,9 +293,21 @@ class T8N(Load):
                 )
 
         if self.fork.is_after_fork("shanghai"):
-            self.fork.process_withdrawals(
-                block_env, self.env.withdrawals
-            )
+            if self.env.withdrawals is not None:
+                for i, w in enumerate(self.env.withdrawals):
+                    self.fork.trie_set(
+                        block_output.withdrawals_trie,
+                        rlp.encode(Uint(i)),
+                        rlp.encode(
+                            [
+                                Uint(w.index),
+                                Uint(w.validator_index),
+                                w.address,
+                                Uint(w.amount),
+                            ]
+                        ),
+                    )
+            self.fork.process_withdrawals(block_env, self.env.withdrawals)
 
         if self.fork.is_after_fork("prague"):
             self.fork.process_general_purpose_requests(block_env, block_output)
