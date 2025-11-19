@@ -2152,7 +2152,7 @@ class Paris(
         """From Paris, payloads can be sent through the engine API."""
         del block_number, timestamp
         return 1
-    
+
     @classmethod
     def system_contracts(
         cls, *, block_number: int = 0, timestamp: int = 0
@@ -2175,10 +2175,11 @@ class Paris(
         on blockchain type tests.
         """
         del block_number, timestamp
-        
+
         new_allocation = {}
         with open(
-            CURRENT_FOLDER / "contracts" / "block_reward_contract.bin", mode="rb"
+            CURRENT_FOLDER / "contracts" / "block_reward_contract.bin",
+            mode="rb",
         ) as f:
             new_allocation.update(
                 {
