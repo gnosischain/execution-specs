@@ -27,6 +27,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="RPC endpoint to an execution client",
     )
     remote_rpc_group.addoption(
+        "--chain-id",
+        action="store",
+        dest="chain_id",
+        required=False,
+        type=int,
+        default=None,
+        help="ID of the chain where the tests will be executed.",
+    )
+    remote_rpc_group.addoption(
         "--rpc-chain-id",
         action="store",
         dest="rpc_chain_id",
