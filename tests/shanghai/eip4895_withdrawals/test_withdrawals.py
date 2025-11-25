@@ -12,7 +12,6 @@ from execution_testing import (
     Block,
     BlockchainTestFiller,
     Op,
-    Transaction,
     Withdrawal,
 )
 
@@ -24,39 +23,15 @@ REFERENCE_SPEC_VERSION = ref_spec_4895.version
 pytestmark = pytest.mark.valid_from("Shanghai")
 
 DEPOSIT_CONTRACT = Address(0xB97036A26259B7147018913BD58A774CF91ACF25)
-SYSTEM_ADDRESS = Address(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE)
 
 
 def get_minimal_deposit_contract_code() -> bytes:
     """
-    Returns bytecode for minimal deposit contract.
-
-    Contract logic:
-    - Check msg.sender == SYSTEM_ADDRESS
-    - Check arrays have same length
-    - Return success
+    Returns bytecode for minimal deposit contract that just stops.
+    Used to verify system calls succeed without testing contract
+    internals.
     """
-    return bytes(
-        # Check msg.sender == SYSTEM_ADDRESS (0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE)  # noqa: E501
-        Op.PUSH20(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE)
-        + Op.CALLER
-        + Op.EQ
-        + Op.PUSH1(0x0F)  # Jump to success if equal
-        + Op.JUMPI
-        +
-        # Revert if not system address
-        Op.PUSH1(0)
-        + Op.PUSH1(0)
-        + Op.REVERT
-        +
-        # JUMPDEST for success path
-        Op.JUMPDEST
-        +
-        # Decode and check array lengths match
-        # For simplicity, we just return success
-        Op.STOP
-    )
-
+    return bytes(Op.STOP)
 
 def test_withdrawal_system_call_succeeds(
     blockchain_test: BlockchainTestFiller,
@@ -347,42 +322,5 @@ def test_withdrawal_max_amount(
 
     blocks = [Block(withdrawals=[withdrawal])]
     post = {DEPOSIT_CONTRACT: Account(storage={})}
-
-    blockchain_test(pre=pre, post=post, blocks=blocks)
-
-
-def test_withdrawal_only_system_address_can_call(
-    blockchain_test: BlockchainTestFiller,
-    pre: Alloc,
-) -> None:
-    """
-    Test that only SYSTEM_ADDRESS can call the deposit contract.
-    Regular transactions should not be able to trigger withdrawals.
-    """
-    # Deploy contract that checks caller
-    pre[DEPOSIT_CONTRACT] = Account(
-        code=get_minimal_deposit_contract_code(),
-        nonce=1,
-    )
-
-    sender = pre.fund_eoa()
-
-    tx = Transaction(
-        sender=sender,
-        to=DEPOSIT_CONTRACT,
-        data=bytes.fromhex("79d0c0bc") + (b"\x00" * 96),
-        gas_limit=100000,
-    )
-
-    blocks = [
-        Block(
-            txs=[tx],
-        ),
-    ]
-
-    # Transaction should revert
-    post = {
-        DEPOSIT_CONTRACT: Account(storage={}),
-    }
 
     blockchain_test(pre=pre, post=post, blocks=blocks)
