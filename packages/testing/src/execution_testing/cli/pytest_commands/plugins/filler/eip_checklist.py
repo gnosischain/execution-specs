@@ -51,8 +51,8 @@ TITLE_LINE = "# EIP Execution Layer Testing Checklist Template"
 PERCENTAGE_LINE = (
     "| TOTAL_CHECKLIST_ITEMS | COVERED_CHECKLIST_ITEMS | PERCENTAGE |"
 )
-TEMPLATE_PATH = Path(
-    # TODO: add better repo root detection
+
+TEMPLATE_PATH = (
     Path(__file__).parents[8]
     / "docs"
     / "writing_tests"
