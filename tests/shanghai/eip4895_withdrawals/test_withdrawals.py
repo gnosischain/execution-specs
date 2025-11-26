@@ -33,35 +33,30 @@ def get_minimal_deposit_contract_code() -> bytes:
     """
     return bytes(Op.STOP)
 
-def test_withdrawal_system_call_succeeds(
+
+def test_store_withdrawal_values_in_contract(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
 ) -> None:
-    """
-    Test that the system call to deposit contract succeeds.
-    Verifies the withdrawal mechanism works without testing contract internals.
-    """
-    # Deploy deposit contract at specific address
+    """Test that system transaction calldata is correctly formed."""
+    # Deploy contract at deposit contract address to receive system calls
     pre[DEPOSIT_CONTRACT] = Account(
-        code=get_minimal_deposit_contract_code(),
+        code=Op.SSTORE(0, Op.CALLDATASIZE)
+        + sum(Op.SSTORE(i + 1, Op.CALLDATALOAD(i * 32)) for i in range(10)),
         nonce=1,
-        balance=0,
     )
-
-    validator_1 = Address(0x0A)
-    validator_2 = Address(0x0B)
 
     withdrawal_1 = Withdrawal(
         index=0,
         validator_index=0,
-        address=validator_1,
-        amount=12,  # 12 gwei
+        address=Address(0x0A),
+        amount=0x0C,
     )
     withdrawal_2 = Withdrawal(
         index=1,
         validator_index=1,
-        address=validator_2,
-        amount=13,  # 13 gwei
+        address=Address(0x0B),
+        amount=0x0D,
     )
 
     blocks = [
@@ -70,10 +65,21 @@ def test_withdrawal_system_call_succeeds(
         ),
     ]
 
-    # Verify the call succeeded by checking block is valid
     post = {
         DEPOSIT_CONTRACT: Account(
-            storage={},
+            storage={
+                0x00: 0x0000000000000000000000000000000000000000000000000000000000000124,  # noqa: E501
+                0x01: 0x79D0C0BC00000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                0x02: 0x0000000400000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                0x03: 0x0000006000000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                0x04: 0x000000C000000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                0x05: 0x0000000200000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                0x06: 0x0000000C00000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                0x07: 0x0000000D00000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                0x08: 0x0000000200000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                0x09: 0x0000000A00000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                0x0A: 0x0000000B00000000000000000000000000000000000000000000000000000000,  # noqa: E501
+            }
         ),
     }
 
