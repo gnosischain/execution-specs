@@ -10,10 +10,6 @@ on:
       rpc_endpoint:
         description: "Execution RPC endpoint"
         required: true
-      rpc_chain_id:
-        description: "Chain ID for the RPC endpoint"
-        required: true
-        default: "10209"
       chain_id:
         description: "Chain ID passed to --chain-id"
         required: true
@@ -78,7 +74,6 @@ jobs:
           uv run execute remote \
             --fork="${{ inputs.fork }}" \
             --rpc-endpoint="${{ inputs.rpc_endpoint }}" \
-            --rpc-chain-id="${{ inputs.rpc_chain_id }}" \
             --chain-id="${{ inputs.chain_id }}" \
             --rpc-seed-key="${SEED}" \
             "${{ inputs.test_target }}" \
