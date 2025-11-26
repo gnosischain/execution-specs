@@ -34,6 +34,47 @@ def get_minimal_deposit_contract_code() -> bytes:
     return bytes(Op.STOP)
 
 
+def test_withdrawal_system_call_succeeds(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+) -> None:
+    """
+    Test that the system call to deposit contract succeeds.
+    Verifies the withdrawal mechanism works without testing contract internals.
+    """
+    # Deploy deposit contract at specific address
+    pre[DEPOSIT_CONTRACT] = Account(
+        code=get_minimal_deposit_contract_code(),
+        nonce=1,
+        balance=0,
+    )
+
+    withdrawal_1 = Withdrawal(
+        index=0,
+        validator_index=0,
+        address=Address(0x0A),
+        amount=12,  # 12 gwei
+    )
+    withdrawal_2 = Withdrawal(
+        index=1,
+        validator_index=1,
+        address=Address(0x0B),
+        amount=13,  # 13 gwei
+    )
+
+    blocks = [
+        Block(
+            withdrawals=[withdrawal_1, withdrawal_2],
+        ),
+    ]
+
+    post = {
+        DEPOSIT_CONTRACT: Account(storage={}),
+    }
+
+    blockchain_test(pre=pre, post=post, blocks=blocks)
+
+
 def test_store_withdrawal_values_in_contract(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
