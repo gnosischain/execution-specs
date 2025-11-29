@@ -49,7 +49,7 @@ EXTRA_DATA_AT_LIMIT = b"\x00" * 15
 # Max size adjustment extra_data can absorb
 # reserves 1 byte so delta=-1 tests stay valid
 EXTRA_DATA_TOLERANCE = len(EXTRA_DATA_AT_LIMIT) - 1
-BLOCK_GAS_LIMIT = 100_000_000
+BLOCK_GAS_LIMIT = 17_000_000  # Gnosis gas limit
 
 
 @pytest.fixture
@@ -252,25 +252,26 @@ def _exact_size_transactions_impl(
 
     calculator = fork.transaction_intrinsic_cost_calculator()
 
-    data_large = Bytes(b"\x00" * 500_000)
+    # Reduced transaction size for Gnosis (max tx size ~128KB)
+    # Carefully tuned to hit the 8,388,608 byte RLP limit
+    # Using 106,056 bytes per transaction to approach the limit
+    data_large = Bytes(b"\x00" * 106_056)
     gas_limit_large = calculator(calldata=data_large)
 
-    # block with 16 transactions + large calldata remains safely below the
-    # limit add 15 generic transactions to fill the block and one typed
-    # transaction if tx_type is specified, otherwise just add 16 generic
-    # transactions
+    # With smaller transactions, we need more of them to fill the block
+    # Use 79 transactions to leave room for gas and fine-tuning
     not_all_generic_txs = any(
         kwarg is not None
         for kwarg in [specific_transaction_to_include, emit_logs_contract]
     )
 
-    generic_tx_num = 15 if not_all_generic_txs else 16
+    generic_tx_num = 78 if not_all_generic_txs else 79
     for _ in range(generic_tx_num):
         tx = Transaction(
             sender=sender,
             nonce=nonce,
-            max_fee_per_gas=10**11,
-            max_priority_fee_per_gas=10**11,
+            max_fee_per_gas=10**9,  # Reduced for Gnosis
+            max_priority_fee_per_gas=10**9,
             gas_limit=gas_limit_large,
             data=data_large,
         )
@@ -284,7 +285,9 @@ def _exact_size_transactions_impl(
             tx_dict = specific_transaction_to_include.model_dump(
                 exclude_unset=True
             )
-            data = Bytes(b"\x00" * 200_000)
+            data = Bytes(
+                b"\x00" * 106_056
+            )  # Reduced for Gnosis, matching data_large
             gas_limit = HexNumber(
                 calculator(
                     calldata=data,
@@ -300,13 +303,16 @@ def _exact_size_transactions_impl(
             tx_dict["gas_limit"] = gas_limit
             last_tx = Transaction(**tx_dict)
         elif emit_logs_contract is not None:
+            # Use same data size as other transactions to maintain block size
+            data = Bytes(b"\x00" * 106_056)
             last_tx = Transaction(
                 sender=sender,
                 nonce=nonce,
-                max_fee_per_gas=10**11,
-                max_priority_fee_per_gas=10**11,
-                gas_limit=calculator(calldata=b""),
+                max_fee_per_gas=10**9,  # Reduced for Gnosis
+                max_priority_fee_per_gas=10**9,
+                gas_limit=calculator(calldata=data),
                 to=emit_logs_contract,
+                data=data,
             )
         else:
             raise ValueError(
@@ -324,13 +330,13 @@ def _exact_size_transactions_impl(
     remaining_bytes = block_size_limit - current_size
     remaining_gas = block_gas_limit - total_gas_used
 
-    if remaining_bytes > 0 and remaining_gas > 50_000:
+    if remaining_bytes > 0 and remaining_gas > 25_000:
         # create an empty transaction to measure base contribution
         empty_tx = Transaction(
             sender=sender,
             nonce=nonce,
-            max_fee_per_gas=10**11,
-            max_priority_fee_per_gas=10**11,
+            max_fee_per_gas=10**9,  # Reduced for Gnosis
+            max_priority_fee_per_gas=10**9,
             gas_limit=calculator(calldata=b""),
             data=b"",
         )
@@ -352,8 +358,8 @@ def _exact_size_transactions_impl(
             test_tx = Transaction(
                 sender=sender,
                 nonce=nonce,
-                max_fee_per_gas=10**11,
-                max_priority_fee_per_gas=10**11,
+                max_fee_per_gas=10**9,  # Reduced for Gnosis
+                max_priority_fee_per_gas=10**9,
                 gas_limit=target_gas,
                 data=target_calldata,
             )
