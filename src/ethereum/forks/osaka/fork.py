@@ -104,13 +104,13 @@ EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
-    "0xfffffffffffffffffffffffffffffffffffffffe"
+    "0xb97036A26259B7147018913bD58a774cf91acf25"
 )
 BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
-    "0xfffffffffffffffffffffffffffffffffffffffe"
+    "0x2000000000000000000000000000000000000001"
 )
 FEE_COLLECTOR_ADDRESS = hex_to_address(
-    "0xfffffffffffffffffffffffffffffffffffffffe"
+    "0x1559000000000000000000000000000000000000"
 )
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 BEACON_ROOTS_ADDRESS = hex_to_address(
@@ -1046,7 +1046,7 @@ def process_withdrawals(
     withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
-    Make a system call to the deposit contract to process withdrawals
+    Make a system call to the deposit contract to process withdrawals.
     """
     amounts = []
     addresses = []
@@ -1069,14 +1069,13 @@ def process_block_rewards(
 ) -> None:
     """
     Call BlockRewardAuRaBase contract reward function
-    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20.
     """
-
     # reward(address[],uint16[]) with empty lists
     data = bytes.fromhex(
         "f91c2898"
-        "0000000000000000000000000000000000000000000000000000000000000020"
         "0000000000000000000000000000000000000000000000000000000000000040"
+        "0000000000000000000000000000000000000000000000000000000000000060"
         "0000000000000000000000000000000000000000000000000000000000000000"
         "0000000000000000000000000000000000000000000000000000000000000000"
     )
@@ -1085,14 +1084,12 @@ def process_block_rewards(
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         data=data,
     )
-    addresses, amounts = decode(
-        ["address[]", "uint256[]"], out.return_data
-    )
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
 
     for address, amount in zip(addresses, amounts, strict=False):
-        balance_after = get_account(
-            block_env.state, address
-        ).balance + U256(amount)
+        balance_after = get_account(block_env.state, address).balance + U256(
+            amount
+        )
         set_account_balance(block_env.state, address, balance_after)
 
 
