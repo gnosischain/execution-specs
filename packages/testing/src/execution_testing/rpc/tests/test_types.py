@@ -66,7 +66,7 @@ eth_config_dict: Dict[str, Any] = {
                 "0x0000bbddc7ce488642fb579f8b00f3a590007251"
             ),
             "DEPOSIT_CONTRACT_ADDRESS": (
-                "0x00000000219ab540356cbb839cbe05303d7705fa"
+                "0xbabe2bed00000000000000000000000000000003"
             ),
             "HISTORY_STORAGE_ADDRESS": (
                 "0x0000f90827f1c53a10cb7a02335b175320002935"
@@ -110,7 +110,7 @@ eth_config_dict: Dict[str, Any] = {
                 "0x0000bbddc7ce488642fb579f8b00f3a590007251"
             ),
             "DEPOSIT_CONTRACT_ADDRESS": (
-                "0x00000000219ab540356cbb839cbe05303d7705fa"
+                "0xbabe2bed00000000000000000000000000000003"
             ),
             "HISTORY_STORAGE_ADDRESS": (
                 "0x0000f90827f1c53a10cb7a02335b175320002935"
