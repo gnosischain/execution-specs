@@ -1953,7 +1953,7 @@ class Prague(Cancun):
         """
         return [
             Address(
-                0x00000000219AB540356CBB839CBE05303D7705FA,
+                0xBABE2BED00000000000000000000000000000003,
                 label="DEPOSIT_CONTRACT_ADDRESS",
             ),
             Address(
@@ -2136,7 +2136,7 @@ class Prague(Cancun):
         ) as f:
             new_allocation.update(
                 {
-                    0x00000000219AB540356CBB839CBE05303D7705FA: {
+                    0xBABE2BED00000000000000000000000000000003: {
                         "nonce": 1,
                         "code": f.read(),
                         "storage": storage,
