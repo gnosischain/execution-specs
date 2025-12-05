@@ -1,0 +1,102 @@
+name: EEST → Hive (Gnosis - reth-gnosis only)
+on:
+  push:
+    branches: [make-hive-compatible]
+    paths: ['tests/**', 'packages/**', 'pyproject.toml']
+  pull_request:
+    branches: [make-hive-compatible]
+    paths: ['tests/**', 'packages/**', 'pyproject.toml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test: [eip3855_push0]  # Add: eip7702, etc.
+        client: [reth-gnosis]
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: make-hive-compatible
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        enable-cache: true
+
+    - name: Cache uv
+      uses: actions/cache@v5
+      with:
+        path: |
+          .venv
+          ~/.cache/uv
+        key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
+    - name: Sync deps
+      run: uv sync --all-extras --frozen
+
+    - name: Cache fixtures
+      uses: actions/cache@v5
+      with:
+        path: fixtures
+        key: ${{ runner.os }}-fixtures-${{ matrix.test }}-${{ hashFiles('tests/shanghai/**') }}
+
+    - name: Generate fixtures
+      run: |
+        uv run fill -v tests/shanghai/${{ matrix.test }} \
+          --clean --fork Shanghai -v -x --traces
+        echo "=== Genesis hashes ==="
+        find fixtures/blockchain_tests/shanghai/${{ matrix.test }} \
+          -name "*.json" -exec jq -r '.[].genesisBlockHeader.hash' {} \;
+
+    - name: Checkout Hive (sync-eest)
+      uses: actions/checkout@v4
+      with:
+        repository: gnosischain/hive
+        ref: sync-eest
+        path: hive
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '>=1.24'
+        cache-dependency-path: hive/go.sum
+
+    - name: Build Hive
+      run: |
+        cd hive
+        go build -v -o hive .
+
+    - name: Start Hive (reth-gnosis)
+      run: |
+        cd hive
+        ./hive --dev --client reth-gnosis \
+          --loglevel 5 --sim.loglevel 5 &
+        echo "Waiting for Hive simulator..."
+        for i in {1..60}; do
+          if curl -s http://127.0.0.1:3000/ > /dev/null 2>&1; then
+            echo "✅ Hive ready at http://127.0.0.1:3000"
+            echo "HIVE_SIMULATOR=http://127.0.0.1:3000" >> $GITHUB_ENV
+            break
+          fi
+          echo "⏳ Waiting ($i/60)..."
+          sleep 3
+        done || { echo "❌ Hive failed to start"; exit 1; }
+
+    - name: Consume fixtures against Hive
+      env:
+        HIVE_SIMULATOR: http://127.0.0.1:3000
+      run: |
+        uv run consume engine -v \
+          fixtures/blockchain_tests/shanghai/${{ matrix.test }}
+
+    - name: Upload logs & fixtures (failure)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: hive-${{ matrix.client }}-${{ matrix.test }}-failure
+        path: |
+          hive/*.log
+          ~/.docker/containers/
+          fixtures/blockchain_tests/shanghai/${{ matrix.test }}/
+          .venv/
