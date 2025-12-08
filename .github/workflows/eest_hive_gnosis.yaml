@@ -7,7 +7,8 @@ on:
   pull_request:
     branches:
       - make-hive-compatible
-
+  workflow_dispatch:
+  
 jobs:
   test:
     runs-on: ubuntu-latest
