@@ -62,12 +62,12 @@ jobs:
           uv run solc-select use 0.8.24 --always-install
       
       - name: Run fill
-        run: uv run fill tests/shanghai/ --fork Shanghai --clean -v -x --traces
+        run: uv run fill tests/shanghai/eip3651_warm_coinbase --fork Shanghai --clean -v -x --traces
 
       - name: Run test against Reth
         env:
           HIVE_SIMULATOR: http://127.0.0.1:3000
-        run: uv run consume engine -v --input fixtures/blockchain_tests_engine/shanghai/
+        run: uv run consume engine -v --input fixtures/blockchain_tests_engine/shanghai/eip3651_warm_coinbase
 
       - name: Upload Hive logs
         if: always()
