@@ -36,8 +36,6 @@ jobs:
           ~/go/bin/hive --dev --client reth-gnosis \
             --dev.addr=127.0.0.1:3000 \
             --loglevel=5 \
-            --client.env RUST_LOG=trace \
-            --client.env RETH_LOG_STDOUT=1 \
             --sim.loglevel=5 \
             --docker.output \
             --docker.pull > hive.log 2>&1 &
