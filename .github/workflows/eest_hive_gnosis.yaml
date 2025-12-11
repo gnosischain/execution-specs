@@ -35,7 +35,7 @@ jobs:
           cd hive
           ~/go/bin/hive --dev --client reth-gnosis \
             --dev.addr=127.0.0.1:3000 \
-            --client.loglevel=trace \
+            --loglevel=5 \
             --client.env RUST_LOG=trace \
             --client.env RETH_LOG_STDOUT=1 \
             --sim.loglevel=5 \
