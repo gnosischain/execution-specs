@@ -1460,7 +1460,7 @@ class Paris(
 
         # Pre-allocate system address with empty state
         new_allocation[0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE] = {
-            "nonce": 1,
+            "nonce": 0,
             "balance": 0,
             "code": b"",
             "storage": {},
