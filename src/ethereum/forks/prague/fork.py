@@ -992,7 +992,7 @@ def process_transaction(
     # transfer base fee to fee collector address
     fee_collector_balance_after = get_account(
         block_env.state, FEE_COLLECTOR_ADDRESS
-    ).balance + U256(tx.gas * block_env.base_fee_per_gas)
+    ).balance + U256(tx_gas_used_after_refund * block_env.base_fee_per_gas)
     if fee_collector_balance_after != 0:
         set_account_balance(
             block_env.state,
