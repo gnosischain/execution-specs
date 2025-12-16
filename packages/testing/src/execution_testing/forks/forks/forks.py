@@ -1459,12 +1459,12 @@ class Paris(
             )
 
         # Pre-allocate system address with empty state
-        new_allocation[0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE] = {
-            "nonce": 0,
-            "balance": 0,
-            "code": b"",
-            "storage": {},
-        }
+        # new_allocation[0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE] = {
+        #     "nonce": 0,
+        #     "balance": 0,
+        #     "code": b"",
+        #     "storage": {},
+        # }
 
         return new_allocation | super(Paris, cls).pre_allocation_blockchain()  # type: ignore
 
