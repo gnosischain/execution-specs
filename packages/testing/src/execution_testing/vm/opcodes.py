@@ -3,9 +3,10 @@ Ethereum Virtual Machine opcode definitions.
 
 Acknowledgments: The individual opcode documentation below is due to the work
 by [smlXL](https://github.com/smlxl) on [evm.codes](https://www.evm.codes/),
-available as open source [github.com/smlxl/
-evm.codes](https://github.com/smlxl/evm.codes) - thank you! And thanks
-to @ThreeHrSleep for integrating it in the docstrings.
+available as open source [`smlxl/evm.codes`][0]; thank you! And thanks to
+@ThreeHrSleep for integrating it in the docstrings.
+
+[0]: https://github.com/smlxl/evm.codes
 """
 
 from enum import Enum
@@ -2091,8 +2092,7 @@ class Opcodes(Opcode, Enum):
     ----
     3
 
-    Source: [eips.ethereum.org/EIPS/
-    eip-4844](https://eips.ethereum.org/EIPS/eip-4844)
+    Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844)
     """
 
     BLOBBASEFEE = Opcode(0x4A, popped_stack_items=0, pushed_stack_items=1)
@@ -2120,8 +2120,7 @@ class Opcodes(Opcode, Enum):
     ----
     2
 
-    Source: [eips.ethereum.org/EIPS/eip-7516](https://eips.ethereum.org/
-    EIPS/eip-7516)
+    Source: [EIP-7516](https://eips.ethereum.org/EIPS/eip-7516)
     """
 
     POP = Opcode(0x50, popped_stack_items=1)
@@ -2569,8 +2568,7 @@ class Opcodes(Opcode, Enum):
     ----
     100
 
-    Source: [eips.ethereum.org/EIPS/eip-1153](https://eips.ethereum.org/EIPS/
-    eip-1153)
+    Source: [EIP-1153](https://eips.ethereum.org/EIPS/eip-1153)
     """
 
     MCOPY = Opcode(
@@ -2604,8 +2602,7 @@ class Opcodes(Opcode, Enum):
     - static_gas = 3
     - dynamic_gas = 3 * minimum_word_size + memory_expansion_cost
 
-    Source: [eips.ethereum.org/EIPS/eip-5656](https://eips.ethereum.org/EIPS/
-    eip-5656)
+    Source: [EIP-5656](https://eips.ethereum.org/EIPS/eip-5656)
     """
 
     PUSH0 = Opcode(0x5F, pushed_stack_items=1)
@@ -4897,8 +4894,7 @@ class Opcodes(Opcode, Enum):
     Gas
     ----
 
-    Source: [eips.ethereum.org/EIPS/eip-4200](https://eips.ethereum.org/EIPS/
-    eip-4200)
+    Source: [EIP-4200](https://eips.ethereum.org/EIPS/eip-4200)
     """
 
     DATALOAD = Opcode(
@@ -4930,8 +4926,7 @@ class Opcodes(Opcode, Enum):
     ----
     4
 
-    Source: [eips.ethereum.org/EIPS/eip-7480](https://eips.ethereum.org/EIPS/
-    eip-7480)
+    Source: [EIP-7480](https://eips.ethereum.org/EIPS/eip-7480)
     """
 
     DATALOADN = Opcode(0xD1, pushed_stack_items=1, data_portion_length=2)
@@ -4965,8 +4960,7 @@ class Opcodes(Opcode, Enum):
     ----
     3
 
-    Source: [eips.ethereum.org/EIPS/eip-7480](https://eips.ethereum.org/EIPS/
-    eip-7480)
+    Source: [EIP-7480](https://eips.ethereum.org/EIPS/eip-7480)
     """
 
     DATASIZE = Opcode(0xD2, pushed_stack_items=1)
@@ -4995,8 +4989,7 @@ class Opcodes(Opcode, Enum):
     ----
     2
 
-    Source: [eips.ethereum.org/EIPS/eip-7480](https://eips.ethereum.org/EIPS/
-    eip-7480)
+    Source: [EIP-7480](https://eips.ethereum.org/EIPS/eip-7480)
     """
 
     DATACOPY = Opcode(
@@ -5032,8 +5025,7 @@ class Opcodes(Opcode, Enum):
     - static_gas = 3
     - dynamic_gas = 3 * minimum_word_size + memory_expansion_cost
 
-    Source: [eips.ethereum.org/EIPS/eip-7480](https://eips.ethereum.org/EIPS/
-    eip-7480)
+    Source: [EIP-7480](https://eips.ethereum.org/EIPS/eip-7480)
     """
 
     RJUMPI = Opcode(0xE1, popped_stack_items=1, data_portion_length=2)
@@ -5059,8 +5051,7 @@ class Opcodes(Opcode, Enum):
     Gas
     ----
 
-    Source: [eips.ethereum.org/EIPS/eip-4200](https://eips.ethereum.org/EIPS/
-    eip-4200)
+    Source: [EIP-4200](https://eips.ethereum.org/EIPS/eip-4200)
     """
 
     RJUMPV = Opcode(
@@ -5099,8 +5090,7 @@ class Opcodes(Opcode, Enum):
     Gas
     ----
 
-    Source: [eips.ethereum.org/EIPS/eip-4200](https://eips.ethereum.org/EIPS/
-    eip-4200)
+    Source: [EIP-4200](https://eips.ethereum.org/EIPS/eip-4200)
     """
 
     CALLF = Opcode(0xE3, data_portion_length=2, unchecked_stack=True)
@@ -5140,8 +5130,7 @@ class Opcodes(Opcode, Enum):
     5
 
     Source:
-    [ipsilon/eof/blob/main/spec/eof.md](https://github.com/ipsilon/eof/blob/
-    main/spec/eof.md)
+    [`eof.md`](https://github.com/ipsilon/eof/blob/main/spec/eof.md)
     """
 
     RETF = Opcode(0xE4, terminating=True)
