@@ -326,10 +326,10 @@ class Alloc(BaseAlloc):
 
     def empty_accounts(self) -> List[Address]:
         """Return list of addresses of empty accounts."""
-        SYSTEM_ADDRESS = Address(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE)  # noqa N806
+        # SYSTEM_ADDRESS = Address(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE)  # noqa N806
         return [
             address for address, account in self.root.items() if not account
-            if not account and address != SYSTEM_ADDRESS
+            # if not account and address != SYSTEM_ADDRESS
         ]
 
     def state_root(self) -> Hash:
