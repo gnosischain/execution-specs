@@ -62,7 +62,7 @@ class Load(BaseLoad):
         state = self.fork.State()
         set_storage = self.fork.set_storage
         EMPTY_ACCOUNT = self.fork.EMPTY_ACCOUNT  # noqa N806
-        # SYSTEM_ADDRESS = self.fork.hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe") # noqa N806
+        SYSTEM_ADDRESS = self.fork.hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe") # noqa N806
 
         for address_hex, account_state in raw.items():
             address = self.fork.hex_to_address(address_hex)
@@ -71,11 +71,10 @@ class Load(BaseLoad):
                 balance=U256(hex_to_uint(account_state.get("balance", "0x0"))),
                 code=hex_to_bytes(account_state.get("code", "")),
             )
-            # if (
-            #     self.fork.proof_of_stake and account == EMPTY_ACCOUNT
-            #     and address != SYSTEM_ADDRESS
-            # ):
-            if self.fork.proof_of_stake and account == EMPTY_ACCOUNT:
+            if (
+                self.fork.proof_of_stake and account == EMPTY_ACCOUNT
+                and address != SYSTEM_ADDRESS
+            ):
                 raise StateWithEmptyAccount(f"Empty account at {address_hex}.")
 
             self.fork.set_account(state, address, account)
