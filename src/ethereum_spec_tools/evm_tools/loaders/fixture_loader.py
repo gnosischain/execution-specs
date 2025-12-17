@@ -62,7 +62,7 @@ class Load(BaseLoad):
         state = self.fork.State()
         set_storage = self.fork.set_storage
         EMPTY_ACCOUNT = self.fork.EMPTY_ACCOUNT  # noqa N806
-        SYSTEM_ADDRESS = self.fork.hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe") # noqa N806
+        SYSTEM_ADDRESS = self.fork.SYSTEM_ADDRESS  # noqa N806
 
         for address_hex, account_state in raw.items():
             address = self.fork.hex_to_address(address_hex)
@@ -72,7 +72,8 @@ class Load(BaseLoad):
                 code=hex_to_bytes(account_state.get("code", "")),
             )
             if (
-                self.fork.proof_of_stake and account == EMPTY_ACCOUNT
+                self.fork.proof_of_stake
+                and account == EMPTY_ACCOUNT
                 and address != SYSTEM_ADDRESS
             ):
                 raise StateWithEmptyAccount(f"Empty account at {address_hex}.")

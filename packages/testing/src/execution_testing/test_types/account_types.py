@@ -328,7 +328,9 @@ class Alloc(BaseAlloc):
         """Return list of addresses of empty accounts."""
         SYSTEM_ADDRESS = Address(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE)  # noqa N806
         return [
-            address for address, account in self.root.items() if not account
+            address
+            for address, account in self.root.items()
+            if not account
             if not account and address != SYSTEM_ADDRESS
         ]
 
