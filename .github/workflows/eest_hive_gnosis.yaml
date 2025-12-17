@@ -8,6 +8,15 @@ on:
     branches:
       - make-hive-compatible
   workflow_dispatch:
+    inputs:
+      fork:
+        description: "Fork passed to --fork"
+        required: true
+        default: "Osaka"
+      client:
+        description: "Client passed to --client"
+        required: true
+        default: "reth-gnosis"
   
 jobs:
   test:
@@ -16,6 +25,20 @@ jobs:
     steps:
       - name: Checkout execution-specs
         uses: actions/checkout@v4
+      
+      - name: Set fork and client variables
+        id: vars
+        run: |
+          # Use input if available (workflow_dispatch), otherwise use defaults
+          FORK="${{ github.event.inputs.fork || 'Osaka' }}"
+          CLIENT="${{ github.event.inputs.client || 'reth-gnosis' }}"
+          
+          # Convert fork name to lowercase for directory paths
+          FORK_LOWER=$(echo "$FORK" | tr '[:upper:]' '[:lower:]')
+          
+          echo "fork=$FORK" >> $GITHUB_OUTPUT
+          echo "fork_lower=$FORK_LOWER" >> $GITHUB_OUTPUT
+          echo "client=$CLIENT" >> $GITHUB_OUTPUT
 
       - name: Install Go (for Hive)
         uses: actions/setup-go@v5
@@ -33,7 +56,7 @@ jobs:
       - name: Start Hive in background
         run: |
           cd hive
-          ~/go/bin/hive --dev --client reth-gnosis \
+          ~/go/bin/hive --dev --client "${{ steps.vars.outputs.client }}" \
             --dev.addr=127.0.0.1:3000 \
             --loglevel=5 \
             --sim.loglevel=5 \
@@ -62,12 +85,13 @@ jobs:
           uv run solc-select use 0.8.24 --always-install
       
       - name: Run fill
-        run: uv run fill tests/shanghai/eip3651_warm_coinbase --fork Shanghai --clean -v -x --traces
+        run: |
+          uv run fill tests/${{ steps.vars.outputs.fork_lower }} --fork ${{ steps.vars.outputs.fork }} --clean -v -x --traces
 
-      - name: Run test against Reth
+      - name: Run test against client
         env:
           HIVE_SIMULATOR: http://127.0.0.1:3000
-        run: uv run consume engine -v --input fixtures/blockchain_tests_engine/shanghai/eip3651_warm_coinbase
+        run: uv run consume engine -v --input fixtures/blockchain_tests_engine/${{ steps.vars.outputs.fork_lower }}
 
       - name: Upload Hive logs
         if: always()
