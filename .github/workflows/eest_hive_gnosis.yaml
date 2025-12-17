@@ -12,7 +12,7 @@ on:
       fork:
         description: "Fork passed to --fork"
         required: true
-        default: "Osaka"
+        default: "Prague"
       client:
         description: "Client passed to --client"
         required: true
@@ -30,7 +30,7 @@ jobs:
         id: vars
         run: |
           # Use input if available (workflow_dispatch), otherwise use defaults
-          FORK="${{ github.event.inputs.fork || 'Osaka' }}"
+          FORK="${{ github.event.inputs.fork || 'Prague' }}"
           CLIENT="${{ github.event.inputs.client || 'reth-gnosis' }}"
           
           # Convert fork name to lowercase for directory paths
