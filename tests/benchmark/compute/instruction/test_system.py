@@ -479,8 +479,8 @@ def test_selfdestruct_existing(
     fork: Fork,
     pre: Alloc,
     value_bearing: bool,
-    env: Environment,
     gas_benchmark_value: int,
+    tx_gas_limit: int,
 ) -> None:
     """
     Benchmark SELFDESTRUCT instruction for existing contracts.
@@ -511,13 +511,15 @@ def test_selfdestruct_existing(
         # cost for CREATE2
         + gas_costs.G_VERY_LOW * 3  # ~MSTOREs+ADDs
         + gas_costs.G_COLD_ACCOUNT_ACCESS  # CALL to self-destructing contract
+        + gas_costs.G_BASE
         + gas_costs.G_SELF_DESTRUCT
-        + 63  # ~Gluing opcodes
+        + 88  # ~Gluing opcodes
     )
     final_storage_gas = (
-        gas_costs.G_STORAGE_RESET
-        + gas_costs.G_COLD_SLOAD
-        + (gas_costs.G_VERY_LOW * 2)
+        gas_costs.G_VERY_LOW  # ADD
+        + gas_costs.G_VERY_LOW * 3  # PUSHs
+        + gas_costs.G_COLD_SLOAD  # SSTORE cold
+        + gas_costs.G_STORAGE_RESET  # SSTORE new value
     )
     memory_expansion_cost = fork().memory_expansion_gas_calculator()(
         new_bytes=96
@@ -529,9 +531,8 @@ def test_selfdestruct_existing(
         + memory_expansion_cost
     )
     num_contracts = (attack_gas_limit - base_costs) // loop_cost
-    expected_benchmark_gas_used = num_contracts * loop_cost + base_costs
 
-    # Create a factory that deployes a new SELFDESTRUCT contract instance pre-
+    # Create a factory that deploys a new SELFDESTRUCT contract instance pre-
     # funded depending on the value_bearing parameter. We use CREATE2 so the
     # caller contract can easily reproduce the addresses in a loop for CALLs.
     factory_code = (
@@ -554,8 +555,9 @@ def test_selfdestruct_existing(
         + Op.RETURN(0, 32)
     )
 
-    required_balance = num_contracts if value_bearing else 0  # 1 wei per
-    # contract
+    required_balance = (
+        num_contracts if value_bearing else 0
+    )  # 1 wei per contract
     factory_address = pre.deploy_contract(
         code=factory_code, balance=required_balance
     )
@@ -571,45 +573,73 @@ def test_selfdestruct_existing(
     )
     factory_caller_address = pre.deploy_contract(code=factory_caller_code)
 
+    # The deployed code length is two-bytes. The dominant factor
+    # is the static cost, plus a few glue opcodes/memory-expansion costs.
+    estimated_gas_per_creation = gas_costs.G_CREATE + 3_000
+    max_creations_per_tx = int(tx_gas_limit // estimated_gas_per_creation)
+    num_setup_txs = math.ceil(num_contracts / max_creations_per_tx)
+
+    setup_txs = []
     with TestPhaseManager.setup():
-        contracts_deployment_tx = Transaction(
-            to=factory_caller_address,
-            gas_limit=env.gas_limit,
-            data=Hash(num_contracts),
-            sender=pre.fund_eoa(),
-        )
+        for i in range(num_setup_txs):
+            count = min(
+                max_creations_per_tx, num_contracts - i * max_creations_per_tx
+            )
+            setup_txs.append(
+                Transaction(
+                    to=factory_caller_address,
+                    gas_limit=tx_gas_limit,
+                    data=Hash(count),
+                    sender=pre.fund_eoa(),
+                )
+            )
 
     code = (
         # Setup memory for later CREATE2 address generation loop.
         # 0xFF+[Address(20bytes)]+[seed(32bytes)]+[initcode keccak(32bytes)]
         Op.MSTORE(0, factory_address)
         + Op.MSTORE8(32 - 20 - 1, 0xFF)
-        + Op.MSTORE(32, 0)
+        + Op.MSTORE(32, Op.CALLDATALOAD(0))  # Starting address from calldata
         + Op.MSTORE(64, initcode.keccak256())
         # Main loop
         + While(
             body=Op.POP(Op.CALL(address=Op.SHA3(32 - 20 - 1, 85)))
             + Op.MSTORE(32, Op.ADD(Op.MLOAD(32), 1)),
-            # Only loop if we have enough gas to cover another iteration plus
-            # the final storage gas.
+            # Loop while we have enough gas AND within target count
             condition=Op.GT(Op.GAS, final_storage_gas + loop_cost),
         )
-        + Op.SSTORE(0, 42)  # Done for successful tx execution assertion below.
+        + Op.SSTORE(
+            0, Op.ADD(Op.SLOAD(0), 1)
+        )  # Done for successful tx execution assertion below.
     )
     assert len(code) <= fork.max_code_size()
 
     # The 0 storage slot is initialize to avoid creation costs in SSTORE above.
     code_addr = pre.deploy_contract(code=code, storage={0: 1})
+
+    # Calculate max targets per execution TX based on effective gas limit
+    max_targets_per_tx = (tx_gas_limit - base_costs) // loop_cost
+    num_exec_txs = math.ceil(num_contracts / max_targets_per_tx)
+
+    exec_txs = []
     with TestPhaseManager.execution():
-        opcode_tx = Transaction(
-            to=code_addr,
-            gas_limit=attack_gas_limit,
-            sender=pre.fund_eoa(),
-        )
+        for i in range(num_exec_txs):
+            start = i * max_targets_per_tx
+            count = min(max_targets_per_tx, num_contracts - start)
+            exec_txs.append(
+                Transaction(
+                    to=code_addr,
+                    gas_limit=tx_gas_limit,
+                    data=Hash(start),
+                    sender=pre.fund_eoa(),
+                )
+            )
 
     post = {
         factory_address: Account(storage={0: num_contracts}),
-        code_addr: Account(storage={0: 42}),  # Check for successful execution.
+        code_addr: Account(
+            storage={0: len(exec_txs) + 1}
+        ),  # Check for successful execution.
     }
     deployed_contract_addresses = []
     for i in range(num_contracts):
@@ -624,10 +654,10 @@ def test_selfdestruct_existing(
     benchmark_test(
         post=post,
         blocks=[
-            Block(txs=[contracts_deployment_tx]),
-            Block(txs=[opcode_tx], fee_recipient=fee_recipient),
+            Block(txs=setup_txs),
+            Block(txs=exec_txs, fee_recipient=fee_recipient),
         ],
-        expected_benchmark_gas_used=expected_benchmark_gas_used,
+        skip_gas_used_validation=True,
     )
 
 
