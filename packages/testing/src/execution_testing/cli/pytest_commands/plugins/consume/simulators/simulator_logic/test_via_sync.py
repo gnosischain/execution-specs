@@ -12,33 +12,33 @@ This simulator:
 4. Verifies that the sync was successful
 """
 
-import time
-
 import pytest
 
 from execution_testing.exceptions import UndefinedException
 from execution_testing.fixtures import BlockchainEngineSyncFixture
-from execution_testing.rpc import AdminRPC, EngineRPC, EthRPC, NetRPC
+from execution_testing.logging import get_logger
+from execution_testing.rpc import (
+    AdminRPC,
+    BlockNotAvailableError,
+    EngineRPC,
+    EthRPC,
+    ForkchoiceUpdateTimeoutError,
+    NetRPC,
+    PeerConnectionTimeoutError,
+)
 from execution_testing.rpc.rpc_types import (
     ForkchoiceState,
     JSONRPCError,
     PayloadStatusEnum,
 )
 
-from execution_testing.logging import get_logger
-from ..helpers.exceptions import GenesisBlockMismatchExceptionError
+from ..helpers.exceptions import (
+    GenesisBlockMismatchExceptionError,
+    LoggedError,
+)
 from ..helpers.timing import TimingData
 
 logger = get_logger(__name__)
-
-
-class LoggedError(Exception):
-    """Exception that uses the logger to log the failure."""
-
-    def __init__(self, *args: object) -> None:
-        """Initialize the exception and log the failure."""
-        super().__init__(*args)
-        logger.fail(str(self))
 
 
 def test_blockchain_via_sync(
@@ -67,38 +67,26 @@ def test_blockchain_via_sync(
     # Initialize client under test
     with timing_data.time("Initialize client under test"):
         logger.info("Initializing client under test with genesis block...")
-
-        # Send initial forkchoice update to client under test
-        delay = 0.5
-        for attempt in range(3):
-            forkchoice_response = engine_rpc.forkchoice_updated(
+        try:
+            response = engine_rpc.forkchoice_updated_with_retry(
                 forkchoice_state=ForkchoiceState(
                     head_block_hash=fixture.genesis.block_hash,
                 ),
-                payload_attributes=None,
-                version=fixture.payloads[0].forkchoice_updated_version,
+                forkchoice_version=fixture.payloads[
+                    0
+                ].forkchoice_updated_version,
+                max_attempts=4,
+                wait_fixed=0.5,
             )
-            status = forkchoice_response.payload_status.status
-            logger.info(
-                f"Initial forkchoice update response attempt {attempt + 1}: {status}"
-            )
-            if status != PayloadStatusEnum.SYNCING:
-                break
-            if attempt < 2:
-                time.sleep(delay)
-                delay *= 2
-
-        if (
-            forkchoice_response.payload_status.status
-            != PayloadStatusEnum.VALID
-        ):
-            logger.error(
-                f"Client under test failed to initialize properly after 3 attempts, "
-                f"final status: {forkchoice_response.payload_status.status}"
-            )
+            if response.payload_status.status != PayloadStatusEnum.VALID:
+                raise LoggedError(
+                    f"Unexpected status on forkchoice updated to genesis: "
+                    f"{response.payload_status.status}"
+                )
+        except ForkchoiceUpdateTimeoutError as e:
             raise LoggedError(
-                f"unexpected status on forkchoice updated to genesis: {forkchoice_response}"
-            )
+                f"Timed out waiting for forkchoice update to genesis: {e}"
+            ) from None
 
     # Verify genesis block on client under test
     with timing_data.time("Verify genesis on client under test"):
@@ -296,39 +284,26 @@ def test_blockchain_via_sync(
     # Initialize sync client
     with timing_data.time("Initialize sync client"):
         logger.info("Initializing sync client with genesis block...")
-
-        # Send initial forkchoice update to sync client
-        delay = 0.5
-        for attempt in range(3):
-            forkchoice_response = sync_engine_rpc.forkchoice_updated(
+        try:
+            response = sync_engine_rpc.forkchoice_updated_with_retry(
                 forkchoice_state=ForkchoiceState(
                     head_block_hash=fixture.genesis.block_hash,
                 ),
-                payload_attributes=None,
-                version=fixture.payloads[0].forkchoice_updated_version,
+                forkchoice_version=fixture.payloads[
+                    0
+                ].forkchoice_updated_version,
+                max_attempts=4,
+                wait_fixed=0.5,
             )
-            status = forkchoice_response.payload_status.status
-            logger.info(
-                f"Sync client forkchoice update response attempt {attempt + 1}: {status}"
-            )
-            if status != PayloadStatusEnum.SYNCING:
-                break
-            if attempt < 2:
-                time.sleep(delay)
-                delay *= 2
-
-        if (
-            forkchoice_response.payload_status.status
-            != PayloadStatusEnum.VALID
-        ):
-            logger.error(
-                f"Sync client failed to initialize properly after 3 attempts, "
-                f"final status: {forkchoice_response.payload_status.status}"
-            )
+            if response.payload_status.status != PayloadStatusEnum.VALID:
+                raise LoggedError(
+                    f"Unexpected status on sync client forkchoice updated to genesis: "
+                    f"{response.payload_status.status}"
+                )
+        except ForkchoiceUpdateTimeoutError as e:
             raise LoggedError(
-                f"Unexpected status on sync client forkchoice updated to genesis: "
-                f"{forkchoice_response}"
-            )
+                f"Timed out waiting for sync client forkchoice update to genesis: {e}"
+            ) from None
 
     # Add peer using admin_addPeer This seems to be required... TODO: we can
     # maybe improve flow here if not required
@@ -340,20 +315,18 @@ def test_blockchain_via_sync(
     except Exception as e:
         raise LoggedError(f"admin_addPeer failed: {e}") from e
 
-    # quick sleep to allow for connection - TODO: is this necessary?
-    time.sleep(1)
-
+    # Wait for peer connection to establish
     try:
-        sync_peer_count = sync_net_rpc.peer_count()
-        client_peer_count = net_rpc.peer_count()
-        logger.info(
-            f"Peer count: sync_client={sync_peer_count}, client_under_test={client_peer_count}"
-        )
-
-        if sync_peer_count == 0 and client_peer_count == 0:
-            raise LoggedError("No P2P connection established between clients")
-    except Exception as e:
-        logger.warning(f"Could not verify peer connection: {e}")
+        sync_net_rpc.wait_for_peer_connection()
+        logger.info("Peer connection established on sync client")
+    except PeerConnectionTimeoutError:
+        try:
+            net_rpc.wait_for_peer_connection()
+            logger.info("Peer connection established on client under test")
+        except PeerConnectionTimeoutError as e:
+            raise LoggedError(
+                f"No P2P connection established between clients: {e}"
+            ) from e
 
     # Trigger sync by sending the target block via newPayload followed by
     # forkchoice update
@@ -425,23 +398,24 @@ def test_blockchain_via_sync(
                     "Sync client accepted the block, may start syncing ancestors"
                 )
 
-            # Give a moment for P2P connections to establish after sync starts
-            time.sleep(1)
-
-            # Check peer count after triggering sync Note: Reth does not
-            # actually raise the peer count but doesn't seem to need this to
-            # sync.
+            # Wait for P2P connections after sync starts
+            # Note: Reth does not report peer count but still syncs successfully
             try:
                 assert sync_net_rpc is not None, "sync_net_rpc is required"
-                client_peer_count = net_rpc.peer_count()
-                sync_peer_count = sync_net_rpc.peer_count()
-                if sync_peer_count > 0 or client_peer_count > 0:
+                sync_net_rpc.wait_for_peer_connection()
+                logger.debug(
+                    "Peer connection verified on sync client after sync trigger"
+                )
+            except PeerConnectionTimeoutError:
+                try:
+                    net_rpc.wait_for_peer_connection()
                     logger.debug(
-                        f"Peers connected: client_under_test={client_peer_count}, "
-                        f"sync_client={sync_peer_count}"
+                        "Peer connection verified on client under test"
                     )
-            except Exception as e:
-                logger.debug(f"Could not check peer count: {e}")
+                except PeerConnectionTimeoutError as e:
+                    logger.debug(
+                        f"Peer connection not verified (may still sync): {e}"
+                    )
 
         except Exception as e:
             logger.warning(
@@ -464,112 +438,74 @@ def test_blockchain_via_sync(
             f"(hash: {last_valid_block_hash})"
         )
 
-        # Start monitoring sync progress
-        sync_start_time = time.time()
-        last_forkchoice_time = time.time()
-        forkchoice_interval = 2.0  # Send forkchoice updates every 2 seconds
-
-        while time.time() - sync_start_time < 15:  # 15 second timeout
-            # Send periodic forkchoice updates to keep sync alive
-            if time.time() - last_forkchoice_time >= forkchoice_interval:
-                try:
-                    # Send forkchoice update to sync client to trigger/maintain
-                    # sync
-                    assert sync_engine_rpc is not None, (
-                        "sync_engine_rpc is required"
-                    )
-                    sync_fc_response = sync_engine_rpc.forkchoice_updated(
-                        forkchoice_state=last_valid_block_forkchoice_state,
-                        payload_attributes=None,
-                        version=fixture.sync_payload.forkchoice_updated_version
-                        if fixture.sync_payload
-                        else fixture.payloads[-1].forkchoice_updated_version,
-                    )
-                    status = sync_fc_response.payload_status.status
-                    logger.debug(
-                        f"Periodic forkchoice update status: {status}"
-                    )
-                    if status.VALID:
-                        break
-                    last_forkchoice_time = time.time()
-                except Exception as fc_err:
-                    logger.debug(
-                        f"Periodic forkchoice update failed: {fc_err}"
-                    )
-            time.sleep(0.5)
-        else:
-            raise LoggedError(
-                f"Sync client failed to synchronize to block {last_valid_block_hash} "
-                f"within timeout"
+        try:
+            response = sync_engine_rpc.forkchoice_updated_with_retry(
+                forkchoice_state=last_valid_block_forkchoice_state,
+                forkchoice_version=fixture.sync_payload.forkchoice_updated_version
+                if fixture.sync_payload
+                else fixture.payloads[-1].forkchoice_updated_version,
+                max_attempts=30,
+                wait_fixed=0.5,
             )
+            if response.payload_status.status != PayloadStatusEnum.VALID:
+                raise LoggedError(
+                    f"Sync client failed to sync to block {last_valid_block_hash}: "
+                    f"unexpected status {response.payload_status.status}"
+                )
+        except ForkchoiceUpdateTimeoutError as e:
+            raise LoggedError(
+                f"Sync client timed out syncing to block {last_valid_block_hash}: {e}"
+            ) from None
 
         logger.info("Sync verification successful! FCU returned VALID.")
 
-        # Verify the final state but give a few tries
-        assert eth_rpc is not None, "eth_rpc is required"
-        assert sync_eth_rpc is not None, "sync_eth_rpc is required"
+        # Verify the final state by fetching blocks from both clients
+        # Note: Block unavailability is acceptable - FCU VALID is authoritative
+        client_block = None
+        sync_block = None
 
-        max_attempts = 5  # 5 attempts with 1 second wait between
-        for attempt in range(max_attempts):
-            try:
-                sync_block = sync_eth_rpc.get_block_by_hash(
-                    last_valid_block_hash
+        try:
+            client_block = eth_rpc.get_block_by_hash_with_retry(
+                last_valid_block_hash,
+                max_attempts=5,
+                wait_fixed=1.0,
+            )
+        except BlockNotAvailableError as e:
+            logger.debug(
+                f"Block not available on client under test (acceptable): {e}"
+            )
+
+        try:
+            sync_block = sync_eth_rpc.get_block_by_hash_with_retry(
+                last_valid_block_hash,
+                max_attempts=5,
+                wait_fixed=1.0,
+            )
+        except BlockNotAvailableError as e:
+            logger.debug(
+                f"Block not available on sync client (acceptable): {e}"
+            )
+
+        if sync_block is not None and client_block is not None:
+            if sync_block["stateRoot"] != client_block["stateRoot"]:
+                raise LoggedError(
+                    f"State root mismatch after sync. "
+                    f"Sync client: {sync_block['stateRoot']}, "
+                    f"Client under test: {client_block['stateRoot']}"
                 )
-                client_block = eth_rpc.get_block_by_hash(last_valid_block_hash)
 
-                if sync_block is not None and client_block is not None:
-                    # If we have both blocks, verify they match
-                    if sync_block["stateRoot"] != client_block["stateRoot"]:
-                        raise LoggedError(
-                            f"State root mismatch after sync. "
-                            f"Sync client: {sync_block['stateRoot']}, "
-                            f"Client under test: {client_block['stateRoot']}"
-                        )
-
-                    if fixture.post_state_hash:
-                        if sync_block["stateRoot"] != str(
-                            fixture.post_state_hash
-                        ):
-                            raise LoggedError(
-                                f"Final state root mismatch. "
-                                f"Expected: {fixture.post_state_hash}, "
-                                f"Got: {sync_block['stateRoot']}"
-                            )
-
-                    logger.info(
-                        f"Block state verified via eth_getBlockByHash (attempt {attempt + 1}): "
-                        f"{sync_block['stateRoot']}"
+            # Verify against expected post-state hash if provided
+            if fixture.post_state_hash:
+                if sync_block["stateRoot"] != str(fixture.post_state_hash):
+                    raise LoggedError(
+                        f"Final state root mismatch. "
+                        f"Expected: {fixture.post_state_hash}, "
+                        f"Got: {sync_block['stateRoot']}"
                     )
-                    break
-                else:
-                    missing = []
-                    if sync_block is None:
-                        missing.append("sync_client")
-                    if client_block is None:
-                        missing.append("client_under_test")
 
-                    if attempt < max_attempts - 1:
-                        logger.debug(
-                            f"Block {last_valid_block_hash} not yet available on {', '.join(missing)} "
-                            f"(attempt {attempt + 1}/{max_attempts})"
-                        )
-                        time.sleep(1)
-                    else:
-                        # Final attempt and blocks still not available
-                        logger.debug(
-                            f"Block {last_valid_block_hash} not available via eth_getBlockByHash "
-                            f"after {max_attempts} attempts (missing from: {', '.join(missing)}). "
-                            f"This is acceptable as FCU VALID is the authoritative success signal."
-                        )
-            except LoggedError:
-                # Re-raise validation errors immediately with no retry
-                raise
-            except Exception as e:
-                # Log other errors without failing the test
-                logger.debug(
-                    f"Error fetching blocks for verification (attempt {attempt + 1}): {e}"
-                )
-                if attempt < max_attempts - 1:
-                    time.sleep(1)
+            logger.info(
+                f"Block state verified via eth_getBlockByHash: "
+                f"{sync_block['stateRoot']}"
+            )
 
     logger.info("Sync test completed successfully!")
