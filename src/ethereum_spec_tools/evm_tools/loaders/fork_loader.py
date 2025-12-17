@@ -85,11 +85,6 @@ class ForkLoad:
         return self._module("fork").process_block_rewards
 
     @property
-    def process_block_rewards(self) -> Any:
-        """process_block_rewards function of the given fork."""
-        return self._module("fork").process_block_rewards
-
-    @property
     def process_withdrawals(self) -> Any:
         """process_withdrawals function of the given fork."""
         return self._module("fork").process_withdrawals
@@ -188,6 +183,11 @@ class ForkLoad:
     def EMPTY_ACCOUNT(self) -> Any:
         """EMPTY_ACCOUNT of the fork."""
         return self._module("fork_types").EMPTY_ACCOUNT
+
+    @property
+    def SYSTEM_ADDRESS(self) -> Any:
+        """SYSTEM_ADDRESS of the fork."""
+        return self._module("fork").SYSTEM_ADDRESS
 
     @property
     def Header(self) -> Any:
