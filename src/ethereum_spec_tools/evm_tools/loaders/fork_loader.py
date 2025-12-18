@@ -115,6 +115,11 @@ class ForkLoad:
         return self._module("fork").state_transition
 
     @property
+    def SYSTEM_ADDRESS(self) -> Any:
+        """SYSTEM_ADDRESS of the fork."""
+        return self._module("fork").SYSTEM_ADDRESS
+
+    @property
     def signing_hash(self) -> Any:
         """signing_hash function of the fork."""
         return self._module("transactions").signing_hash
@@ -183,11 +188,6 @@ class ForkLoad:
     def EMPTY_ACCOUNT(self) -> Any:
         """EMPTY_ACCOUNT of the fork."""
         return self._module("fork_types").EMPTY_ACCOUNT
-
-    @property
-    def SYSTEM_ADDRESS(self) -> Any:
-        """SYSTEM_ADDRESS of the fork."""
-        return self._module("fork_types").SYSTEM_ADDRESS
 
     @property
     def Header(self) -> Any:
