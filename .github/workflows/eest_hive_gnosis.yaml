@@ -42,7 +42,7 @@ jobs:
           cd hive
           ~/go/bin/hive --dev --client "${{ github.event.inputs.client }}" \
             --dev.addr=127.0.0.1:3000 \
-            --loglevel=4 \
+            --loglevel=5 \
             --sim.loglevel=5 \
             --docker.output \
             --docker.pull > hive.log 2>&1 &
