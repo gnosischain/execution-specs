@@ -185,11 +185,6 @@ class ForkLoad:
         return self._module("fork_types").EMPTY_ACCOUNT
 
     @property
-    def SYSTEM_ADDRESS(self) -> Any:
-        """SYSTEM_ADDRESS of the fork."""
-        return self._module("fork").SYSTEM_ADDRESS
-
-    @property
     def Header(self) -> Any:
         """Header class of the fork."""
         return self._module("blocks").Header
