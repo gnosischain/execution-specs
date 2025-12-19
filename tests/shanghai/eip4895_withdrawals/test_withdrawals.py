@@ -22,7 +22,7 @@ REFERENCE_SPEC_VERSION = ref_spec_4895.version
 
 pytestmark = pytest.mark.valid_from("Shanghai")
 
-DEPOSIT_CONTRACT = Address(0xB97036A26259B7147018913BD58A774CF91ACF25)
+DEPOSIT_CONTRACT = Address(0xBABE2BED00000000000000000000000000000003)
 
 
 def get_minimal_deposit_contract_code() -> bytes:
