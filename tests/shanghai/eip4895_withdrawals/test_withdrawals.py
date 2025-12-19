@@ -14,6 +14,7 @@ from execution_testing import (
     Op,
     Withdrawal,
 )
+from execution_testing.exceptions import BlockException
 
 from .spec import ref_spec_4895
 
@@ -162,9 +163,6 @@ def test_withdrawal_system_call_with_revert(
 ) -> None:
     """
     Test behavior when deposit contract reverts.
-
-    On Gnosis, if the system call reverts, the block should still be valid
-    (unlike Ethereum where withdrawals are unconditional balance updates).
     """
     # Deploy contract that always reverts
     pre[DEPOSIT_CONTRACT] = Account(
@@ -182,6 +180,7 @@ def test_withdrawal_system_call_with_revert(
     blocks = [
         Block(
             withdrawals=[withdrawal],
+            exception=BlockException.SYSTEM_CONTRACT_CALL_FAILED,
         ),
     ]
 
