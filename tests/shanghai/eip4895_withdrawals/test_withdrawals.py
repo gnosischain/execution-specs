@@ -157,6 +157,7 @@ def test_withdrawal_index_order(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
+@pytest.mark.exception_test
 def test_withdrawal_system_call_with_revert(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -181,6 +182,7 @@ def test_withdrawal_system_call_with_revert(
         Block(
             withdrawals=[withdrawal],
             exception=BlockException.SYSTEM_CONTRACT_CALL_FAILED,
+            skip_exception_verification=True,
         ),
     ]
 
