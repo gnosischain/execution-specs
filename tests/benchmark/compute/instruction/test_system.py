@@ -815,14 +815,16 @@ def test_selfdestruct_created(
 
 @pytest.mark.parametrize("value_bearing", [True, False])
 def test_selfdestruct_initcode(
-    state_test: StateTestFiller,
+    benchmark_test: BenchmarkTestFiller,
     pre: Alloc,
     value_bearing: bool,
     fork: Fork,
     env: Environment,
     gas_benchmark_value: int,
+    tx_gas_limit: int,
 ) -> None:
     """Benchmark SELFDESTRUCT instruction executed in initcode."""
+    # Avoid account creation costs in the SELFDESTRUCT recipient.
     fee_recipient = pre.fund_eoa(amount=1)
     env.fee_recipient = fee_recipient
 
@@ -841,8 +843,8 @@ def test_selfdestruct_initcode(
         + gas_costs.G_INITCODE_WORD
     )
     extra_costs = (
-        gas_costs.G_BASE  # POP
-        + gas_costs.G_VERY_LOW * 6  # PUSHs, ADD, DUP, GT
+        gas_costs.G_BASE * 2  # POP, GAS
+        + gas_costs.G_VERY_LOW * 5  # PUSHs, ADD, GT
         + gas_costs.G_HIGH  # JUMPI
         + gas_costs.G_JUMPDEST
     )
@@ -854,19 +856,20 @@ def test_selfdestruct_initcode(
         + memory_expansion_calc(new_bytes=32)
     )
     suffix_cost = (
-        gas_costs.G_COLD_SLOAD
+        gas_costs.G_VERY_LOW
+        + gas_costs.G_VERY_LOW * 3
+        + gas_costs.G_COLD_SLOAD
         + gas_costs.G_STORAGE_RESET
-        + (gas_costs.G_VERY_LOW * 2)
     )
 
     base_costs = prefix_cost + suffix_cost + intrinsic_gas_cost_calc()
 
-    iterations = (gas_benchmark_value - base_costs) // loop_cost
-
     initcode = Op.SELFDESTRUCT(Op.COINBASE)
     code_prefix = Op.MSTORE(0, initcode.hex()) + Op.PUSH0 + Op.JUMPDEST
     code_suffix = (
-        Op.SSTORE(0, 42)  # Done for successful tx execution assertion below.
+        Op.SSTORE(
+            0, Op.ADD(Op.SLOAD(0), 1)
+        )  # Done for successful tx execution assertion below.
         + Op.STOP
     )
 
@@ -880,24 +883,42 @@ def test_selfdestruct_initcode(
         )
         + Op.PUSH1[1]
         + Op.ADD
-        + Op.JUMPI(len(code_prefix) - 1, Op.GT(iterations, Op.DUP1))
+        + Op.JUMPI(
+            len(code_prefix) - 1, Op.GT(Op.GAS, suffix_cost + loop_cost)
+        )
     )
     code = code_prefix + loop_body + code_suffix
 
-    # The 0 storage slot is initialize to avoid creation costs in SSTORE above.
+    # The 0 storage slot is initialized to avoid creation
+    # costs in SSTORE above.
     code_addr = pre.deploy_contract(code=code, balance=100_000, storage={0: 1})
-    code_tx = Transaction(
-        to=code_addr,
-        gas_limit=gas_benchmark_value,
-        gas_price=10,
-        sender=pre.fund_eoa(),
-    )
 
-    post = {code_addr: Account(storage={0: 42})}  # Check for successful
-    # execution.
-    state_test(
-        pre=pre,
+    exec_txs = []
+    expected_benchmark_gas_used = 0
+    with TestPhaseManager.execution():
+        used_gas = 0
+        while used_gas < gas_benchmark_value:
+            gas_limit = min(tx_gas_limit, gas_benchmark_value - used_gas)
+            if gas_limit < intrinsic_gas_cost_calc():
+                break
+            exec_txs.append(
+                Transaction(
+                    to=code_addr,
+                    gas_limit=gas_limit,
+                    sender=pre.fund_eoa(),
+                )
+            )
+            used_gas += gas_limit
+            iterations = (gas_limit - base_costs) // loop_cost
+            expected_benchmark_gas_used += iterations * loop_cost + base_costs
+
+    post = {
+        code_addr: Account(storage={0: len(exec_txs) + 1})
+    }  # Check for successful execution.
+    benchmark_test(
         post=post,
-        tx=code_tx,
-        expected_benchmark_gas_used=iterations * loop_cost + base_costs,
+        blocks=[
+            Block(txs=exec_txs, fee_recipient=fee_recipient),
+        ],
+        expected_benchmark_gas_used=expected_benchmark_gas_used,
     )
