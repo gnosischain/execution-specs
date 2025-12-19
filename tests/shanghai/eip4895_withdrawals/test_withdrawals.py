@@ -26,13 +26,13 @@ pytestmark = pytest.mark.valid_from("Shanghai")
 DEPOSIT_CONTRACT = Address(0xBABE2BED00000000000000000000000000000003)
 
 
-def get_minimal_deposit_contract_code() -> bytes:
+def get_minimal_deposit_contract_code():
     """
     Returns bytecode for minimal deposit contract that just stops.
     Used to verify system calls succeed without testing contract
     internals.
     """
-    return bytes(Op.STOP)
+    return Op.STOP
 
 
 def test_withdrawal_system_call_succeeds(
