@@ -85,16 +85,6 @@ class ForkLoad:
         return self._module("fork").process_block_rewards
 
     @property
-    def process_block_rewards(self) -> Any:
-        """process_block_rewards function of the given fork."""
-        return self._module("fork").process_block_rewards
-
-    @property
-    def process_block_rewards(self) -> Any:
-        """process_block_rewards function of the given fork."""
-        return self._module("fork").process_block_rewards
-
-    @property
     def process_withdrawals(self) -> Any:
         """process_withdrawals function of the given fork."""
         return self._module("fork").process_withdrawals
