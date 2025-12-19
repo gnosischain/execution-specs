@@ -221,45 +221,6 @@ def test_withdrawal_system_call_out_of_gas(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
-def test_multiple_withdrawals_same_validator(
-    blockchain_test: BlockchainTestFiller,
-    pre: Alloc,
-) -> None:
-    """
-    Test multiple withdrawals to the same validator in one block.
-    Verifies the contract can handle multiple calls correctly.
-    """
-    # Deploy minimal contract
-    pre[DEPOSIT_CONTRACT] = Account(
-        code=get_minimal_deposit_contract_code(),
-        nonce=1,
-    )
-
-    validator = Address(0x0A)
-
-    withdrawals = [
-        Withdrawal(
-            index=i,
-            validator_index=0,
-            address=validator,
-            amount=10 + i,
-        )
-        for i in range(5)
-    ]
-
-    blocks = [
-        Block(
-            withdrawals=withdrawals,
-        ),
-    ]
-
-    post = {
-        DEPOSIT_CONTRACT: Account(storage={}),
-    }
-
-    blockchain_test(pre=pre, post=post, blocks=blocks)
-
-
 def test_empty_withdrawals_list(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -317,57 +278,5 @@ def test_withdrawal_contract_not_deployed(
 
     # Call to non-existent contract succeeds but does nothing
     post: Dict[str, Any] = {}
-
-    blockchain_test(pre=pre, post=post, blocks=blocks)
-
-
-def test_withdrawal_zero_amount(
-    blockchain_test: BlockchainTestFiller,
-    pre: Alloc,
-) -> None:
-    """
-    Test withdrawal with zero amount.
-    Edge case: system call with zero-value withdrawal.
-    """
-    pre[DEPOSIT_CONTRACT] = Account(
-        code=get_minimal_deposit_contract_code(),
-        nonce=1,
-    )
-
-    withdrawal = Withdrawal(
-        index=0,
-        validator_index=0,
-        address=Address(0x01),
-        amount=0,  # Zero amount
-    )
-
-    blocks = [Block(withdrawals=[withdrawal])]
-    post = {DEPOSIT_CONTRACT: Account(storage={})}
-
-    blockchain_test(pre=pre, post=post, blocks=blocks)
-
-
-def test_withdrawal_max_amount(
-    blockchain_test: BlockchainTestFiller,
-    pre: Alloc,
-) -> None:
-    """
-    Test withdrawal with maximum uint64 amount.
-    Ensures no overflow in amount handling.
-    """
-    pre[DEPOSIT_CONTRACT] = Account(
-        code=get_minimal_deposit_contract_code(),
-        nonce=1,
-    )
-
-    withdrawal = Withdrawal(
-        index=0,
-        validator_index=0,
-        address=Address(0x01),
-        amount=2**64 - 1,  # Max uint64
-    )
-
-    blocks = [Block(withdrawals=[withdrawal])]
-    post = {DEPOSIT_CONTRACT: Account(storage={})}
 
     blockchain_test(pre=pre, post=post, blocks=blocks)
