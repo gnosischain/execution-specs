@@ -390,7 +390,7 @@ class T8N(Load):
                 data=block_env.parent_beacon_block_root,
             )
 
-        if self.fork.is_after_fork("paris"):
+        if self.fork.has_process_block_rewards:
             self.fork.process_block_rewards(block_env)
 
         for tx_index, (original_idx, tx) in enumerate(
