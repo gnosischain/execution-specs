@@ -258,7 +258,7 @@ class GenesisConfig(CamelModel):
     terminal_total_difficulty: int
     terminal_total_difficulty_passed: bool
     deposit_contract_address: Address = Address(
-        0x00000000219AB540356CBB839CBE05303D7705FA
+        0xBABE2BED00000000000000000000000000000003
     )
     fork_activation_times: ForkActivationTimes
     blob_schedule: Dict[Fork, ForkConfigBlobSchedule]
@@ -276,13 +276,13 @@ class GenesisConfig(CamelModel):
     def address_overrides(self) -> AddressOverrideDict:
         """Get the address overrides."""
         if self.deposit_contract_address == Address(
-            0x00000000219AB540356CBB839CBE05303D7705FA
+            0xBABE2BED00000000000000000000000000000003
         ):
             return AddressOverrideDict({})
         return AddressOverrideDict(
             {
                 Address(
-                    0x00000000219AB540356CBB839CBE05303D7705FA
+                    0xBABE2BED00000000000000000000000000000003
                 ): self.deposit_contract_address
             }
         )
