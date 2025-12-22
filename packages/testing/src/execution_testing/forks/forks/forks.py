@@ -1421,6 +1421,53 @@ class Paris(
         del block_number, timestamp
         return 1
 
+    @classmethod
+    def system_contracts(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> List[Address]:
+        """Paris introduces the system contract for block rewards."""
+        del block_number, timestamp
+        return [
+            Address(
+                0x2000000000000000000000000000000000000001,
+                label="BLOCK_REWARDS_CONTRACT_ADDRESS",
+            )
+        ]
+
+    @classmethod
+    def pre_allocation_blockchain(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> Mapping:
+        """
+        Paris requires pre-allocation of the block rewards contract
+        on blockchain type tests.
+        """
+        del block_number, timestamp
+
+        new_allocation = {}
+        with open(
+            CURRENT_FOLDER / "contracts" / "block_reward_contract.bin",
+            mode="rb",
+        ) as f:
+            new_allocation.update(
+                {
+                    0x2000000000000000000000000000000000000001: {
+                        "nonce": 1,
+                        "code": f.read(),
+                    }
+                }
+            )
+
+        # Pre-allocate system address with empty state
+        new_allocation[0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE] = {
+            "nonce": 0,
+            "balance": 0,
+            "code": b"",
+            "storage": {},
+        }
+
+        return new_allocation | super(Paris, cls).pre_allocation_blockchain()  # type: ignore
+
 
 class Shanghai(Paris):
     """Shanghai fork."""
@@ -1598,7 +1645,7 @@ class Cancun(Shanghai):
     ) -> int:
         """Return the blob base fee update fraction for Cancun."""
         del block_number, timestamp
-        return 3338477
+        return 1112826
 
     @classmethod
     def blob_gas_per_blob(
@@ -1621,22 +1668,22 @@ class Cancun(Shanghai):
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
         """
-        Blobs are enabled starting from Cancun, with a static target of 3 blobs
+        Blobs are enabled starting from Cancun, with a static target of 1 blob
         per block.
         """
         del block_number, timestamp
-        return 3
+        return 1
 
     @classmethod
     def max_blobs_per_block(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
         """
-        Blobs are enabled starting from Cancun, with a static max of 6 blobs
+        Blobs are enabled starting from Cancun, with a static max of 2 blobs
         per block.
         """
         del block_number, timestamp
-        return 6
+        return 2
 
     @classmethod
     def blob_reserve_price_active(
@@ -1804,11 +1851,11 @@ class Prague(Cancun):
     # update some blob constants
     BLOB_CONSTANTS = {
         **Cancun.BLOB_CONSTANTS,  # same base constants as cancun
-        "MAX_BLOBS_PER_BLOCK": 9,  # but overwrite or add these
-        "TARGET_BLOBS_PER_BLOCK": 6,
-        "MAX_BLOB_GAS_PER_BLOCK": 1179648,
-        "TARGET_BLOB_GAS_PER_BLOCK": 786432,
-        "BLOB_BASE_FEE_UPDATE_FRACTION": 5007716,
+        "MAX_BLOBS_PER_BLOCK": 2,  # but overwrite or add these
+        "TARGET_BLOBS_PER_BLOCK": 1,
+        "MAX_BLOB_GAS_PER_BLOCK": 262144,
+        "TARGET_BLOB_GAS_PER_BLOCK": 131072,
+        "BLOB_BASE_FEE_UPDATE_FRACTION": 1112826,
     }
 
     @classmethod
@@ -1875,7 +1922,7 @@ class Prague(Cancun):
         """
         return [
             Address(
-                0x00000000219AB540356CBB839CBE05303D7705FA,
+                0xBABE2BED00000000000000000000000000000003,
                 label="DEPOSIT_CONTRACT_ADDRESS",
             ),
             Address(
@@ -2012,23 +2059,23 @@ class Prague(Cancun):
     ) -> int:
         """Return the blob base fee update fraction for Prague."""
         del block_number, timestamp
-        return 5007716
+        return 1112826
 
     @classmethod
     def target_blobs_per_block(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
-        """Blobs in Prague, have a static target of 6 blobs per block."""
+        """Blobs in Prague, have a static target of 1 blob per block."""
         del block_number, timestamp
-        return 6
+        return 1
 
     @classmethod
     def max_blobs_per_block(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
-        """Blobs in Prague, have a static max of 9 blobs per block."""
+        """Blobs in Prague, have a static max of 2 blobs per block."""
         del block_number, timestamp
-        return 9
+        return 2
 
     @classmethod
     def pre_allocation_blockchain(
@@ -2058,7 +2105,7 @@ class Prague(Cancun):
         ) as f:
             new_allocation.update(
                 {
-                    0x00000000219AB540356CBB839CBE05303D7705FA: {
+                    0xBABE2BED00000000000000000000000000000003: {
                         "nonce": 1,
                         "code": f.read(),
                         "storage": storage,
