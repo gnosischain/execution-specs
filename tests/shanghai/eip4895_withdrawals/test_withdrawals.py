@@ -11,6 +11,7 @@ from execution_testing import (
     Alloc,
     Block,
     BlockchainTestFiller,
+    BlockException,
     Op,
     Withdrawal,
 )
@@ -25,13 +26,12 @@ pytestmark = pytest.mark.valid_from("Shanghai")
 DEPOSIT_CONTRACT = Address(0xBABE2BED00000000000000000000000000000003)
 
 
-def get_minimal_deposit_contract_code() -> bytes:
+def get_minimal_deposit_contract_code():
     """
-    Returns bytecode for minimal deposit contract that just stops.
-    Used to verify system calls succeed without testing contract
-    internals.
+    Returns bytecode for minimal deposit contract that returns successfully.
+    Used to verify system calls succeed without testing contract internals.
     """
-    return bytes(Op.STOP)
+    return Op.PUSH0 + Op.PUSH0 + Op.RETURN
 
 
 def test_withdrawal_system_call_succeeds(
@@ -162,9 +162,6 @@ def test_withdrawal_system_call_with_revert(
 ) -> None:
     """
     Test behavior when deposit contract reverts.
-
-    On Gnosis, if the system call reverts, the block should still be valid
-    (unlike Ethereum where withdrawals are unconditional balance updates).
     """
     # Deploy contract that always reverts
     pre[DEPOSIT_CONTRACT] = Account(
