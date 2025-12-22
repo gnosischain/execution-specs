@@ -317,7 +317,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                             signature=0x03,
                             index=i,
                         )
-                        for i in range(450)
+                        for i in range(200)
                     ],
                     tx_gas_limit=16_777_216,
                 ),
@@ -489,7 +489,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                             index=i,
                             valid=False,
                         )
-                        for i in range(450)
+                        for i in range(200)
                     ],
                     tx_gas_limit=10_000_000,
                 ),

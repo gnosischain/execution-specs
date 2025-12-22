@@ -23,8 +23,7 @@ from execution_testing.base_types import (
 from execution_testing.forks import Fork
 
 DEFAULT_BASE_FEE = 7
-CURRENT_MAINNET_BLOCK_GAS_LIMIT = 17_000_000
-DEFAULT_BLOCK_GAS_LIMIT = CURRENT_MAINNET_BLOCK_GAS_LIMIT * 2
+DEFAULT_BLOCK_GAS_LIMIT = 17_000_000
 
 
 @dataclass

@@ -104,7 +104,7 @@ EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
-    "0xb97036A26259B7147018913bD58a774cf91acf25"
+    "0xbabe2bed00000000000000000000000000000003"
 )
 BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
     "0x2000000000000000000000000000000000000001"
@@ -1001,7 +1001,7 @@ def process_transaction(
     # transfer base fee to fee collector address
     fee_collector_balance_after = get_account(
         block_env.state, FEE_COLLECTOR_ADDRESS
-    ).balance + U256(tx.gas * block_env.base_fee_per_gas)
+    ).balance + U256(tx_gas_used_after_refund * block_env.base_fee_per_gas)
     if fee_collector_balance_after != 0:
         set_account_balance(
             block_env.state,
