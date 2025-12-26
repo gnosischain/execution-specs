@@ -2432,7 +2432,7 @@ class Cancun(Shanghai):
     ) -> int:
         """Return the minimum base fee per blob gas for Cancun."""
         del block_number, timestamp
-        return 1
+        return 1000000000
 
     @classmethod
     def blob_base_fee_update_fraction(
