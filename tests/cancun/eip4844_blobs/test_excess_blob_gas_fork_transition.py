@@ -234,6 +234,12 @@ def post_fork_blocks(
     """Generate blocks after the fork."""
     blocks = []
 
+    # Calculate the blob gas price at the fork block
+    blob_gas_price_calculator = fork.blob_gas_price_calculator()
+    fork_blob_gas_price = blob_gas_price_calculator(
+        excess_blob_gas=fork_block_excess_blob_gas
+    )
+
     for i in range(post_fork_block_count):
         if post_fork_blobs_per_block == 0:
             if i == 0:
@@ -264,7 +270,7 @@ def post_fork_blocks(
                     gas_limit=100_000,
                     max_fee_per_gas=1_000_000,
                     max_priority_fee_per_gas=10,
-                    max_fee_per_blob_gas=100,
+                    max_fee_per_blob_gas=fork_blob_gas_price * 100,
                     blob_versioned_hashes=add_kzg_version(
                         [Hash(blob_index + x) for x in range(tx_blobs)],
                         Spec.BLOB_COMMITMENT_VERSION_KZG,
