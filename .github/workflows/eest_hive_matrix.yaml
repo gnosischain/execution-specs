@@ -1,0 +1,178 @@
+name: EEST → Hive (Matrix)
+
+on:
+  workflow_dispatch:
+    inputs:
+      fork:
+        description: "Fork passed to --fork"
+        required: true
+        default: "Prague"
+      client:
+        description: "Client passed to --client"
+        required: true
+        default: "reth-gnosis"
+      test_dirs:
+        description: "Comma-separated list of EIP numbers or directory names"
+        required: true
+        default: "prague"
+  
+jobs:
+  # Prepare matrix from input
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout execution-specs
+        uses: actions/checkout@v4
+
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          FORK="${{ github.event.inputs.fork }}"
+          FORK_LOWER=$(echo "$FORK" | tr '[:upper:]' '[:lower:]')
+          INPUT="${{ github.event.inputs.test_dirs }}"
+          INPUT=$(echo "$INPUT" | xargs)
+          
+          MATRIX="{\"include\":["
+          FIRST=true
+          
+          # Split by comma
+          IFS=',' read -ra ENTRIES <<< "$INPUT"
+          
+          for ENTRY in "${ENTRIES[@]}"; do
+            ENTRY=$(echo "$ENTRY" | xargs)
+            [ -z "$ENTRY" ] && continue
+            
+            # If entry contains '/', treat as full path
+            if [[ "$ENTRY" == *"/"* ]]; then
+              TEST_DIR="$ENTRY"
+            # If entry is just digits (EIP number), find matching directories
+            elif [[ "$ENTRY" =~ ^[0-9]+$ ]]; then
+              # Find directories matching eip{number}_*
+              MATCHES=$(find tests/$FORK_LOWER -maxdepth 1 -type d -name "eip${ENTRY}_*" 2>/dev/null | sed "s|^tests/||" || true)
+              if [ -z "$MATCHES" ]; then
+                echo "Warning: No directory found for EIP $ENTRY in tests/$FORK_LOWER" >&2
+                continue
+              fi
+              # Handle multiple matches (shouldn't happen, but just in case)
+              while IFS= read -r MATCH; do
+                if [ "$FIRST" = false ]; then
+                  MATRIX+=","
+                fi
+                MATRIX+="{\"test_dir\":\"$MATCH\"}"
+                FIRST=false
+              done <<< "$MATCHES"
+              continue
+            # If entry starts with 'eip', prepend fork name
+            elif [[ "$ENTRY" == eip* ]]; then
+              TEST_DIR="$FORK_LOWER/$ENTRY"
+            # If entry is just a fork name or doesn't match patterns, check if it's a fork directory
+            else
+              # Check if it's a valid fork/test directory
+              if [ -d "tests/$ENTRY" ]; then
+                # If it's a fork directory, list all EIP subdirectories
+                EIP_DIRS=$(find tests/$ENTRY -maxdepth 1 -type d -name "eip*" 2>/dev/null | sed "s|^tests/||" || true)
+                if [ -n "$EIP_DIRS" ]; then
+                  while IFS= read -r EIP_DIR; do
+                    if [ "$FIRST" = false ]; then
+                      MATRIX+=","
+                    fi
+                    MATRIX+="{\"test_dir\":\"$EIP_DIR\"}"
+                    FIRST=false
+                  done <<< "$EIP_DIRS"
+                  continue
+                else
+                  # No EIP subdirectories, use as-is
+                  TEST_DIR="$ENTRY"
+                fi
+              else
+                # Assume it's a directory name under the fork
+                TEST_DIR="$FORK_LOWER/$ENTRY"
+              fi
+            fi
+            
+            # Add to matrix if we have a test_dir
+            if [ -n "$TEST_DIR" ]; then
+              if [ "$FIRST" = false ]; then
+                MATRIX+=","
+              fi
+              MATRIX+="{\"test_dir\":\"$TEST_DIR\"}"
+              FIRST=false
+            fi
+          done
+          
+          MATRIX+="]}"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Generated matrix: $MATRIX"
+
+  test:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Checkout execution-specs
+        uses: actions/checkout@v4
+
+      - name: Install Go (for Hive)
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+          cache: false
+
+      - name: Build and install Hive
+        run: |
+          git clone -b sync-eest https://github.com/gnosischain/hive.git
+          cd hive
+          go install ./...
+          cd ..
+      
+      - name: Start Hive in background
+        run: |
+          cd hive
+          ~/go/bin/hive --dev --client "${{ github.event.inputs.client }}" \
+            --dev.addr=127.0.0.1:3000 \
+            --loglevel=5 \
+            --sim.loglevel=5 \
+            --docker.output \
+            --docker.pull > hive.log 2>&1 &
+          sleep 10  # Give Hive time to start
+      
+      - name: Install wait-on utility
+        run: npm install -g wait-on
+
+      - name: Wait for Hive to listen on port 3000
+        run: npx wait-on --timeout 60000 tcp:127.0.0.1:3000
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH  # uv installs here on Ubuntu
+      
+      - name: Bootstrap Python and install deps
+        run: |
+          pip install uv
+          uv python install 3.11
+          uv python pin 3.11
+          uv sync --all-extras
+          uv pip install solc-select
+          uv run solc-select use 0.8.24 --always-install
+      
+      - name: Run fill
+        run: |
+          uv run fill tests/${{ matrix.test_dir }} --fork ${{ github.event.inputs.fork }} --clean -v -x --traces
+
+      - name: Run test against client
+        env:
+          HIVE_SIMULATOR: http://127.0.0.1:3000
+        run: uv run consume engine -v --input fixtures/blockchain_tests_engine/${{ matrix.test_dir }}
+
+      - name: Upload Hive logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-log-${{ matrix.test_dir }}
+          path: hive/hive.log
