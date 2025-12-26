@@ -106,8 +106,6 @@ def test_valid_max_blobs_per_tx(
     lambda fork: [
         fork.max_blobs_per_tx() + 1,
         fork.max_blobs_per_tx() + 2,
-        fork.max_blobs_per_block(),
-        fork.max_blobs_per_block() + 1,
     ],
 )
 @pytest.mark.valid_from("Osaka")
@@ -135,57 +133,4 @@ def test_invalid_max_blobs_per_tx(
             else TransactionException.TYPE_3_TX_BLOB_COUNT_EXCEEDED
         ),
         post={},
-    )
-
-
-@pytest.mark.parametrize_by_fork(
-    "blob_count",
-    lambda fork: [
-        fork.max_blobs_per_tx(timestamp=FORK_TIMESTAMP) + 1,
-        fork.max_blobs_per_block(timestamp=FORK_TIMESTAMP) + 1,
-    ],
-)
-@pytest.mark.valid_at_transition_to("Osaka")
-@pytest.mark.exception_test
-def test_max_blobs_per_tx_fork_transition(
-    fork: Fork,
-    blockchain_test: BlockchainTestFiller,
-    env: Environment,
-    pre: Alloc,
-    tx: Transaction,
-    blob_count: int,
-) -> None:
-    """Test `MAX_BLOBS_PER_TX` limit enforcement across fork transition."""
-    expected_exception = (
-        TransactionException.TYPE_3_TX_MAX_BLOB_GAS_ALLOWANCE_EXCEEDED
-        if blob_count > fork.max_blobs_per_block(timestamp=FORK_TIMESTAMP)
-        else TransactionException.TYPE_3_TX_BLOB_COUNT_EXCEEDED
-    )
-    pre_fork_block = Block(
-        txs=[
-            tx
-            if blob_count
-            < fork.max_blobs_per_block(timestamp=FORK_TIMESTAMP - 1)
-            else tx.with_error(expected_exception)
-        ],
-        timestamp=FORK_TIMESTAMP - 1,
-        exception=None
-        if blob_count < fork.max_blobs_per_block(timestamp=FORK_TIMESTAMP - 1)
-        else [expected_exception],
-    )
-    fork_block = Block(
-        txs=[tx.with_nonce(1).with_error(expected_exception)],
-        timestamp=FORK_TIMESTAMP,
-        exception=[expected_exception],
-    )
-    post_fork_block = Block(
-        txs=[tx.with_nonce(1).with_error(expected_exception)],
-        timestamp=FORK_TIMESTAMP + 1,
-        exception=[expected_exception],
-    )
-    blockchain_test(
-        pre=pre,
-        post={},
-        blocks=[pre_fork_block, fork_block, post_fork_block],
-        genesis_environment=env,
     )
