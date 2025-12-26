@@ -431,7 +431,7 @@ class Transaction(
             )
 
         if self.ty == 3 and self.max_fee_per_blob_gas is None:
-            self.max_fee_per_blob_gas = HexNumber(1)
+            self.max_fee_per_blob_gas = HexNumber(1000000000)
             self.model_fields_set.remove("max_fee_per_blob_gas")
         if self.ty != 3:
             assert self.blob_versioned_hashes is None, (
