@@ -170,9 +170,29 @@ jobs:
           HIVE_SIMULATOR: http://127.0.0.1:3000
         run: uv run consume engine -v --input fixtures/blockchain_tests_engine/${{ matrix.test_dir }}
 
+      - name: Sanitize artifact name
+        id: sanitize-name
+        if: always()
+        run: |
+          # Extract fork and EIP number from path (e.g., prague/eip7685_general_purpose_el_requests -> prague-eip7685)
+          TEST_DIR="${{ matrix.test_dir }}"
+          # Extract fork name (part before first /)
+          FORK=$(echo "$TEST_DIR" | cut -d'/' -f1)
+          # Extract EIP number from directory name (e.g., eip7685_general... -> 7685)
+          EIP_NUM=$(echo "$TEST_DIR" | sed -n 's|.*/eip\([0-9]\+\).*|\1|p')
+          # Construct name: hive-log-prague-eip7685
+          if [ -n "$EIP_NUM" ]; then
+            ARTIFACT_NAME="hive-log-$FORK-eip$EIP_NUM"
+          else
+            # Fallback: use full path with slashes replaced
+            ARTIFACT_NAME=$(echo "$TEST_DIR" | sed 's|/|-|g')
+            ARTIFACT_NAME="hive-log-$ARTIFACT_NAME"
+          fi
+          echo "name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+
       - name: Upload Hive logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hive-log-${{ matrix.test_dir }}
+          name: ${{ steps.sanitize-name.outputs.name }}
           path: hive/hive.log
