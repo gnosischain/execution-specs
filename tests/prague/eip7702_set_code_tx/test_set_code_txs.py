@@ -2993,7 +2993,7 @@ def test_set_code_to_system_contract(
     # Setup the initial storage of the account to mimic the system contract if
     # required
     match system_contract:
-        case Address(0x00000000219AB540356CBB839CBE05303D7705FA):  # EIP-6110
+        case Address(0xBABE2BED00000000000000000000000000000003):  # EIP-6110
             # Deposit contract needs specific storage values, so we set them on
             # the account
             auth_signer = pre.fund_eoa(
