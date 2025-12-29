@@ -408,7 +408,7 @@ class Alloc(BaseAlloc):
         self,
         amount: NumberConvertible | None = None,
         label: str | None = None,
-        storage: Storage | None = None,
+        storage: Storage | StorageRootType | None = None,
         delegation: Address | Literal["Self"] | None = None,
         nonce: NumberConvertible | None = None,
     ) -> EOA:
@@ -432,14 +432,16 @@ class Alloc(BaseAlloc):
         fund_tx: PendingTransaction | None = None
         if delegation is not None or storage is not None:
             if storage is not None:
+                if not isinstance(storage, Storage):
+                    storage = Storage.model_validate(storage)
                 logger.debug(
-                    f"Deploying storage contract for EOA {eoa} with {len(storage.root)} storage slots"
+                    f"Deploying storage contract for EOA {eoa} with {len(storage)} storage slots"
                 )
                 sstore_address = self.deploy_contract(
                     code=(
                         sum(
                             Op.SSTORE(key, value)
-                            for key, value in storage.root.items()
+                            for key, value in storage.items()
                         )
                         + Op.STOP
                     )
@@ -451,6 +453,7 @@ class Alloc(BaseAlloc):
                 set_storage_tx = PendingTransaction(
                     sender=self._sender,
                     to=eoa,
+                    value=0,
                     authorization_list=[
                         AuthorizationTuple(
                             chain_id=self._chain_id,
@@ -498,7 +501,7 @@ class Alloc(BaseAlloc):
                 fund_tx = PendingTransaction(
                     sender=self._sender,
                     to=eoa,
-                    value=amount,
+                    value=amount if amount is not None else 0,
                     authorization_list=[
                         AuthorizationTuple(
                             chain_id=self._chain_id,

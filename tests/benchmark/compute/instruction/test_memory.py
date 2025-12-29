@@ -19,7 +19,7 @@ from execution_testing import (
 )
 
 
-@pytest.mark.repricing(mem_size=1_000)
+@pytest.mark.repricing(mem_size=1)
 @pytest.mark.parametrize("mem_size", [0, 1, 1_000, 100_000, 1_000_000])
 def test_msize(
     benchmark_test: BenchmarkTestFiller,
@@ -27,6 +27,7 @@ def test_msize(
 ) -> None:
     """Benchmark MSIZE instruction."""
     benchmark_test(
+        target_opcode=Op.MSIZE,
         code_generator=ExtCallGenerator(
             setup=Op.POP(Op.MLOAD(Op.SELFBALANCE)),
             attack_block=Op.MSIZE,
@@ -36,7 +37,7 @@ def test_msize(
 
 
 @pytest.mark.repricing(
-    offset=31,
+    offset=0,
     offset_initialized=True,
     big_memory_expansion=True,
 )
@@ -67,13 +68,14 @@ def test_memory_access(
     )
 
     benchmark_test(
+        target_opcode=opcode,
         code_generator=JumpLoopGenerator(
             setup=setup, attack_block=attack_block
         ),
     )
 
 
-@pytest.mark.repricing(size=10 * 1024, fixed_src_dst=True)
+@pytest.mark.repricing(size=0, fixed_src_dst=True)
 @pytest.mark.parametrize(
     "size",
     [
@@ -107,6 +109,7 @@ def test_mcopy(
         else Bytecode()
     )
     benchmark_test(
+        target_opcode=Op.MCOPY,
         code_generator=JumpLoopGenerator(
             attack_block=attack_block, cleanup=mem_touch
         ),

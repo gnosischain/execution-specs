@@ -19,10 +19,10 @@ from execution_testing import (
 
 
 @pytest.mark.repricing(
-    size=1024 * 1024,
+    size=0,
     non_zero_data=True,
-    zeros_topic=False,
-    fixed_offset=True,
+    zeros_topic=0,
+    fixed_offset=False,
 )
 @pytest.mark.parametrize(
     "opcode",
@@ -81,6 +81,7 @@ def test_log(
     attack_block = Op.DUP1 * topic_count + size_op + offset + opcode
 
     benchmark_test(
+        target_opcode=opcode,
         code_generator=JumpLoopGenerator(
             setup=setup, attack_block=attack_block
         ),

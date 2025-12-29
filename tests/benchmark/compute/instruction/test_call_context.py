@@ -43,11 +43,12 @@ def test_call_frame_context_ops(
 ) -> None:
     """Benchmark call zero-parameter instructions."""
     benchmark_test(
+        target_opcode=opcode,
         code_generator=ExtCallGenerator(attack_block=opcode),
     )
 
 
-@pytest.mark.repricing(calldata_length=1_000)
+@pytest.mark.repricing(calldata_length=10_000)
 @pytest.mark.parametrize("calldata_length", [0, 1_000, 10_000])
 def test_calldatasize(
     benchmark_test: BenchmarkTestFiller,
@@ -55,6 +56,7 @@ def test_calldatasize(
 ) -> None:
     """Benchmark CALLDATASIZE instruction."""
     benchmark_test(
+        target_opcode=Op.CALLDATASIZE,
         code_generator=ExtCallGenerator(
             attack_block=Op.CALLDATASIZE,
             tx_kwargs={"data": b"\x00" * calldata_length},
@@ -62,6 +64,7 @@ def test_calldatasize(
     )
 
 
+@pytest.mark.repricing(non_zero_value=True)
 @pytest.mark.parametrize("non_zero_value", [True, False])
 def test_callvalue_from_origin(
     benchmark_test: BenchmarkTestFiller,
@@ -71,6 +74,7 @@ def test_callvalue_from_origin(
     Benchmark CALLVALUE instruction from origin.
     """
     benchmark_test(
+        target_opcode=Op.CALLVALUE,
         code_generator=JumpLoopGenerator(
             attack_block=Op.POP(Op.CALLVALUE),
             tx_kwargs={"value": int(non_zero_value)},
@@ -108,7 +112,7 @@ def test_callvalue_from_call(
     )
 
 
-@pytest.mark.repricing(calldata=b"")
+@pytest.mark.repricing(calldata=b"\x00")
 @pytest.mark.parametrize(
     "calldata",
     [
@@ -123,6 +127,7 @@ def test_calldataload(
 ) -> None:
     """Benchmark CALLDATALOAD instruction."""
     benchmark_test(
+        target_opcode=Op.CALLDATALOAD,
         code_generator=JumpLoopGenerator(
             setup=Op.PUSH0,
             attack_block=Op.CALLDATALOAD,
@@ -131,6 +136,7 @@ def test_calldataload(
     )
 
 
+@pytest.mark.repricing(size=0, fixed_src_dst=True, non_zero_data=False)
 @pytest.mark.parametrize(
     "size",
     [
@@ -195,11 +201,12 @@ def test_calldatacopy_from_origin(
     )
 
     benchmark_test(
+        target_opcode=Op.CALLDATACOPY,
         code_generator=JumpLoopGenerator(
             setup=setup,
             attack_block=attack_block,
             tx_kwargs={"data": data},
-        )
+        ),
     )
 
 
@@ -267,17 +274,18 @@ def test_calldatacopy_from_call(
     )
 
     benchmark_test(
+        target_opcode=Op.CALLDATACOPY,
         code_generator=ExtCallGenerator(
             setup=setup,
             attack_block=attack_block,
             tx_kwargs={"data": data},
-        )
+        ),
     )
 
 
 @pytest.mark.repricing(
-    returned_size=1,
-    return_data_style=ReturnDataStyle.RETURN,
+    returned_size=0,
+    return_data_style=ReturnDataStyle.IDENTITY,
 )
 @pytest.mark.parametrize(
     "return_data_style",
@@ -316,6 +324,7 @@ def test_returndatasize_nonzero(
         )
 
     benchmark_test(
+        target_opcode=Op.RETURNDATASIZE,
         code_generator=JumpLoopGenerator(
             setup=setup, attack_block=Op.POP(Op.RETURNDATASIZE)
         ),
@@ -328,11 +337,12 @@ def test_returndatasize_zero(
 ) -> None:
     """Benchmark RETURNDATASIZE instruction with zero buffer."""
     benchmark_test(
+        target_opcode=Op.RETURNDATASIZE,
         code_generator=ExtCallGenerator(attack_block=Op.RETURNDATASIZE),
     )
 
 
-@pytest.mark.repricing(size=10 * 1024, fixed_dst=True)
+@pytest.mark.repricing(size=0, fixed_dst=True)
 @pytest.mark.parametrize(
     "size",
     [
@@ -377,6 +387,7 @@ def test_returndatacopy(
     attack_block = Op.RETURNDATACOPY(dst, Op.PUSH0, Op.RETURNDATASIZE)
 
     benchmark_test(
+        target_opcode=Op.RETURNDATACOPY,
         code_generator=JumpLoopGenerator(
             setup=returndata_gen,
             attack_block=attack_block,

@@ -149,6 +149,7 @@ def test_arithmetic(
     attack_block = Op.DUP2 + opcode
     cleanup = Op.POP + Op.POP + Op.DUP2 + Op.DUP2
     benchmark_test(
+        target_opcode=opcode,
         code_generator=JumpLoopGenerator(
             setup=setup,
             attack_block=attack_block,
@@ -158,7 +159,7 @@ def test_arithmetic(
     )
 
 
-@pytest.mark.repricing(mod_bits=255)
+@pytest.mark.repricing(mod_bits=127)
 @pytest.mark.parametrize("mod_bits", [255, 191, 127, 63])
 @pytest.mark.parametrize("opcode", [Op.MOD, Op.SMOD])
 def test_mod(
@@ -277,7 +278,7 @@ def test_mod(
     )
 
 
-@pytest.mark.repricing(mod_bits=255)
+@pytest.mark.repricing(mod_bits=191)
 @pytest.mark.parametrize("mod_bits", [255, 191, 127, 63])
 @pytest.mark.parametrize("opcode", [Op.ADDMOD, Op.MULMOD])
 def test_mod_arithmetic(
@@ -388,4 +389,6 @@ def test_mod_arithmetic(
         sender=pre.fund_eoa(),
     )
 
-    benchmark_test(tx=tx)
+    benchmark_test(
+        tx=tx,
+    )

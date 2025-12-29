@@ -40,6 +40,7 @@ from execution_testing import (
 from tests.benchmark.compute.helpers import XOR_TABLE
 
 
+@pytest.mark.repricing
 @pytest.mark.parametrize(
     "opcode",
     [
@@ -267,6 +268,7 @@ def _deploy_max_contract_factory(
     return initcode, factory_address, factory_caller_address
 
 
+@pytest.mark.repricing(max_code_size_ratio=0)
 @pytest.mark.parametrize(
     "opcode",
     [
@@ -369,11 +371,12 @@ def test_create(
     )
 
     benchmark_test(
+        target_opcode=opcode,
         code_generator=JumpLoopGenerator(
             setup=setup,
             attack_block=attack_block,
             contract_balance=1_000_000_000 if value > 0 else 0,
-        )
+        ),
     )
 
 
@@ -442,13 +445,13 @@ def test_creates_collisions(
             pre.deploy_contract(address=addr, code=Op.INVALID)
 
     benchmark_test(
+        target_opcode=opcode,
         code_generator=JumpLoopGenerator(
             setup=setup, attack_block=attack_block
         ),
     )
 
 
-@pytest.mark.repricing(return_size=1024, return_non_zero_data=True)
 @pytest.mark.parametrize(
     "opcode",
     [Op.RETURN, Op.REVERT],
@@ -485,6 +488,7 @@ def test_return_revert(
         Op.CODECOPY(size=return_size) if return_non_zero_data else Bytecode()
     )
     benchmark_test(
+        target_opcode=opcode,
         code_generator=ExtCallGenerator(
             setup=mem_preparation,
             attack_block=opcode(size=return_size),
@@ -673,6 +677,7 @@ def test_selfdestruct_existing(
 
     benchmark_test(
         post=post,
+        target_opcode=Op.SELFDESTRUCT,
         blocks=[
             Block(txs=setup_txs),
             Block(txs=exec_txs, fee_recipient=fee_recipient),
@@ -681,6 +686,7 @@ def test_selfdestruct_existing(
     )
 
 
+@pytest.mark.repricing(value_bearing=True)
 @pytest.mark.parametrize("value_bearing", [True, False])
 def test_selfdestruct_created(
     benchmark_test: BenchmarkTestFiller,
@@ -812,6 +818,7 @@ def test_selfdestruct_created(
     )
 
 
+@pytest.mark.repricing(value_bearing=False)
 @pytest.mark.parametrize("value_bearing", [True, False])
 def test_selfdestruct_initcode(
     benchmark_test: BenchmarkTestFiller,
