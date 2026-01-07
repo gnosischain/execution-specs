@@ -161,16 +161,17 @@ class FixtureHeader(CamelModel):
     state_root: Hash
     transactions_trie: Hash = Field(
         Hash(EmptyTrieRoot),
+        alias="transactionsRoot",
         validation_alias=AliasChoices("transactionsTrie", "transactionsRoot"),
     )
     receipts_root: Hash = Field(
         Hash(EmptyTrieRoot),
-        alias="receiptTrie",
+        alias="receiptsRoot",
         validation_alias=AliasChoices("receiptTrie", "receiptsRoot"),
     )
     logs_bloom: Bloom = Field(
         Bloom(0),
-        alias="bloom",
+        alias="logsBloom",
         validation_alias=AliasChoices("bloom", "logsBloom"),
     )
     difficulty: ZeroPaddedHexNumber = ZeroPaddedHexNumber(0)
