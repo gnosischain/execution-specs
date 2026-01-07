@@ -120,15 +120,15 @@ Address of the account that will receive the rewards for building the block.
 
 Root hash of the state trie.
 
-#### - `transactionsTrie`: [`Hash`](./common_types.md#hash)
+#### - `transactionsRoot`: [`Hash`](./common_types.md#hash)
 
 Root hash of the transactions trie.
 
-#### - `receiptTrie`: [`Hash`](./common_types.md#hash)
+#### - `receiptsRoot`: [`Hash`](./common_types.md#hash)
 
 Root hash of the receipts trie.
 
-#### - `bloom`: [`Bloom`](./common_types.md#bloom)
+#### - `logsBloom`: [`Bloom`](./common_types.md#bloom)
 
 Bloom filter composed of the logs of all the transactions in the block.
 
