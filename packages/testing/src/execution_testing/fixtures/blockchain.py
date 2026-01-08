@@ -143,6 +143,10 @@ class FixtureHeader(CamelModel):
     We combine the `Environment` and `Result` contents to create this model.
     """
 
+    # Allow extra fields: FixtureHeader is constructed from merged Result and
+    # Environment data via model_dump(), which includes fields not in this model.
+    model_config = CamelModel.model_config | {"extra": "ignore"}
+
     parent_hash: Hash = Hash(0)
     ommers_hash: Hash = Field(Hash(EmptyOmmersRoot), alias="uncleHash")
     fee_recipient: Address = Field(
@@ -293,6 +297,10 @@ class FixtureExecutionPayload(CamelModel):
     Representation of an Ethereum execution payload within a test Fixture.
     """
 
+    # Allow extra fields: FixtureExecutionPayload is constructed from
+    # FixtureHeader via model_dump(), which includes fields not in this model.
+    model_config = CamelModel.model_config | {"extra": "ignore"}
+
     parent_hash: Hash
     fee_recipient: Address
     state_root: Hash
@@ -333,7 +341,7 @@ class FixtureExecutionPayload(CamelModel):
         transactions, a list of withdrawals, and an optional block access list.
         """
         return cls(
-            **header.model_dump(exclude={"rlp"}, exclude_none=True),
+            **header.model_dump(exclude_none=True),
             transactions=[tx.rlp() for tx in transactions],
             withdrawals=withdrawals,
             block_access_list=block_access_list,
@@ -460,6 +468,10 @@ class FixtureTransaction(
 ):
     """Representation of an Ethereum transaction within a test Fixture."""
 
+    # Allow extra fields: FixtureTransaction is constructed from
+    # Transaction via model_dump(), which includes fields not in this model.
+    model_config = CamelModel.model_config | {"extra": "ignore"}
+
     authorization_list: List[FixtureAuthorizationTuple] | None = None
     initcodes: List[Bytes] | None = None
 
@@ -505,6 +517,18 @@ class FixtureBlockBase(CamelModel):
     bytes.
     """
 
+    @model_validator(mode="before")
+    @classmethod
+    def strip_block_number_computed_field(cls, data: Any) -> Any:
+        """
+        Strip the block_number computed field which gets included in model_dump()
+        but is not a valid input field.
+        """
+        if isinstance(data, dict):
+            data.pop("blocknumber", None)
+            data.pop("block_number", None)
+        return data
+
     header: FixtureHeader = Field(..., alias="blockHeader")
     txs: List[FixtureTransaction] = Field(
         default_factory=list, alias="transactions"
@@ -517,6 +541,7 @@ class FixtureBlockBase(CamelModel):
     block_access_list: BlockAccessList | None = Field(
         None, description="EIP-7928 Block Access List"
     )
+    fork: Fork | None = Field(None, exclude=True)
 
     @computed_field(alias="blocknumber")  # type: ignore[prop-decorator]
     @cached_property
@@ -676,6 +701,10 @@ class BlockchainEngineXFixture(BlockchainEngineFixtureCommon):
     Uses pre-allocation groups (and a single client instance) for efficient
     test execution without client restarts.
     """
+
+    # Allow extra fields: BlockchainEngineXFixture is constructed from shared
+    # fixture_data that includes fields for other fixture formats (e.g. genesis).
+    model_config = CamelModel.model_config | {"extra": "ignore"}
 
     format_name: ClassVar[str] = "blockchain_test_engine_x"
     description: ClassVar[str] = (
