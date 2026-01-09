@@ -57,11 +57,14 @@ class JSONRPCError(Exception):
 class TransactionByHashResponse(Transaction):
     """Represents the response of a transaction by hash request."""
 
+    model_config = Transaction.model_config | {"extra": "ignore"}
+
     block_hash: Hash | None = None
     block_number: HexNumber | None = None
 
     gas_limit: HexNumber = Field(HexNumber(21_000), alias="gas")
     transaction_hash: Hash = Field(..., alias="hash")
+    transaction_index: HexNumber | None = None
     sender: EOA | None = Field(None, alias="from")
 
     # The to field can have different names in different clients, so we use
