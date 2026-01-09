@@ -20,11 +20,14 @@ from .block_types import (
 )
 from .chain_config_types import ChainConfig, ChainConfigDefaults
 from .helpers import (
+    DETERMINISTIC_FACTORY_ADDRESS,
+    DETERMINISTIC_FACTORY_BYTECODE,
     TestParameterGroup,
     add_kzg_version,
     ceiling_division,
     compute_create2_address,
     compute_create_address,
+    compute_deterministic_create2_address,
     compute_eofcreate_address,
 )
 from .phase_manager import TestPhase, TestPhaseManager
@@ -46,6 +49,8 @@ from .transaction_types import (
 from .utils import Removable, keccak256
 
 __all__ = (
+    "DETERMINISTIC_FACTORY_BYTECODE",
+    "DETERMINISTIC_FACTORY_ADDRESS",
     "Alloc",
     "AuthorizationTuple",
     "BalAccountChange",
@@ -82,6 +87,7 @@ __all__ = (
     "ceiling_division",
     "compute_create_address",
     "compute_create2_address",
+    "compute_deterministic_create2_address",
     "compute_eofcreate_address",
     "keccak256",
 )

@@ -52,6 +52,7 @@ from .specs import (
     TransactionTestFiller,
 )
 from .test_types import (
+    DETERMINISTIC_FACTORY_ADDRESS,
     EOA,
     Alloc,
     AuthorizationTuple,
@@ -83,6 +84,7 @@ from .test_types import (
     ceiling_division,
     compute_create2_address,
     compute_create_address,
+    compute_deterministic_create2_address,
     compute_eofcreate_address,
     keccak256,
 )
@@ -116,6 +118,7 @@ from .vm import (
 )
 
 __all__ = (
+    "DETERMINISTIC_FACTORY_ADDRESS",
     "AccessList",
     "Account",
     "Address",
@@ -210,6 +213,7 @@ __all__ = (
     "ceiling_division",
     "compute_create_address",
     "compute_create2_address",
+    "compute_deterministic_create2_address",
     "compute_eofcreate_address",
     "extend_with_defaults",
     "gas_test",

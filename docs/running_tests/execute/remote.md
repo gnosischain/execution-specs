@@ -32,6 +32,13 @@ These transactions are created from the seed or worker accounts provided via the
 
 When the test is executed, all `pre.fund_eoa` and `pre.deploy_contract` calls generate transactions that create the accounts on chain, instead of placing them directly in the `pre` object like `fill` does.
 
+If a test uses `pre.deterministic_deploy_contract`, the `execute` command first checks whether the contract is already present on chain before attempting to deploy it. If the proxy used for deterministic deployment is also not present on chain, the command will automatically deploy it as well. The address of these contracts is computed as `keccak256(0xff ++ DETERMINISTIC_FACTORY_ADDRESS ++ salt ++ keccak256(init_code))[12:]`.
+
+The value of `DETERMINISTIC_FACTORY_ADDRESS` depends on the currently active fork:
+
+- If EIP-7997 is active in the current fork, the address of the pre-deploy is used.
+- Otherwise, the address `0x4E59B44847B379578588920CA78FBF26C0B4956C` is used (see https://github.com/Arachnid/deterministic-deployment-proxy for details on how this address is computed)
+
 The transactions are collected and only sent after the test function finishes execution. This is done in order to perform optimizations based on the transactions that the test requires to perform its verifications.
 
 One optimization is the deferred calculation of the funding amount for the EOA, which is calculated on the fly depending the test transactions that use the account as sender, and this amount is the minimum balance that the account would need in order for the transactions to be included given the current network gas prices.
