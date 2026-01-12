@@ -182,6 +182,11 @@ lint = [
     "vulture==2.14.0",
     "types-requests>=2.31,<2.33",
 ]
+actionlint = [
+    "actionlint-py>=1.7",
+    "pyflakes>=3.0",
+    "shellcheck-py>=0.10",
+]
 doc = [
     "docc>=0.3.0,<0.4.0",
     "fladrif>=0.2.0,<0.3.0",
@@ -210,6 +215,7 @@ mkdocs = [
 dev = [
     { include-group = "test" },
     { include-group = "lint" },
+    { include-group = "actionlint" },
     { include-group = "doc" },
     { include-group = "mkdocs" },
     "ethereum-execution[optimized]",
