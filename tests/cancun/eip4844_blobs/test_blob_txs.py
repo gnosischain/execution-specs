@@ -1023,10 +1023,12 @@ def test_invalid_blob_hash_versioning_single_tx(
             [Hash(x) for x in range(2)],
         ],
         [
-            [Hash(1)] + add_kzg_version([Hash(2)], Spec.BLOB_COMMITMENT_VERSION_KZG),  # noqa: E501
+            [Hash(1)]
+            + add_kzg_version([Hash(2)], Spec.BLOB_COMMITMENT_VERSION_KZG),  # noqa: E501
         ],
         [
-            add_kzg_version([Hash(1)], Spec.BLOB_COMMITMENT_VERSION_KZG) + [Hash(2)],  # noqa: E501
+            add_kzg_version([Hash(1)], Spec.BLOB_COMMITMENT_VERSION_KZG)
+            + [Hash(2)],  # noqa: E501
         ],
     ],
     ids=[
