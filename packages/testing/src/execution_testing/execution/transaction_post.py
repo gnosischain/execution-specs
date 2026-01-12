@@ -80,6 +80,7 @@ class TransactionPost(BaseExecute):
         """Execute the format."""
         del fork
         del engine_rpc
+
         for block in self.blocks:
             for tx in block:
                 if not isinstance(tx, NetworkWrappedTransaction):
@@ -131,6 +132,7 @@ class TransactionPost(BaseExecute):
                             f"Transaction rejected as expected: {exc_info.value}"
                         )
             else:
+                # Send transactions (batching is handled by eth_rpc internally)
                 eth_rpc.send_wait_transactions(signed_txs)
                 all_tx_hashes.extend([tx.hash for tx in signed_txs])
 
