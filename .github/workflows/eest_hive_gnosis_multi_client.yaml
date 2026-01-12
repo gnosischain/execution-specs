@@ -24,7 +24,7 @@ jobs:
           - nethermind-gnosis
           - erigon-gnosis
     
-    name: Test ${{ matrix.client }}
+    name: ${{ matrix.client }}
 
     steps:
       - name: Checkout execution-specs
