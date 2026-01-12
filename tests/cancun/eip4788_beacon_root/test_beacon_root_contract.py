@@ -747,10 +747,15 @@ def test_no_beacon_root_contract_at_transition(
         balance=0,
     )
     post = {
-        Spec.SYSTEM_ADDRESS: Account(
-            storage={},
+        Spec.BEACON_ROOTS_ADDRESS: Account(
+            storage={
+                timestamp % Spec.HISTORY_BUFFER_LENGTH: 0,
+                (timestamp % Spec.HISTORY_BUFFER_LENGTH)
+                + Spec.HISTORY_BUFFER_LENGTH: 0,
+            },
             code=b"",
             nonce=0,
+            balance=int(1e9),
         ),
         caller_address: Account(
             storage={
@@ -915,11 +920,13 @@ def test_beacon_root_contract_deploy(
         storage=beacon_root_contract_storage,
         code=expected_code,
         nonce=1,
+        balance=int(2e9),
     )
     post[Spec.SYSTEM_ADDRESS] = Account(
         storage={},
         code=b"",
         nonce=0,
+        balance=int(2e9),
     )
     post[deployer_address] = Account(
         balance=175916000000000000,  # It doesn't consume all the balance :(
