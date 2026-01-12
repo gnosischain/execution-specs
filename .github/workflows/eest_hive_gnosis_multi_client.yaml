@@ -1,0 +1,102 @@
+name: EEST → Hive (Gnosis Multi-Client)
+
+on:
+  workflow_dispatch:
+    inputs:
+      fork:
+        description: "Fork passed to --fork"
+        required: true
+        default: "Osaka"
+      test_dir:
+        description: "Test directory to execute"
+        required: true
+        default: "osaka"
+  
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        client:
+          - reth-gnosis
+          - geth-gnosis
+          - nethermind-gnosis
+          - erigon-gnosis
+    
+    name: Test ${{ matrix.client }}
+
+    steps:
+      - name: Checkout execution-specs
+        uses: actions/checkout@v4
+
+      - name: Install Go (for Hive)
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+          cache: false
+
+      - name: Build and install Hive
+        run: |
+          git clone -b sync-eest https://github.com/gnosischain/hive.git
+          cd hive
+          go install ./...
+          cd ..
+      
+      - name: Start Hive in background
+        run: |
+          cd hive
+          ~/go/bin/hive --dev --client ${{ matrix.client }} \
+            --dev.addr=127.0.0.1:3000 \
+            --loglevel=5 \
+            --sim.loglevel=5 \
+            --docker.output \
+            --docker.pull > hive.log 2>&1 &
+          sleep 10  # Give Hive time to start
+      
+      - name: Install wait-on utility
+        run: npm install -g wait-on
+
+      - name: Wait for Hive to listen on port 3000
+        run: npx wait-on --timeout 60000 tcp:127.0.0.1:3000
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH  # uv installs here on Ubuntu
+      
+      - name: Bootstrap Python and install deps
+        run: |
+          pip install uv
+          uv python install 3.11
+          uv python pin 3.11
+          uv sync --all-extras
+          uv pip install solc-select
+          uv run solc-select use 0.8.24 --always-install
+      
+      - name: Run fill
+        run: |
+          uv run fill tests/${{ github.event.inputs.test_dir }} \
+            --fork ${{ github.event.inputs.fork }} \
+            --clean -v -x --traces
+
+      - name: Run test against ${{ matrix.client }}
+        env:
+          HIVE_SIMULATOR: http://127.0.0.1:3000
+        run: |
+          uv run consume engine -v \
+            --input fixtures/blockchain_tests_engine/${{ github.event.inputs.test_dir }}
+
+      - name: Upload Hive logs for ${{ matrix.client }}
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-log-${{ matrix.client }}
+          path: hive/hive.log
+      
+      - name: Upload test fixtures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixtures-${{ matrix.client }}
+          path: fixtures/blockchain_tests_engine/${{ github.event.inputs.test_dir }}
