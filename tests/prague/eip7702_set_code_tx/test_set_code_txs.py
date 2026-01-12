@@ -3131,9 +3131,12 @@ def test_set_code_to_system_contract(
 
 @pytest.mark.with_all_tx_types(
     selector=lambda tx_type: tx_type != 4,
-    marks=lambda tx_type: pytest.mark.execute(
-        pytest.mark.skip("incompatible tx")
-    )
+    marks=lambda tx_type: [
+        pytest.mark.execute(
+            pytest.mark.skip("incompatible tx")
+        ),
+        pytest.mark.blockchain_test_only,
+    ]
     if tx_type in [0, 3]
     else None,
 )
