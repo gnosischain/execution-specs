@@ -11,7 +11,7 @@ from execution_testing import (
     Alloc,
     Block,
     BlockchainTestFiller,
-    BlockException,
+    Bytecode,
     Op,
     Withdrawal,
 )
@@ -26,7 +26,7 @@ pytestmark = pytest.mark.valid_from("Shanghai")
 DEPOSIT_CONTRACT = Address(0xBABE2BED00000000000000000000000000000003)
 
 
-def get_minimal_deposit_contract_code():
+def get_minimal_deposit_contract_code() -> Bytecode:
     """
     Returns bytecode for minimal deposit contract that returns successfully.
     Used to verify system calls succeed without testing contract internals.

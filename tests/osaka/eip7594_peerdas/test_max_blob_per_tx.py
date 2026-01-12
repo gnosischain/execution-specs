@@ -9,8 +9,6 @@ import pytest
 from execution_testing import (
     Address,
     Alloc,
-    Block,
-    BlockchainTestFiller,
     Environment,
     Fork,
     Hash,
