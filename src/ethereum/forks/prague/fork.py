@@ -101,7 +101,7 @@ EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
-    "0xbabe2bed00000000000000000000000000000003"
+    "0xBABE2BED00000000000000000000000000000003"
 )
 BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
     "0x2000000000000000000000000000000000000001"
@@ -127,9 +127,7 @@ CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS = hex_to_address(
 HISTORY_STORAGE_ADDRESS = hex_to_address(
     "0x0000F90827F1C53a10cb7A02335B175320002935"
 )
-BLOB_FEE_COLLECTOR = hex_to_address(
-    "0xfffffffffffffffffffffffffffffffffffffffe"
-)
+
 
 @dataclass
 class BlockChain:
