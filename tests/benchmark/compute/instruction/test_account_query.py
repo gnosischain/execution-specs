@@ -345,29 +345,24 @@ def test_extcode_ops(
     )
 
 
-@pytest.mark.repricing(copied_size=512)
 @pytest.mark.parametrize(
-    "copied_size",
-    [
-        pytest.param(512, id="512"),
-        pytest.param(1024, id="1KiB"),
-        pytest.param(5 * 1024, id="5KiB"),
-    ],
+    "copy_size",
+    [0, 32, 256, 512, 1024],
 )
 def test_extcodecopy_warm(
     benchmark_test: BenchmarkTestFiller,
     pre: Alloc,
-    copied_size: int,
+    copy_size: int,
 ) -> None:
     """Benchmark EXTCODECOPY instruction."""
     copied_contract_address = pre.deploy_contract(
-        code=Op.JUMPDEST * copied_size,
+        code=Op.JUMPDEST * copy_size,
     )
 
     benchmark_test(
         target_opcode=Op.EXTCODECOPY,
         code_generator=JumpLoopGenerator(
-            setup=Op.PUSH10(copied_size) + Op.PUSH20(copied_contract_address),
+            setup=Op.PUSH10(copy_size) + Op.PUSH20(copied_contract_address),
             attack_block=Op.EXTCODECOPY(Op.DUP4, 0, 0, Op.DUP2),
         ),
     )
