@@ -32,6 +32,7 @@ Test fixtures for use by clients are available for each release on the [Github r
 ### 🧪 Test Cases
 
 - ✨ Add missing fuzzy-compute benchmark configurations for `KECCAK256`, `CODECOPY`, `CALLDATACOPY`, `RETURNDATACOPY`, `MLOAD`, `MSTORE`, `MSTORE8`, `MCOPY`, `LOG*`, `CALLDATASIZE`, `CALLDATALOAD`, and `RETURNDATASIZE` opcodes ([#1956](https://github.com/ethereum/execution-specs/pull/1956)).
+- ✨ Add precompile benchmark configurations for `ecPairing`, `blake2f`, `BLS12_G1_MSM`, `BLS12_G2_MSM` and `BLS12_PAIRING` to unblock repricing analysis ([#2003](https://github.com/ethereum/execution-specs/pull/2003)).
 - 🔀 Relabel `@pytest.mark.repricing` markers in benchmark tests to reflect configurations requested for gas repricing analysis ([#1971](https://github.com/ethereum/execution-specs/pull/1971)).
 - ✨ New EIP-7702 test cases added ([#1974](https://github.com/ethereum/execution-specs/pull/1974)).
 - ✨ Add missing benchmark configurations / opcode to benchmark tests for repricing analysis([#2006](https://github.com/ethereum/execution-specs/pull/2006)).
