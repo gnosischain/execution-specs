@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
 from functools import cached_property
+import numbers
 from typing import Any, ClassVar, Dict, Generic, List, Literal, Self, Sequence
 
 import ethereum_rlp as eth_rlp
@@ -841,6 +842,47 @@ class Transaction(
             )
         else:
             return gas_price * gas_limit + self.value
+
+    def _format_field_value(self, value: Any) -> str:
+        """
+        Format a field value for string representation.
+
+        Uses decimal for numeric values (int, HexNumber, etc.) and
+        hex encoding for Address, Bytes, Hash, etc.
+        """
+        if value is None:
+            return "None"
+
+        # fields like 'value' should be shown as decimal number
+        if isinstance(value, numbers.Number):
+            # Force decimal representation for int subclasses like HexNumber
+            if isinstance(value, int):
+                return str(int(value))
+
+            return str(value)
+
+        # fields like 'to' should be shown as hex string
+        if hasattr(value, "hex") and callable(value.hex):
+            return f'"{value.hex()}"'
+
+        return repr(value)
+
+    def __repr__(self) -> str:
+        """
+        Return string representation with hex-encoded values for
+        applicable fields.
+        """
+        field_strs = []
+        for field_name in self.__class__.model_fields:
+            value = getattr(self, field_name)
+            formatted_value = self._format_field_value(value)
+            field_strs.append(f"{field_name}={formatted_value}")
+
+        return f"{self.__class__.__name__}({', '.join(field_strs)})"
+
+    def __str__(self) -> str:
+        """Return the repr string representation."""
+        return self.__repr__()
 
 
 class NetworkWrappedTransaction(CamelModel, RLPSerializable):
