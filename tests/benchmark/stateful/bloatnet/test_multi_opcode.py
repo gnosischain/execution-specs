@@ -62,6 +62,7 @@ def test_bloatnet_balance_extcodesize(
     pre: Alloc,
     fork: Fork,
     gas_benchmark_value: int,
+    tx_gas_limit: int,
     balance_first: bool,
 ) -> None:
     """
@@ -79,28 +80,55 @@ def test_bloatnet_balance_extcodesize(
     # Calculate gas costs
     intrinsic_gas = fork.transaction_intrinsic_cost_calculator()(calldata=b"")
 
+    # Setup overhead (before loop): STATICCALL + result handling + memory setup
+    setup_overhead = (
+        gas_costs.G_COLD_ACCOUNT_ACCESS  # STATICCALL to factory (2600)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_VERY_LOW  # PUSH2 (3)
+        + gas_costs.G_HIGH  # JUMPI (10)
+        + gas_costs.G_VERY_LOW * 2  # MLOAD × 2 for factory results (3 * 2)
+        + gas_costs.G_VERY_LOW * 3  # MSTORE × 3 for memory setup (3 * 3)
+        + gas_costs.G_VERY_LOW  # MSTORE8 for 0xFF prefix (3)
+        + gas_costs.G_VERY_LOW  # PUSH1 for memory position (3)
+    )
+
+    # Cleanup overhead (after loop)
+    cleanup_overhead = gas_costs.G_BASE  # POP counter (2)
+
+    # While loop condition overhead per iteration
+    loop_condition_overhead = (
+        gas_costs.G_VERY_LOW  # DUP1 (3)
+        + gas_costs.G_VERY_LOW  # PUSH1 (3)
+        + gas_costs.G_VERY_LOW  # SWAP1 (3)
+        + gas_costs.G_VERY_LOW  # SUB (3)
+        + gas_costs.G_VERY_LOW  # DUP1 (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_HIGH  # JUMPI (10)
+    )
+
     # Cost per contract access with CREATE2 address generation
     cost_per_contract = (
         gas_costs.G_KECCAK_256  # SHA3 static cost for address generation (30)
-        + gas_costs.G_KECCAK_256_WORD
-        * 3  # SHA3 dynamic cost (85 bytes = 3 words * 6)
+        + gas_costs.G_KECCAK_256_WORD * 3  # SHA3 dynamic (85 bytes = 3 words)
         + gas_costs.G_COLD_ACCOUNT_ACCESS  # Cold access (2600)
         + gas_costs.G_BASE  # POP first result (2)
         + gas_costs.G_WARM_ACCOUNT_ACCESS  # Warm access (100)
         + gas_costs.G_BASE  # POP second result (2)
-        + gas_costs.G_BASE  # DUP1 before first op (3)
-        + gas_costs.G_VERY_LOW * 4  # PUSH1 operations (4 * 3)
-        + gas_costs.G_LOW  # MLOAD for salt (3)
+        + gas_costs.G_VERY_LOW  # DUP1 before first op (3)
+        + gas_costs.G_VERY_LOW  # MLOAD for salt (3)
         + gas_costs.G_VERY_LOW  # ADD for increment (3)
-        + gas_costs.G_LOW  # MSTORE salt back (3)
-        + 10  # While loop overhead
+        + gas_costs.G_VERY_LOW  # MSTORE salt back (3)
+        + loop_condition_overhead  # While loop condition
     )
 
-    # Calculate how many contracts to access based on available gas
-    available_gas = (
-        gas_benchmark_value - intrinsic_gas - 1000
-    )  # Reserve for cleanup
-    contracts_needed = int(available_gas // cost_per_contract)
+    # Calculate how many transactions we need to fill the block
+    num_txs = max(1, gas_benchmark_value // tx_gas_limit)
+
+    # Calculate how many contracts to access per transaction
+    total_overhead = setup_overhead + cleanup_overhead
+    available_gas_per_tx = tx_gas_limit - intrinsic_gas - total_overhead
+    contracts_per_tx = int(available_gas_per_tx // cost_per_contract)
 
     # Deploy factory using stub contract - NO HARDCODED VALUES
     # The stub "bloatnet_factory" must be provided via --address-stubs flag
@@ -114,8 +142,9 @@ def test_bloatnet_balance_extcodesize(
 
     # Log test requirements - deployed count read from factory storage
     print(
-        f"Test needs {contracts_needed} contracts for "
-        f"{gas_benchmark_value / 1_000_000:.1f}M gas. "
+        f"Tx gas limit: {tx_gas_limit / 1_000_000:.1f}M gas. "
+        f"Number of txs: {num_txs}. "
+        f"Contracts per tx: {contracts_per_tx}. "
         f"Factory storage will be checked during execution."
     )
 
@@ -187,12 +216,16 @@ def test_bloatnet_balance_extcodesize(
     # Deploy attack contract
     attack_address = pre.deploy_contract(code=attack_code)
 
-    # Run the attack
-    attack_tx = Transaction(
-        to=attack_address,
-        gas_limit=gas_benchmark_value,
-        sender=pre.fund_eoa(),
-    )
+    # Create multiple attack transactions to fill the block
+    sender = pre.fund_eoa()
+    attack_txs = [
+        Transaction(
+            to=attack_address,
+            gas_limit=tx_gas_limit,
+            sender=sender,
+        )
+        for _ in range(num_txs)
+    ]
 
     # Post-state: just verify attack contract exists
     post = {
@@ -201,7 +234,7 @@ def test_bloatnet_balance_extcodesize(
 
     blockchain_test(
         pre=pre,
-        blocks=[Block(txs=[attack_tx])],
+        blocks=[Block(txs=attack_txs)],
         post=post,
     )
 
@@ -217,6 +250,7 @@ def test_bloatnet_balance_extcodecopy(
     pre: Alloc,
     fork: Fork,
     gas_benchmark_value: int,
+    tx_gas_limit: int,
     balance_first: bool,
 ) -> None:
     """
@@ -235,27 +269,56 @@ def test_bloatnet_balance_extcodecopy(
     # Calculate costs
     intrinsic_gas = fork.transaction_intrinsic_cost_calculator()(calldata=b"")
 
+    # Setup overhead (before loop): STATICCALL + result handling + memory setup
+    setup_overhead = (
+        gas_costs.G_COLD_ACCOUNT_ACCESS  # STATICCALL to factory (2600)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_VERY_LOW  # PUSH2 (3)
+        + gas_costs.G_HIGH  # JUMPI (10)
+        + gas_costs.G_VERY_LOW * 2  # MLOAD × 2 for factory results (3 * 2)
+        + gas_costs.G_VERY_LOW * 3  # MSTORE × 3 for memory setup (3 * 3)
+        + gas_costs.G_VERY_LOW  # MSTORE8 for 0xFF prefix (3)
+        + gas_costs.G_VERY_LOW  # PUSH1 for memory position (3)
+    )
+
+    # Cleanup overhead (after loop)
+    cleanup_overhead = gas_costs.G_BASE  # POP counter (2)
+
+    # While loop condition overhead per iteration
+    loop_condition_overhead = (
+        gas_costs.G_VERY_LOW  # DUP1 (3)
+        + gas_costs.G_VERY_LOW  # PUSH1 (3)
+        + gas_costs.G_VERY_LOW  # SWAP1 (3)
+        + gas_costs.G_VERY_LOW  # SUB (3)
+        + gas_costs.G_VERY_LOW  # DUP1 (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_HIGH  # JUMPI (10)
+    )
+
     # Cost per contract with EXTCODECOPY and CREATE2 address generation
     cost_per_contract = (
         gas_costs.G_KECCAK_256  # SHA3 static cost for address generation (30)
-        + gas_costs.G_KECCAK_256_WORD
-        * 3  # SHA3 dynamic cost (85 bytes = 3 words * 6)
+        + gas_costs.G_KECCAK_256_WORD * 3  # SHA3 dynamic (85 bytes = 3 words)
         + gas_costs.G_COLD_ACCOUNT_ACCESS  # Cold access (2600)
         + gas_costs.G_BASE  # POP first result (2)
         + gas_costs.G_WARM_ACCOUNT_ACCESS  # Warm access base (100)
         + gas_costs.G_COPY * 1  # Copy cost for 1 byte (3)
-        + gas_costs.G_BASE * 2  # DUP1 before first op, DUP4 for address (6)
-        + gas_costs.G_VERY_LOW * 8  # PUSH operations (8 * 3 = 24)
-        + gas_costs.G_LOW * 2  # MLOAD for salt twice (6)
+        + gas_costs.G_VERY_LOW * 2  # DUP1 + DUP4 for address (6)
+        + gas_costs.G_VERY_LOW * 2  # MLOAD for salt twice (6)
         + gas_costs.G_VERY_LOW * 2  # ADD operations (6)
-        + gas_costs.G_LOW  # MSTORE salt back (3)
+        + gas_costs.G_VERY_LOW  # MSTORE salt back (3)
         + gas_costs.G_BASE  # POP after second op (2)
-        + 10  # While loop overhead
+        + loop_condition_overhead  # While loop condition
     )
 
-    # Calculate how many contracts to access
-    available_gas = gas_benchmark_value - intrinsic_gas - 1000
-    contracts_needed = int(available_gas // cost_per_contract)
+    # Calculate how many transactions we need to fill the block
+    num_txs = max(1, gas_benchmark_value // tx_gas_limit)
+
+    # Calculate how many contracts to access per transaction
+    total_overhead = setup_overhead + cleanup_overhead
+    available_gas_per_tx = tx_gas_limit - intrinsic_gas - total_overhead
+    contracts_per_tx = int(available_gas_per_tx // cost_per_contract)
 
     # Deploy factory using stub contract - NO HARDCODED VALUES
     # The stub "bloatnet_factory" must be provided via --address-stubs flag
@@ -269,8 +332,9 @@ def test_bloatnet_balance_extcodecopy(
 
     # Log test requirements - deployed count read from factory storage
     print(
-        f"Test needs {contracts_needed} contracts for "
-        f"{gas_benchmark_value / 1_000_000:.1f}M gas. "
+        f"Tx gas limit: {tx_gas_limit / 1_000_000:.1f}M gas. "
+        f"Number of txs: {num_txs}. "
+        f"Contracts per tx: {contracts_per_tx}. "
         f"Factory storage will be checked during execution."
     )
 
@@ -349,12 +413,16 @@ def test_bloatnet_balance_extcodecopy(
     # Deploy attack contract
     attack_address = pre.deploy_contract(code=attack_code)
 
-    # Run the attack
-    attack_tx = Transaction(
-        to=attack_address,
-        gas_limit=gas_benchmark_value,
-        sender=pre.fund_eoa(),
-    )
+    # Create multiple attack transactions to fill the block
+    sender = pre.fund_eoa()
+    attack_txs = [
+        Transaction(
+            to=attack_address,
+            gas_limit=tx_gas_limit,
+            sender=sender,
+        )
+        for _ in range(num_txs)
+    ]
 
     # Post-state
     post = {
@@ -363,7 +431,7 @@ def test_bloatnet_balance_extcodecopy(
 
     blockchain_test(
         pre=pre,
-        blocks=[Block(txs=[attack_tx])],
+        blocks=[Block(txs=attack_txs)],
         post=post,
     )
 
@@ -379,6 +447,7 @@ def test_bloatnet_balance_extcodehash(
     pre: Alloc,
     fork: Fork,
     gas_benchmark_value: int,
+    tx_gas_limit: int,
     balance_first: bool,
 ) -> None:
     """
@@ -396,28 +465,55 @@ def test_bloatnet_balance_extcodehash(
     # Calculate gas costs
     intrinsic_gas = fork.transaction_intrinsic_cost_calculator()(calldata=b"")
 
+    # Setup overhead (before loop): STATICCALL + result handling + memory setup
+    setup_overhead = (
+        gas_costs.G_COLD_ACCOUNT_ACCESS  # STATICCALL to factory (2600)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_VERY_LOW  # PUSH2 (3)
+        + gas_costs.G_HIGH  # JUMPI (10)
+        + gas_costs.G_VERY_LOW * 2  # MLOAD × 2 for factory results (3 * 2)
+        + gas_costs.G_VERY_LOW * 3  # MSTORE × 3 for memory setup (3 * 3)
+        + gas_costs.G_VERY_LOW  # MSTORE8 for 0xFF prefix (3)
+        + gas_costs.G_VERY_LOW  # PUSH1 for memory position (3)
+    )
+
+    # Cleanup overhead (after loop)
+    cleanup_overhead = gas_costs.G_BASE  # POP counter (2)
+
+    # While loop condition overhead per iteration
+    loop_condition_overhead = (
+        gas_costs.G_VERY_LOW  # DUP1 (3)
+        + gas_costs.G_VERY_LOW  # PUSH1 (3)
+        + gas_costs.G_VERY_LOW  # SWAP1 (3)
+        + gas_costs.G_VERY_LOW  # SUB (3)
+        + gas_costs.G_VERY_LOW  # DUP1 (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_HIGH  # JUMPI (10)
+    )
+
     # Cost per contract access with CREATE2 address generation
     cost_per_contract = (
         gas_costs.G_KECCAK_256  # SHA3 static cost for address generation (30)
-        + gas_costs.G_KECCAK_256_WORD
-        * 3  # SHA3 dynamic cost (85 bytes = 3 words * 6)
+        + gas_costs.G_KECCAK_256_WORD * 3  # SHA3 dynamic (85 bytes = 3 words)
         + gas_costs.G_COLD_ACCOUNT_ACCESS  # Cold access (2600)
         + gas_costs.G_BASE  # POP first result (2)
         + gas_costs.G_WARM_ACCOUNT_ACCESS  # Warm access (100)
         + gas_costs.G_BASE  # POP second result (2)
-        + gas_costs.G_BASE  # DUP1 before first op (3)
-        + gas_costs.G_VERY_LOW * 4  # PUSH1 operations (4 * 3)
-        + gas_costs.G_LOW  # MLOAD for salt (3)
+        + gas_costs.G_VERY_LOW  # DUP1 before first op (3)
+        + gas_costs.G_VERY_LOW  # MLOAD for salt (3)
         + gas_costs.G_VERY_LOW  # ADD for increment (3)
-        + gas_costs.G_LOW  # MSTORE salt back (3)
-        + 10  # While loop overhead
+        + gas_costs.G_VERY_LOW  # MSTORE salt back (3)
+        + loop_condition_overhead  # While loop condition
     )
 
-    # Calculate how many contracts to access based on available gas
-    available_gas = (
-        gas_benchmark_value - intrinsic_gas - 1000
-    )  # Reserve for cleanup
-    contracts_needed = int(available_gas // cost_per_contract)
+    # Calculate how many transactions we need to fill the block
+    num_txs = max(1, gas_benchmark_value // tx_gas_limit)
+
+    # Calculate how many contracts to access per transaction
+    total_overhead = setup_overhead + cleanup_overhead
+    available_gas_per_tx = tx_gas_limit - intrinsic_gas - total_overhead
+    contracts_per_tx = int(available_gas_per_tx // cost_per_contract)
 
     # Deploy factory using stub contract
     factory_address = pre.deploy_contract(
@@ -427,8 +523,9 @@ def test_bloatnet_balance_extcodehash(
 
     # Log test requirements
     print(
-        f"Test needs {contracts_needed} contracts for "
-        f"{gas_benchmark_value / 1_000_000:.1f}M gas. "
+        f"Tx gas limit: {tx_gas_limit / 1_000_000:.1f}M gas. "
+        f"Number of txs: {num_txs}. "
+        f"Contracts per tx: {contracts_per_tx}. "
         f"Factory storage will be checked during execution."
     )
 
@@ -489,12 +586,16 @@ def test_bloatnet_balance_extcodehash(
     # Deploy attack contract
     attack_address = pre.deploy_contract(code=attack_code)
 
-    # Run the attack
-    attack_tx = Transaction(
-        to=attack_address,
-        gas_limit=gas_benchmark_value,
-        sender=pre.fund_eoa(),
-    )
+    # Create multiple attack transactions to fill the block
+    sender = pre.fund_eoa()
+    attack_txs = [
+        Transaction(
+            to=attack_address,
+            gas_limit=tx_gas_limit,
+            sender=sender,
+        )
+        for _ in range(num_txs)
+    ]
 
     # Post-state
     post = {
@@ -503,7 +604,7 @@ def test_bloatnet_balance_extcodehash(
 
     blockchain_test(
         pre=pre,
-        blocks=[Block(txs=[attack_tx])],
+        blocks=[Block(txs=attack_txs)],
         post=post,
     )
 
@@ -530,6 +631,7 @@ def test_mixed_sload_sstore(
     pre: Alloc,
     fork: Fork,
     gas_benchmark_value: int,
+    tx_gas_limit: int,
     address_stubs: AddressStubs | None,
     num_contracts: int,
     sload_percent: int,
@@ -578,6 +680,26 @@ def test_mixed_sload_sstore(
     # Calculate gas costs
     intrinsic_gas = fork.transaction_intrinsic_cost_calculator()(calldata=b"")
 
+    # Per-contract fixed overhead (setup + teardown for each contract's loops)
+    # Each contract has two loops: SLOAD (balanceOf) and SSTORE (approve)
+    overhead_per_contract = (
+        # SLOAD loop setup/teardown
+        gas_costs.G_VERY_LOW  # MSTORE to initialize counter (3)
+        + gas_costs.G_JUMPDEST  # JUMPDEST at loop start (1)
+        + gas_costs.G_VERY_LOW  # MLOAD for While condition (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_HIGH  # JUMPI (10)
+        # SSTORE loop setup/teardown
+        + gas_costs.G_VERY_LOW  # MSTORE selector (3)
+        + gas_costs.G_VERY_LOW  # MSTORE to initialize counter (3)
+        + gas_costs.G_JUMPDEST  # JUMPDEST at loop start (1)
+        + gas_costs.G_VERY_LOW  # MLOAD for While condition (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_HIGH  # JUMPI (10)
+    )
+
     # Fixed overhead for SLOAD loop
     sload_loop_overhead = (
         # Attack contract loop overhead
@@ -585,16 +707,16 @@ def test_mixed_sload_sstore(
         + gas_costs.G_VERY_LOW * 2  # MSTORE selector (3*2)
         + gas_costs.G_VERY_LOW * 3  # MLOAD + MSTORE address (3*3)
         + gas_costs.G_BASE  # POP (2)
-        + gas_costs.G_BASE * 3  # SUB + MLOAD + MSTORE counter decrement
-        + gas_costs.G_BASE * 2  # ISZERO * 2 for loop condition (2*2)
-        + gas_costs.G_MID  # JUMPI (8)
+        + gas_costs.G_VERY_LOW * 3  # SUB + MLOAD + MSTORE decrement (3*3)
+        + gas_costs.G_VERY_LOW * 2  # ISZERO * 2 for loop condition (3*2)
+        + gas_costs.G_HIGH  # JUMPI (10)
     )
 
     # ERC20 balanceOf internal gas
     sload_erc20_internal = (
         gas_costs.G_VERY_LOW  # PUSH4 selector (3)
         + gas_costs.G_BASE  # EQ selector match (2)
-        + gas_costs.G_MID  # JUMPI to function (8)
+        + gas_costs.G_HIGH  # JUMPI to function (10)
         + gas_costs.G_JUMPDEST  # JUMPDEST at function start (1)
         + gas_costs.G_VERY_LOW * 2  # CALLDATALOAD arg (3*2)
         + gas_costs.G_KECCAK_256  # keccak256 static (30)
@@ -607,19 +729,19 @@ def test_mixed_sload_sstore(
     sstore_loop_overhead = (
         # Attack contract loop body operations
         gas_costs.G_VERY_LOW  # MSTORE selector at memory[32] (3)
-        + gas_costs.G_LOW  # MLOAD counter (5)
+        + gas_costs.G_VERY_LOW  # MLOAD counter (3)
         + gas_costs.G_VERY_LOW  # MSTORE spender at memory[64] (3)
         + gas_costs.G_BASE  # POP call result (2)
         # Counter decrement
-        + gas_costs.G_LOW  # MLOAD counter (5)
+        + gas_costs.G_VERY_LOW  # MLOAD counter (3)
         + gas_costs.G_VERY_LOW  # PUSH1 1 (3)
         + gas_costs.G_VERY_LOW  # SUB (3)
         + gas_costs.G_VERY_LOW  # MSTORE counter back (3)
         # While loop condition check
-        + gas_costs.G_LOW  # MLOAD counter (5)
-        + gas_costs.G_BASE  # ISZERO (2)
-        + gas_costs.G_BASE  # ISZERO (2)
-        + gas_costs.G_MID  # JUMPI back to loop start (8)
+        + gas_costs.G_VERY_LOW  # MLOAD counter (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_VERY_LOW  # ISZERO (3)
+        + gas_costs.G_HIGH  # JUMPI back to loop start (10)
     )
 
     # ERC20 approve internal gas
@@ -627,7 +749,7 @@ def test_mixed_sload_sstore(
     sstore_erc20_internal = (
         gas_costs.G_VERY_LOW  # PUSH4 selector (3)
         + gas_costs.G_BASE  # EQ selector match (2)
-        + gas_costs.G_MID  # JUMPI to function (8)
+        + gas_costs.G_HIGH  # JUMPI to function (10)
         + gas_costs.G_JUMPDEST  # JUMPDEST at function start (1)
         + gas_costs.G_VERY_LOW  # CALLDATALOAD spender (3)
         + gas_costs.G_VERY_LOW  # CALLDATALOAD amount (3)
@@ -642,13 +764,19 @@ def test_mixed_sload_sstore(
         + gas_costs.G_VERY_LOW  # PUSH1 0 for return offset (3)
     )
 
-    # Calculate gas budget per contract
-    available_gas = gas_benchmark_value - intrinsic_gas
-    gas_per_contract = available_gas // num_contracts
+    # Calculate how many transactions we need to fill the block
+    num_txs = max(1, gas_benchmark_value // tx_gas_limit)
+
+    # Calculate gas budget per contract per transaction
+    total_overhead_per_tx = intrinsic_gas + (
+        overhead_per_contract * num_contracts
+    )
+    available_gas_per_tx = tx_gas_limit - total_overhead_per_tx
+    gas_per_contract_per_tx = available_gas_per_tx // num_contracts
 
     # For each contract, split gas by percentage
-    sload_gas_per_contract = (gas_per_contract * sload_percent) // 100
-    sstore_gas_per_contract = (gas_per_contract * sstore_percent) // 100
+    sload_gas_per_contract = (gas_per_contract_per_tx * sload_percent) // 100
+    sstore_gas_per_contract = (gas_per_contract_per_tx * sstore_percent) // 100
 
     # Account for cold/warm transitions in CALL costs
     # First SLOAD call is COLD (2600), rest are WARM (100)
@@ -686,9 +814,11 @@ def test_mixed_sload_sstore(
     # Log test requirements
     print(
         f"Total gas budget: {gas_benchmark_value / 1_000_000:.1f}M gas. "
-        f"~{gas_per_contract / 1_000_000:.1f}M gas per contract "
+        f"Tx gas limit: {tx_gas_limit / 1_000_000:.1f}M gas. "
+        f"Number of txs: {num_txs}. "
+        f"~{gas_per_contract_per_tx / 1_000_000:.2f}M gas per contract per tx "
         f"({sload_percent}% SLOAD, {sstore_percent}% SSTORE). "
-        f"Per contract: {sload_calls_per_contract} balanceOf calls, "
+        f"Per contract per tx: {sload_calls_per_contract} balanceOf calls, "
         f"{sstore_calls_per_contract} approve calls."
     )
 
@@ -763,12 +893,16 @@ def test_mixed_sload_sstore(
     # Deploy attack contract
     attack_address = pre.deploy_contract(code=attack_code)
 
-    # Run the attack
-    attack_tx = Transaction(
-        to=attack_address,
-        gas_limit=gas_benchmark_value,
-        sender=pre.fund_eoa(),
-    )
+    # Create multiple attack transactions to fill the block
+    sender = pre.fund_eoa()
+    attack_txs = [
+        Transaction(
+            to=attack_address,
+            gas_limit=tx_gas_limit,
+            sender=sender,
+        )
+        for _ in range(num_txs)
+    ]
 
     # Post-state
     post = {
@@ -777,6 +911,6 @@ def test_mixed_sload_sstore(
 
     blockchain_test(
         pre=pre,
-        blocks=[Block(txs=[attack_tx])],
+        blocks=[Block(txs=attack_txs)],
         post=post,
     )
