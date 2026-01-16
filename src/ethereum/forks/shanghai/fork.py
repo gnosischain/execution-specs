@@ -778,7 +778,9 @@ def process_withdrawals(
 
     # Verify that the withdrawal system call succeeded
     if output.error is not None:
-        raise output.error
+        raise InvalidBlock(
+            f"Withdrawal system call failed: {output.error!r}"
+        )
 
 
 def process_block_rewards(
