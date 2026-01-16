@@ -157,6 +157,7 @@ def test_withdrawal_index_order(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
+@pytest.mark.exception_test
 def test_withdrawal_system_call_with_revert(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -189,6 +190,7 @@ def test_withdrawal_system_call_with_revert(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
+@pytest.mark.exception_test
 def test_withdrawal_system_call_out_of_gas(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
