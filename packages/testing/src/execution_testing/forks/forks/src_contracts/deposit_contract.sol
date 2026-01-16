@@ -151,13 +151,16 @@ contract DepositContract is IDepositContract, ERC165 {
     /// @notice System-level withdrawal execution function
     /// @dev This function is called by the system address (0xfffffffffffffffffffffffffffffffffffffffe)
     /// during block finalization to process beacon chain withdrawals.
-    /// The function accepts the call but does nothing to prevent syscall panics.
+    /// The function accepts the call to prevent syscall panics.
     function executeSystemWithdrawals(
     uint256 /* maxFailedWithdrawalsToProcess */,
     uint64[] calldata /* amounts */,
     address[] calldata /* addresses */
-    ) external {
-        // Intentionally empty to prevent syscall panics.
+    ) external pure {
+        assembly {
+            // Explicitly return empty data
+            return(0, 0)
+        }
     }
 
     function supportsInterface(bytes4 interfaceId) override external pure returns (bool) {
