@@ -157,10 +157,8 @@ contract DepositContract is IDepositContract, ERC165 {
     uint64[] calldata /* amounts */,
     address[] calldata /* addresses */
     ) external pure {
-        assembly {
-            // Explicitly return empty data
-            return(0, 0)
-        }
+        // Successfully do nothing
+        return;
     }
 
     function supportsInterface(bytes4 interfaceId) override external pure returns (bool) {
