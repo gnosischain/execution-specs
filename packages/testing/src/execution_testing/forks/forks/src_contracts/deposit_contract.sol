@@ -151,29 +151,16 @@ contract DepositContract is IDepositContract, ERC165 {
     /// @notice System-level withdrawal execution function
     /// @dev This function is called by the system address (0xfffffffffffffffffffffffffffffffffffffffe)
     /// during block finalization to process beacon chain withdrawals.
-    /// It accepts the call and returns empty arrays to prevent syscall panics.
+    /// It accepts the call to prevent syscall panics.
     /// @param maxFailedWithdrawalsToProcess Maximum number of failed withdrawals (ignored)
     /// @param amounts Array of withdrawal amounts in GWei (ignored)
     /// @param addresses Array of withdrawal recipient addresses (ignored)
-    /// @return Empty arrays to satisfy the syscall
     function executeSystemWithdrawals(
         uint256 maxFailedWithdrawalsToProcess,
         uint64[] calldata amounts,
         address[] calldata addresses
-    ) external pure returns(address[] memory, uint256[] memory) {
-        assembly {
-            // Get free memory pointer
-            let ptr := mload(0x40)
-            
-            // Build ABI-encoded return data for two empty arrays
-            mstore(ptr, 0x40)                // Offset to first array (64 bytes)
-            mstore(add(ptr, 0x20), 0x60)     // Offset to second array (96 bytes)
-            mstore(add(ptr, 0x40), 0)        // First array length = 0
-            mstore(add(ptr, 0x60), 0)        // Second array length = 0
-            
-            // Return 128 bytes (4 words)
-            return(ptr, 0x80)
-        }
+    ) external {
+        // Simply does nothing and succeeds
     }
 
     function supportsInterface(bytes4 interfaceId) override external pure returns (bool) {
