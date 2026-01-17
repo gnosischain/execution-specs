@@ -770,17 +770,11 @@ def process_withdrawals(
         ["uint256", "uint64[]", "address[]"],
         [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
     )
-    output = process_unchecked_system_transaction(
+    process_unchecked_system_transaction(
         block_env=block_env,
         target_address=DEPOSIT_CONTRACT_ADDRESS,
         data=bytes.fromhex("79d0c0bc") + payload,
     )
-
-    # Verify that the withdrawal system call succeeded
-    if output.error is not None:
-        raise InvalidBlock(
-            f"Withdrawal system call failed: {output.error!r}"
-        )
 
 
 def process_block_rewards(
