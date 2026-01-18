@@ -163,7 +163,7 @@ jobs:
       
       - name: Run fill
         run: |
-          uv run fill tests/${{ matrix.test_dir }} --fork ${{ github.event.inputs.fork }} --clean -v -x --traces
+          uv run fill tests/${{ matrix.test_dir }} --fork ${{ github.event.inputs.fork }} --clean -v -x
 
       - name: Run test against client
         env:
