@@ -36,7 +36,7 @@ jobs:
       
       - name: Run fill to generate fixtures
         run: |
-          uv run fill tests/${{ github.event.inputs.test_dir }} --fork ${{ github.event.inputs.fork }} --clean -v -x --traces
+          uv run fill tests/${{ github.event.inputs.test_dir }} --fork ${{ github.event.inputs.fork }} --clean -v -x
       
       - name: Upload generated fixtures
         uses: actions/upload-artifact@v4
