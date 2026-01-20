@@ -49,7 +49,7 @@ EXTRA_DATA_AT_LIMIT = b"\x00" * 15
 # Max size adjustment extra_data can absorb
 # reserves 1 byte so delta=-1 tests stay valid
 EXTRA_DATA_TOLERANCE = len(EXTRA_DATA_AT_LIMIT) - 1
-BLOCK_GAS_LIMIT = 100_000_000
+BLOCK_GAS_LIMIT = 17_000_000
 
 
 @pytest.fixture
