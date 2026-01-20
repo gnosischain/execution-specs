@@ -582,17 +582,17 @@ class TestFillBlockchainValidTxs:
         header_new_fields = Header(
             difficulty=new_difficulty,
             state_root=new_state_root,
-            transactions_trie=new_transactions_root,
+            transactions_root=new_transactions_root,
         )
 
         updated_block_header = header_new_fields.apply(block.header)  # type: ignore
         assert updated_block_header.difficulty == new_difficulty
         assert updated_block_header.state_root == new_state_root
-        assert updated_block_header.transactions_trie == Hash(
+        assert updated_block_header.transactions_root == Hash(
             new_transactions_root
         )
         assert updated_block_header.block_hash != block.header.block_hash  # type: ignore
-        assert isinstance(updated_block_header.transactions_trie, Hash)
+        assert isinstance(updated_block_header.transactions_root, Hash)
 
 
 @pytest.mark.parametrize(

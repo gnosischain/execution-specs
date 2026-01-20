@@ -159,7 +159,7 @@ class FixtureHeader(CamelModel):
         validation_alias=AliasChoices("coinbase", "miner"),
     )
     state_root: Hash
-    transactions_trie: Hash = Field(
+    transactions_root: Hash = Field(
         Hash(EmptyTrieRoot),
         alias="transactionsRoot",
         validation_alias=AliasChoices("transactionsTrie", "transactionsRoot"),
