@@ -132,7 +132,7 @@ def base_pre_genesis(
         ommers_hash=EmptyOmmersRoot,
         fee_recipient=0,
         state_root=state_root,
-        transactions_trie=EmptyTrieRoot,
+        transactions_root=EmptyTrieRoot,
         receipts_root=EmptyTrieRoot,
         logs_bloom=0,
         difficulty=0x20000 if env.difficulty is None else env.difficulty,
