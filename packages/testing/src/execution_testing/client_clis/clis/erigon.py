@@ -102,16 +102,11 @@ class ErigonExceptionMapper(ExceptionMapper):
         TransactionException.GAS_LIMIT_EXCEEDS_MAXIMUM: (
             r"invalid block, txnIdx=\d+,.*gas limit too high"
         ),
-        BlockException.INCORRECT_BLOB_GAS_USED: (
-            r"blobGasUsed by execution: \d+, in header: \d+"
-        ),
-        BlockException.INCORRECT_EXCESS_BLOB_GAS: (
-            r"invalid excessBlobGas: have \d+, want \d+"
-        ),
-        BlockException.INVALID_GAS_USED: (
-            r"gas used by execution: \w+, in header: \w+"
-        ),
-        BlockException.INVALID_GAS_USED_ABOVE_LIMIT: (
-            r"invalid gasUsed: have \d+, gasLimit \d+"
+        BlockException.INCORRECT_BLOB_GAS_USED: r"blobGasUsed by execution: \d+, in header: \d+",
+        BlockException.INCORRECT_EXCESS_BLOB_GAS: r"invalid excessBlobGas: have \d+, want \d+",
+        BlockException.INVALID_GAS_USED: r"gas used by execution: \w+, in header: \w+",
+        BlockException.INVALID_GAS_USED_ABOVE_LIMIT: r"invalid gasUsed: have \d+, gasLimit \d+",
+        BlockException.SYSTEM_CONTRACT_CALL_FAILED: (
+            r"execution reverted|invalid opcode: INVALID"
         ),
     }
