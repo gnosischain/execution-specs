@@ -928,6 +928,11 @@ class Frontier(BaseFork, solc_name="homestead"):
         return False
 
     @classmethod
+    def header_slot_number_required(cls) -> bool:
+        """At genesis, header must not contain slot number (EIP-7843)."""
+        return False
+
+    @classmethod
     def engine_new_payload_blob_hashes(cls) -> bool:
         """At genesis, payloads do not have blob hashes."""
         return False
@@ -2894,3 +2899,25 @@ class Amsterdam(BPO2):
         as a parameter.
         """
         return True
+
+    @classmethod
+    def header_slot_number_required(cls) -> bool:
+        """Slot number in header required from Amsterdam (EIP-7843)."""
+        return True
+
+    @classmethod
+    def opcode_gas_map(
+        cls,
+    ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
+        """Add SLOTNUM opcode gas cost for Amsterdam (EIP-7843)."""
+        gas_costs = cls.gas_costs()
+        base_map = super(Amsterdam, cls).opcode_gas_map()
+        return {
+            **base_map,
+            Opcodes.SLOTNUM: gas_costs.GAS_BASE,
+        }
+
+    @classmethod
+    def valid_opcodes(cls) -> List[Opcodes]:
+        """Add SLOTNUM opcode for Amsterdam (EIP-7843)."""
+        return [Opcodes.SLOTNUM] + super(Amsterdam, cls).valid_opcodes()
