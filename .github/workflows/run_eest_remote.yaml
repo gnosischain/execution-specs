@@ -41,10 +41,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
       - name: Install uv and Python
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -81,7 +81,7 @@ jobs:
             ${{ inputs.extra_args }}
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           name: html-report
           path: ${{ inputs.html_report }}
