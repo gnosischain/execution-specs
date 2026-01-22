@@ -43,6 +43,7 @@ from ..base_fork import (
     CalldataGasCalculator,
     ExcessBlobGasCalculator,
     MemoryExpansionGasCalculator,
+    RefundTypes,
     TransactionDataFloorCostCalculator,
     TransactionIntrinsicCostCalculator,
 )
@@ -1212,6 +1213,13 @@ class Frontier(BaseFork, solc_name="homestead"):
         return -1
 
     @classmethod
+    def refund_types(cls) -> List[RefundTypes]:
+        """
+        At genesis, storage clearing refund is introduced.
+        """
+        return [RefundTypes.STORAGE_CLEAR]
+
+    @classmethod
     def pre_allocation(cls) -> Mapping:
         """
         Return whether the fork expects pre-allocation of accounts.
@@ -2357,6 +2365,15 @@ class Prague(Cancun):
         type is 2.
         """
         return 2
+
+    @classmethod
+    def refund_types(cls) -> List[RefundTypes]:
+        """
+        At Prague, existing authorization refund is introduced.
+        """
+        refunds = super(Prague, cls).refund_types()
+        refunds.append(RefundTypes.AUTHORIZATION_EXISTING_AUTHORITY)
+        return refunds
 
     @classmethod
     def calldata_gas_calculator(cls) -> CalldataGasCalculator:
