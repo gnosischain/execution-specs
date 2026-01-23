@@ -3118,14 +3118,6 @@ class Osaka(Prague, solc_name="cancun"):
         return 2
 
     @classmethod
-    def engine_new_payload_version(
-        cls, *, block_number: int = 0, timestamp: int = 0
-    ) -> Optional[int]:
-        """From Osaka, new payload calls must use version 4."""
-        del block_number, timestamp
-        return 4
-
-    @classmethod
     def full_blob_tx_wrapper_version(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int | None:
