@@ -2878,6 +2878,29 @@ class Amsterdam(BPO2):
         return False
 
     @classmethod
+    def valid_opcodes(cls) -> List[Opcodes]:
+        """Return list of Opcodes that are valid to work on this fork."""
+        return [
+            Opcodes.SWAPN,
+            Opcodes.DUPN,
+            Opcodes.EXCHANGE,
+        ] + super(Amsterdam, cls).valid_opcodes()
+
+    @classmethod
+    def opcode_gas_map(
+        cls,
+    ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
+        """Add Amsterdam opcodes gas costs."""
+        gas_costs = cls.gas_costs()
+        base_map = super(Amsterdam, cls).opcode_gas_map()
+        return {
+            **base_map,
+            Opcodes.SWAPN: gas_costs.GAS_VERY_LOW,
+            Opcodes.DUPN: gas_costs.GAS_VERY_LOW,
+            Opcodes.EXCHANGE: gas_costs.GAS_VERY_LOW,
+        }
+
+    @classmethod
     def engine_new_payload_version(cls) -> Optional[int]:
         """From Amsterdam, new payload calls must use version 5."""
         return 5
