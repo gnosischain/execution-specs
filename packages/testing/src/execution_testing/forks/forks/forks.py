@@ -2883,6 +2883,23 @@ class Amsterdam(BPO2):
         return False
 
     @classmethod
+    def valid_opcodes(cls) -> List[Opcodes]:
+        """Add SLOTNUM opcode for Amsterdam (EIP-7843)."""
+        return [Opcodes.SLOTNUM] + super(Amsterdam, cls).valid_opcodes()
+
+    @classmethod
+    def opcode_gas_map(
+        cls,
+    ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
+        """Add SLOTNUM opcode gas cost for Amsterdam (EIP-7843)."""
+        gas_costs = cls.gas_costs()
+        base_map = super(Amsterdam, cls).opcode_gas_map()
+        return {
+            **base_map,
+            Opcodes.SLOTNUM: gas_costs.GAS_BASE,
+        }
+
+    @classmethod
     def engine_new_payload_version(cls) -> Optional[int]:
         """From Amsterdam, new payload calls must use version 5."""
         return 5
@@ -2904,20 +2921,3 @@ class Amsterdam(BPO2):
     def header_slot_number_required(cls) -> bool:
         """Slot number in header required from Amsterdam (EIP-7843)."""
         return True
-
-    @classmethod
-    def opcode_gas_map(
-        cls,
-    ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
-        """Add SLOTNUM opcode gas cost for Amsterdam (EIP-7843)."""
-        gas_costs = cls.gas_costs()
-        base_map = super(Amsterdam, cls).opcode_gas_map()
-        return {
-            **base_map,
-            Opcodes.SLOTNUM: gas_costs.GAS_BASE,
-        }
-
-    @classmethod
-    def valid_opcodes(cls) -> List[Opcodes]:
-        """Add SLOTNUM opcode for Amsterdam (EIP-7843)."""
-        return [Opcodes.SLOTNUM] + super(Amsterdam, cls).valid_opcodes()
