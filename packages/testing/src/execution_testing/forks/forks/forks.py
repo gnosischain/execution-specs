@@ -2636,6 +2636,7 @@ class Cancun(Shanghai):
                 "5b62001fff42064281555f359062001fff015500",
             }
         }
+
         return new_allocation | super(Cancun, cls).pre_allocation_blockchain()  # type: ignore
 
     @classmethod
@@ -3115,6 +3116,14 @@ class Osaka(Prague, solc_name="cancun"):
         """At Osaka, the engine get blobs version is 2."""
         del block_number, timestamp
         return 2
+
+    @classmethod
+    def engine_new_payload_version(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> Optional[int]:
+        """From Osaka, new payload calls must use version 4."""
+        del block_number, timestamp
+        return 4
 
     @classmethod
     def full_blob_tx_wrapper_version(
