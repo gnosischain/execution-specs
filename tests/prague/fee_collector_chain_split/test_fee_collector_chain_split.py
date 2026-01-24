@@ -60,9 +60,7 @@ def test_fee_collector_with_selfdestructed_coinbase(
     Test that fee collector receives fees when coinbase is self-destructed.
     """
     # Contract that self-destructs immediately when called
-    self_destruct_code = Bytecode(
-        Op.SELFDESTRUCT(Op.CALLER)
-    )
+    self_destruct_code = Bytecode(Op.SELFDESTRUCT(Op.CALLER))
 
     # Pre-deploy the self-destruct contract
     self_destruct_contract = pre.deploy_contract(code=self_destruct_code)
@@ -130,8 +128,7 @@ def test_fee_collector_with_selfdestructed_coinbase(
     blockchain_test(
         pre=pre,
         post={
-            # Fee collector MUST receive the base fees
-            FEE_COLLECTOR_ADDRESS: Account(storage={}),
+            FEE_COLLECTOR_ADDRESS: Account(balance=0x3071DEA82840),
             created_contract_address: Account.NONEXISTENT,
         },
         blocks=[block],
