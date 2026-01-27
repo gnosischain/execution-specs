@@ -28,6 +28,7 @@ dependencies = [
     "cryptography>=45.0.1,<46",
     "platformdirs>=4.2,<5",
     "libcst>=1.8,<2",
+    "eth-abi>=5.2.0",
 ]
 
 [tool.setuptools.package-dir]

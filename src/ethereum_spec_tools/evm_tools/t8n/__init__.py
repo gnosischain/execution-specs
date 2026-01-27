@@ -390,6 +390,9 @@ class T8N(Load):
                 data=block_env.parent_beacon_block_root,
             )
 
+        if self.fork.is_after_fork("paris"):
+            self.fork.process_block_rewards(block_env)
+
         for tx_index, (original_idx, tx) in enumerate(
             zip(
                 self.txs.successfully_parsed,
@@ -428,9 +431,21 @@ class T8N(Load):
                 )
 
         if self.fork.has_withdrawal:
-            self.fork.process_withdrawals(
-                block_env, block_output, self.env.withdrawals
-            )
+            if self.env.withdrawals is not None:
+                for i, w in enumerate(self.env.withdrawals):
+                    self.fork.trie_set(
+                        block_output.withdrawals_trie,
+                        rlp.encode(Uint(i)),
+                        rlp.encode(
+                            [
+                                Uint(w.index),
+                                Uint(w.validator_index),
+                                w.address,
+                                Uint(w.amount),
+                            ]
+                        ),
+                    )
+            self.fork.process_withdrawals(block_env, self.env.withdrawals)
 
         if self.fork.has_compute_requests_hash:
             self.fork.process_general_purpose_requests(block_env, block_output)
