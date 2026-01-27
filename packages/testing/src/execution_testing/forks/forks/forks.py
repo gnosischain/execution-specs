@@ -1079,9 +1079,7 @@ class Frontier(BaseFork, solc_name="homestead"):
 
     @classmethod
     def supports_protected_txs(cls) -> bool:
-        """
-        At Genesis, fork does not have support for EIP-155 protected transactions.
-        """
+        """At Genesis, fork has no support for EIP-155 protected txs."""
         return False
 
     @classmethod
@@ -1374,20 +1372,22 @@ class Frontier(BaseFork, solc_name="homestead"):
         """
         Build a default block header for this fork with the given attributes.
 
-        This method automatically detects which header fields are required by the fork
-        and assigns appropriate default values. It introspects the FixtureHeader model
-        to find fields with HeaderForkRequirement annotations and automatically includes
-        them if the fork requires them.
+        This method automatically detects which header fields are required by
+        the fork and assigns appropriate default values. It introspects the
+        FixtureHeader model to find fields with HeaderForkRequirement
+        annotations and automatically includes them if the fork requires them.
 
         Args:
             block_number: The block number
             timestamp: The block timestamp
 
         Returns:
-            FixtureHeader instance with default values applied based on fork requirements
+            FixtureHeader instance with default values applied based on fork
+            requirements.
 
         Raises:
             TypeError: If the overrides don't have the correct type.
+
         """
         from execution_testing.fixtures.blockchain import FixtureHeader
 
@@ -2790,6 +2790,35 @@ class Prague(Cancun):
             G_TX_DATA_FLOOR_TOKEN_COST=10,
             G_AUTHORIZATION=25_000,
             R_AUTHORIZATION_EXISTING_AUTHORITY=12_500,
+        )
+
+    @classmethod
+    def system_contracts(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> List[Address]:
+        """
+        Prague introduces the system contracts for EIP-6110, EIP-7002, EIP-7251
+        and EIP-2935.
+        """
+        return [
+            Address(
+                0xBABE2BED00000000000000000000000000000003,
+                label="DEPOSIT_CONTRACT_ADDRESS",
+            ),
+            Address(
+                0x00000961EF480EB55E80D19AD83579A64C007002,
+                label="WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS",
+            ),
+            Address(
+                0x0000BBDDC7CE488642FB579F8B00F3A590007251,
+                label="CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS",
+            ),
+            Address(
+                0x0000F90827F1C53A10CB7A02335B175320002935,
+                label="HISTORY_STORAGE_ADDRESS",
+            ),
+        ] + super(Prague, cls).system_contracts(
+            block_number=block_number, timestamp=timestamp
         )
 
     @classmethod

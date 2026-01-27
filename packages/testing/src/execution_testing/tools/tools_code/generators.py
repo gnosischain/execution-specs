@@ -393,3 +393,80 @@ class Switch(Bytecode):
         instance.default_action = default_action
         instance.cases = cases
         return instance
+
+
+class Create2PreimageLayout(Bytecode):
+    """
+    Set up the preimage in memory for CREATE2 address computation.
+
+    Creates the standard memory layout required to compute a CREATE2 address
+    using keccak256(0xFF ++ factory_address ++ salt ++ init_code_hash).
+
+    Memory layout after execution:
+    - MEM[offset + 0: offset + 32] = zero padding + factory_address (20 bytes)
+    - MEM[offset + 11] = 0xFF prefix byte
+    - MEM[offset + 32: offset + 64] = salt (32 bytes)
+    - MEM[offset + 64: offset + 96] = init_code_hash (32 bytes)
+
+    To compute the CREATE2 address, use: `.address_op` or
+    `Op.SHA3(offset + 11, 85)`.
+    The resulting hash's lower 20 bytes (bytes 12-31) form the address.
+    """
+
+    offset: int = 0
+
+    def __new__(
+        cls,
+        *,
+        factory_address: int | bytes | Bytecode,
+        salt: int | bytes | Bytecode,
+        init_code_hash: int | bytes | Bytecode,
+        offset: int = 0,
+        old_memory_size: int = 0,
+    ) -> Self:
+        """
+        Assemble the bytecode that sets up the memory layout for CREATE2
+        address computation.
+        """
+        required_size = offset + 96
+        new_memory_size = max(old_memory_size, required_size)
+        bytecode = (
+            Op.MSTORE(offset=offset, value=factory_address)
+            + Op.MSTORE8(offset=offset + 11, value=0xFF)
+            + Op.MSTORE(offset=offset + 32, value=salt)
+            + Op.MSTORE(
+                offset=offset + 64,
+                value=init_code_hash,
+                # Gas accounting
+                old_memory_size=old_memory_size,
+                new_memory_size=new_memory_size,
+            )
+        )
+        instance = super().__new__(cls, bytecode)
+        instance.offset = offset
+        return instance
+
+    @property
+    def salt_offset(self) -> int:
+        """
+        Return the salt memory offset of the preimage.
+        """
+        return self.offset + 32
+
+    def address_op(self) -> Bytecode:
+        """
+        Return the bytecode that computes the CREATE2 address.
+        """
+        return Op.SHA3(
+            offset=self.offset + 11,
+            size=85,
+            # Gas accounting
+            data_size=85,
+        )
+
+    def increment_salt_op(self, increment: int = 1) -> Bytecode:
+        """Return the bytecode that increments the current salt."""
+        return Op.MSTORE(
+            self.salt_offset,
+            Op.ADD(Op.MLOAD(self.salt_offset), increment),
+        )

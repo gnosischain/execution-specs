@@ -92,9 +92,9 @@ def test_check_helper_fixtures() -> None:
         Cancun,
     ],
 )
-def test_make_genesis(
+def test_make_genesis(  # noqa: D103
     fork: Fork, fixture_hash: bytes, default_t8n: TransitionTool
-) -> None:  # noqa: D103
+) -> None:
     env = Environment(gas_limit=100_000_000_000_000_000)
 
     pre = Alloc(
@@ -202,10 +202,9 @@ def test_fill_state_test(
         tag="my_chain_id_test",
     ).generate(t8n=default_t8n, fixture_format=fixture_format)
     assert generated_fixture.__class__ == fixture_format
+    fixture_key = f"000/my_chain_id_test/{fork}/tx_type_{tx_type}"
     fixture = {
-        f"000/my_chain_id_test/{fork}/tx_type_{tx_type}": generated_fixture.json_dict_with_info(
-            hash_only=True
-        ),
+        fixture_key: generated_fixture.json_dict_with_info(hash_only=True),
     }
 
     format_name = fixture_format.format_name

@@ -25,9 +25,6 @@ from _pytest.mark.structures import ParameterSet
 from pytest import Mark, Metafunc
 
 from execution_testing.client_clis import TransitionTool
-from execution_testing.logging import (
-    get_logger,
-)
 from execution_testing.forks import (
     ALL_FORKS,
     ALL_FORKS_WITH_TRANSITIONS,
@@ -38,6 +35,9 @@ from execution_testing.forks import (
     get_selected_fork_set,
     get_transition_forks,
     transition_fork_to,
+)
+from execution_testing.logging import (
+    get_logger,
 )
 
 logger = get_logger(__name__)
@@ -384,22 +384,28 @@ def covariant_decorator(
 fork_covariant_decorators: List[Type[CovariantDecorator]] = [
     covariant_decorator(
         marker_name="with_all_tx_types",
-        description="marks a test to be parametrized for all tx types at parameter named tx_type"
-        " of type int",
+        description=(
+            "marks a test to be parametrized for all tx types at parameter "
+            "named tx_type of type int"
+        ),
         fork_attribute_name="tx_types",
         argnames=["tx_type"],
     ),
     covariant_decorator(
         marker_name="with_all_contract_creating_tx_types",
-        description="marks a test to be parametrized for all tx types that can create a contract"
-        " at parameter named tx_type of type int",
+        description=(
+            "marks a test to be parametrized for all tx types that can "
+            "create a contract at parameter named tx_type of type int"
+        ),
         fork_attribute_name="contract_creating_tx_types",
         argnames=["tx_type"],
     ),
     covariant_decorator(
         marker_name="with_all_typed_transactions",
-        description="marks a test to be parametrized with default typed transactions named "
-        "typed_transaction",
+        description=(
+            "marks a test to be parametrized with default typed "
+            "transactions named typed_transaction"
+        ),
         fork_attribute_name="tx_types",
         argnames=["typed_transaction"],
         # indirect means the values from `tx_types` will be passed to the
@@ -408,29 +414,37 @@ fork_covariant_decorators: List[Type[CovariantDecorator]] = [
     ),
     covariant_decorator(
         marker_name="with_all_precompiles",
-        description="marks a test to be parametrized for all precompiles at parameter named"
-        " precompile of type int",
+        description=(
+            "marks a test to be parametrized for all precompiles at "
+            "parameter named precompile of type int"
+        ),
         fork_attribute_name="precompiles",
         argnames=["precompile"],
     ),
     covariant_decorator(
         marker_name="with_all_call_opcodes",
-        description="marks a test to be parametrized for all *CALL opcodes at parameter named"
-        " call_opcode",
+        description=(
+            "marks a test to be parametrized for all *CALL opcodes at "
+            "parameter named call_opcode"
+        ),
         fork_attribute_name="call_opcodes",
         argnames=["call_opcode"],
     ),
     covariant_decorator(
         marker_name="with_all_create_opcodes",
-        description="marks a test to be parametrized for all *CREATE* opcodes at parameter named"
-        " create_opcode",
+        description=(
+            "marks a test to be parametrized for all *CREATE* opcodes at "
+            "parameter named create_opcode"
+        ),
         fork_attribute_name="create_opcodes",
         argnames=["create_opcode"],
     ),
     covariant_decorator(
         marker_name="with_all_system_contracts",
-        description="marks a test to be parametrized for all system contracts at parameter named"
-        " system_contract of type int",
+        description=(
+            "marks a test to be parametrized for all system contracts at "
+            "parameter named system_contract of type int"
+        ),
         fork_attribute_name="system_contracts",
         argnames=["system_contract"],
     ),
@@ -468,8 +482,9 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         (
-            "parametrize_by_fork(names, values_fn): parametrize a test case by fork using the "
-            "specified names and values returned by the function values_fn(fork)"
+            "parametrize_by_fork(names, values_fn): parametrize a test case "
+            "by fork using the specified names and values returned by the "
+            "function values_fn(fork)"
         ),
     )
     for d in fork_covariant_decorators:
@@ -526,7 +541,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
     if single_fork and (forks_from or forks_until):
         print(
-            "Error: --fork cannot be used in combination with --from or --until",
+            "Error: --fork cannot be used in combination "
+            "with --from or --until",
             file=sys.stderr,
         )
         pytest.exit(
@@ -546,11 +562,13 @@ def pytest_configure(config: pytest.Config) -> None:
         getattr(config, "single_fork_mode", False)
         and len(selected_fork_set) != 1
     ):
+        fork_count = len(selected_fork_set)
         pytest.exit(
             f"""
-            Expected exactly one fork to be specified, got {len(selected_fork_set)}
+            Expected exactly one fork to be specified, got {fork_count}
             ({selected_fork_set}).
-            Make sure to specify exactly one fork using the --fork command line argument.
+            Make sure to specify exactly one fork using the --fork
+            command line argument.
             """,
             returncode=pytest.ExitCode.USAGE_ERROR,
         )
@@ -628,7 +646,8 @@ def session_fork(request: pytest.FixtureRequest) -> Fork | None:
     ):
         return list(request.config.selected_fork_set)[0]  # type: ignore
     raise AssertionError(
-        "Plugin used `session_fork` fixture without the correct configuration (single_fork_mode)."
+        "Plugin used `session_fork` fixture without the correct "
+        "configuration (single_fork_mode)."
     )
 
 
@@ -1072,8 +1091,8 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
                     marks=[
                         pytest.mark.skip(
                             reason=(
-                                f"{test_name} is not valid for any of the forks specified on "
-                                "the command-line."
+                                f"{test_name} is not valid for any of the "
+                                "forks specified on the command-line."
                             )
                         )
                     ],
@@ -1104,6 +1123,39 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         parametrize_fork(metafunc, pytest_params)
 
 
+def get_param_level_min_valid_fork(metafunc: Metafunc) -> Fork | None:
+    """
+    Extract the minimum valid fork from param-level valid_from markers.
+
+    Returns the earliest fork from any valid_from marker inside pytest.param,
+    or None if no such markers exist.
+    """
+    min_fork: Fork | None = None
+
+    for marker in metafunc.definition.iter_markers("parametrize"):
+        if len(marker.args) < 2:
+            continue
+
+        for value in marker.args[1]:
+            if not isinstance(value, ParameterSet) or not value.marks:
+                continue
+
+            for mark in value.marks:
+                mark_obj = mark.mark if hasattr(mark, "mark") else mark
+                if mark_obj.name == "valid_from" and mark_obj.args:
+                    fork_name = mark_obj.args[0]
+                    try:
+                        for fork in ALL_FORKS:
+                            if fork.name() == fork_name:
+                                if min_fork is None or fork < min_fork:
+                                    min_fork = fork
+                                break
+                    except (ValueError, InvalidForkError):
+                        pass
+
+    return min_fork
+
+
 def add_fork_covariant_parameters(
     metafunc: Metafunc, fork_parametrizers: List[ForkParametrizer]
 ) -> None:
@@ -1111,7 +1163,42 @@ def add_fork_covariant_parameters(
     Iterate over the fork covariant descriptors and add their values to the
     test function.
     """
-    # Process all covariant decorators uniformly
+    # Check if any covariant markers are present
+    has_covariant_markers = any(
+        list(metafunc.definition.iter_markers(cd.marker_name))
+        for cd in fork_covariant_decorators
+    ) or any(
+        marker.name == "parametrize_by_fork"
+        for marker in metafunc.definition.iter_markers()
+    )
+
+    # Filter forks before any param-level valid_from to avoid covariant
+    # assertion errors
+    if has_covariant_markers:
+        param_min_fork = get_param_level_min_valid_fork(metafunc)
+        if param_min_fork:
+            fork_parametrizers[:] = [
+                fp for fp in fork_parametrizers if fp.fork >= param_min_fork
+            ]
+
+    # Filter out forks where blob params don't change for valid_for_bpo_forks
+    if list(metafunc.definition.iter_markers(name="valid_for_bpo_forks")):
+        filtered_forks = [
+            fp.fork
+            for fp in fork_parametrizers
+            if not blob_params_changed_at_transition(fp.fork)
+        ]
+        if filtered_forks:
+            logger.debug(
+                f"Skipping {metafunc.function.__name__} for forks with "
+                f"unchanged blob params: {[f.name() for f in filtered_forks]}"
+            )
+        fork_parametrizers[:] = [
+            fp
+            for fp in fork_parametrizers
+            if blob_params_changed_at_transition(fp.fork)
+        ]
+
     for covariant_descriptor in fork_covariant_decorators:
         if list(
             metafunc.definition.iter_markers(covariant_descriptor.marker_name)
@@ -1203,17 +1290,60 @@ def parametrize_fork(
     )
 
 
+def blob_params_changed_at_transition(fork: Fork) -> bool:
+    """
+    Check if BPO-relevant blob parameters change at a fork transition.
+
+    For transition forks, compares the 3 blob parameters that BPO forks modify
+    between the from_fork and to_fork:
+
+    - target_blobs_per_block
+    - max_blobs_per_block
+    - blob_base_fee_update_fraction
+
+    Returns True if any parameter changed, False otherwise.
+
+    For non-transition forks, returns True (no filtering needed).
+    """
+    # Check if this is a transition fork
+    if not hasattr(fork, "transitions_from") or not hasattr(
+        fork, "transitions_to"
+    ):
+        return True
+
+    from_fork = fork.transitions_from()
+    to_fork = fork.transitions_to()
+
+    # Compare the 3 blob parameters that BPO forks modify
+    bpo_blob_params = [
+        "target_blobs_per_block",
+        "max_blobs_per_block",
+        "blob_base_fee_update_fraction",
+    ]
+
+    for param in bpo_blob_params:
+        from_method = getattr(from_fork, param, None)
+        to_method = getattr(to_fork, param, None)
+        if from_method is None or to_method is None:
+            continue
+        if from_method() != to_method():
+            return True
+
+    return False
+
+
 def pytest_collection_modifyitems(
     config: pytest.Config, items: List[pytest.Item]
 ) -> None:
     """
     Filter tests based on param-level validity markers.
 
-    The pytest_generate_tests hook only considers function-level validity markers.
-    This hook runs after parametrization and can access all markers including
-    param-level ones, allowing us to properly filter tests based on param-level
-    valid_from/valid_until markers.
+    The pytest_generate_tests hook only considers function-level validity
+    markers. This hook runs after parametrization and can access all markers
+    including param-level ones, allowing us to properly filter tests based on
+    param-level valid_from/valid_until markers.
     """
+    del config
     items_to_remove = []
 
     for i, item in enumerate(items):
