@@ -2793,35 +2793,6 @@ class Prague(Cancun):
         )
 
     @classmethod
-    def system_contracts(
-        cls, *, block_number: int = 0, timestamp: int = 0
-    ) -> List[Address]:
-        """
-        Prague introduces the system contracts for EIP-6110, EIP-7002, EIP-7251
-        and EIP-2935.
-        """
-        return [
-            Address(
-                0xBABE2BED00000000000000000000000000000003,
-                label="DEPOSIT_CONTRACT_ADDRESS",
-            ),
-            Address(
-                0x00000961EF480EB55E80D19AD83579A64C007002,
-                label="WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS",
-            ),
-            Address(
-                0x0000BBDDC7CE488642FB579F8B00F3A590007251,
-                label="CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS",
-            ),
-            Address(
-                0x0000F90827F1C53A10CB7A02335B175320002935,
-                label="HISTORY_STORAGE_ADDRESS",
-            ),
-        ] + super(Prague, cls).system_contracts(
-            block_number=block_number, timestamp=timestamp
-        )
-
-    @classmethod
     def max_request_type(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
