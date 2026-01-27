@@ -360,8 +360,9 @@ def generate_system_contract_error_test(
                 # storage, we need to add some NO-OP (JUMPDEST) to the code
                 # that each consume 1 gas.
                 assert gas_costs.G_JUMPDEST == 1, (
-                    f"JUMPDEST gas cost should be 1, but got {gas_costs.G_JUMPDEST}. "
-                    "Generator `generate_system_contract_error_test` needs to be updated."
+                    "JUMPDEST gas cost should be 1, but got "
+                    f"{gas_costs.G_JUMPDEST}. Generator "
+                    "`generate_system_contract_error_test` needs updating."
                 )
                 modified_system_contract_code += sum(
                     Op.JUMPDEST
@@ -495,14 +496,14 @@ def gas_test(
     # 2 times GAS, POP, CALL, 6 times PUSH1 - instructions charged for at every
     # gas run
     gas_costs = fork.gas_costs()
-    OPCODE_GAS_COST = gas_costs.G_BASE
-    OPCODE_POP_COST = gas_costs.G_BASE
-    OPCODE_PUSH_COST = gas_costs.G_VERY_LOW
+    opcode_gas_cost = gas_costs.G_BASE
+    opcode_pop_cost = gas_costs.G_BASE
+    opcode_push_cost = gas_costs.G_VERY_LOW
     gas_single_gas_run = (
-        2 * OPCODE_GAS_COST
-        + OPCODE_POP_COST
+        2 * opcode_gas_cost
+        + opcode_pop_cost
         + gas_costs.G_WARM_ACCOUNT_ACCESS
-        + 6 * OPCODE_PUSH_COST
+        + 6 * opcode_push_cost
     )
     address_legacy_harness = pre.deploy_contract(
         code=(

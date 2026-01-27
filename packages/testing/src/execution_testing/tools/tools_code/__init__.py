@@ -5,6 +5,7 @@ from .generators import (
     Case,
     CodeGasMeasure,
     Conditional,
+    Create2PreimageLayout,
     Initcode,
     Switch,
     While,
@@ -22,4 +23,5 @@ __all__ = (
     "While",
     "Yul",
     "YulCompiler",
+    "Create2PreimageLayout",
 )
