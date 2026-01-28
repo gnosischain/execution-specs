@@ -48,7 +48,7 @@ def test_call_frame_context_ops(
         pytest.param(0, 0, id="no blobs"),
         pytest.param(0, 1, id="one blob and accessed"),
         pytest.param(1, 1, id="one blob but access non-existent index"),
-        pytest.param(5, 6, id="six blobs, access latest"),
+        pytest.param(1, 2, id="two blobs, access latest"),
     ],
 )
 def test_blobhash(
