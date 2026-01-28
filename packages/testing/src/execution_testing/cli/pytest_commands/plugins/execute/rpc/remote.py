@@ -117,15 +117,16 @@ def pytest_configure(config: pytest.Config) -> None:
             f"({configured_chain_id}). Please check if the chain ID is "
             "correctly configured with the --chain-id flag."
         )
-    # Set the transaction gas limit to the block gas limit if not set or if set higher than
+    # Set the transaction gas limit to the block gas limit if not set
+    # or if set higher than
     try:
         latest_block = eth_rpc.get_block_by_number("latest", full_txs=False)
     except (
         Exception
     ) as exc:  # pragma: no cover - RPC availability depends on the remote node
         pytest.exit(
-            f"Failed to query the latest block from the remote RPC endpoint: {exc}."
-            " Please verify connectivity or provide --chain-id consistent with the node."
+            f"Failed to query the latest block from the remote RPC endpoint: {exc}."  # noqa: E501
+            " Please verify connectivity or provide --chain-id consistent with the node."  # noqa: E501
         )
 
     if latest_block is None:
