@@ -320,7 +320,7 @@ class NethermindExceptionMapper(ExceptionMapper):
             "max initcode size exceeded"
         ),
         TransactionException.NONCE_MISMATCH_TOO_LOW: (
-            "wrong transaction nonce"
+            "transaction nonce is too low"
         ),
         TransactionException.NONCE_MISMATCH_TOO_HIGH: (
             "wrong transaction nonce"

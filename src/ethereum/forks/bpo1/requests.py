@@ -23,7 +23,7 @@ from .utils.hexadecimal import hex_to_address
 from .vm import BlockOutput
 
 DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
-    "0x00000000219ab540356cbb839cbe05303d7705fa"
+    "0xBABE2BED00000000000000000000000000000003"
 )
 DEPOSIT_EVENT_SIGNATURE_HASH = hex_to_bytes32(
     "0x649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa790803be39038c5"

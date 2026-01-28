@@ -237,7 +237,7 @@ def test_transaction_validity_type_1_type_2(
         ),
         pytest.param(
             add_kzg_version(
-                [Hash(x) for x in range(6)],
+                [Hash(x) for x in range(2)],
                 EIP_4844_Spec.BLOB_COMMITMENT_VERSION_KZG,
             ),
             id="multiple_blobs",

@@ -2432,7 +2432,7 @@ class Cancun(Shanghai):
     ) -> int:
         """Return the minimum base fee per blob gas for Cancun."""
         del block_number, timestamp
-        return 1
+        return 1000000000
 
     @classmethod
     def blob_base_fee_update_fraction(
@@ -3219,11 +3219,11 @@ class Osaka(Prague, solc_name="cancun"):
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
         """
-        Blobs in Osaka, have a static max of 6 blobs per tx. Differs from the
+        Blobs in Osaka, have a static max of 2 blobs per tx. Differs from the
         max per block.
         """
         del block_number, timestamp
-        return 6
+        return 2
 
     @classmethod
     def blob_reserve_price_active(

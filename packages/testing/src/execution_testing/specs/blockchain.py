@@ -136,7 +136,7 @@ class Header(CamelModel):
     ommers_hash: Hash | None = None
     fee_recipient: Address | None = None
     state_root: Hash | None = None
-    transactions_trie: Hash | None = None
+    transactions_root: Hash | None = None
     receipts_root: Hash | None = None
     logs_bloom: Bloom | None = None
     difficulty: HexNumber | None = None
@@ -642,12 +642,12 @@ class BlockchainTest(BaseTest):
             **(
                 transition_tool_output.result.model_dump(
                     exclude_none=True,
-                    exclude={"blob_gas_used", "transactions_trie"},
+                    exclude={"blob_gas_used", "transactions_root"},
                 )
                 | env.model_dump(exclude_none=True, exclude={"blob_gas_used"})
             ),
             blob_gas_used=blob_gas_used,
-            transactions_trie=Transaction.list_root(txs),
+            transactions_root=Transaction.list_root(txs),
             extra_data=block.extra_data
             if block.extra_data is not None
             else b"",

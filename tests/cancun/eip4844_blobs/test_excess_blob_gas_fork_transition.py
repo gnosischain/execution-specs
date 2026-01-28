@@ -126,7 +126,7 @@ def pre_fork_blocks(
                     gas_limit=blob_tx_gas_limit,
                     max_fee_per_gas=1_000_000,
                     max_priority_fee_per_gas=10,
-                    max_fee_per_blob_gas=100,
+                    max_fee_per_blob_gas=10**10,
                     access_list=[],
                     blob_versioned_hashes=add_kzg_version(
                         [Hash(blob_index + x) for x in range(tx_blobs)],
@@ -276,7 +276,7 @@ def post_fork_blocks(
                     gas_limit=100_000,
                     max_fee_per_gas=1_000_000,
                     max_priority_fee_per_gas=10,
-                    max_fee_per_blob_gas=100,
+                    max_fee_per_blob_gas=10**10,
                     blob_versioned_hashes=add_kzg_version(
                         [Hash(blob_index + x) for x in range(tx_blobs)],
                         Spec.BLOB_COMMITMENT_VERSION_KZG,

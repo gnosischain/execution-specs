@@ -11,10 +11,11 @@ from execution_testing import (
     Alloc,
     Block,
     BlockchainTestFiller,
-    BlockException,
+    Bytecode,
     Op,
     Withdrawal,
 )
+from execution_testing.exceptions import BlockException
 
 from .spec import ref_spec_4895
 
@@ -26,7 +27,7 @@ pytestmark = pytest.mark.valid_from("Shanghai")
 DEPOSIT_CONTRACT = Address(0xBABE2BED00000000000000000000000000000003)
 
 
-def get_minimal_deposit_contract_code():
+def get_minimal_deposit_contract_code() -> Bytecode:
     """
     Returns bytecode for minimal deposit contract that returns successfully.
     Used to verify system calls succeed without testing contract internals.
@@ -156,6 +157,8 @@ def test_withdrawal_index_order(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
+@pytest.mark.exception_test
+@pytest.mark.blockchain_test_engine_only
 def test_withdrawal_system_call_with_revert(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -179,6 +182,8 @@ def test_withdrawal_system_call_with_revert(
     blocks = [
         Block(
             withdrawals=[withdrawal],
+            exception=BlockException.SYSTEM_CONTRACT_CALL_FAILED,
+            skip_exception_verification=True,
         ),
     ]
 
@@ -187,6 +192,8 @@ def test_withdrawal_system_call_with_revert(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
+@pytest.mark.exception_test
+@pytest.mark.blockchain_test_engine_only
 def test_withdrawal_system_call_out_of_gas(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -210,6 +217,8 @@ def test_withdrawal_system_call_out_of_gas(
     blocks = [
         Block(
             withdrawals=[withdrawal],
+            exception=BlockException.SYSTEM_CONTRACT_CALL_FAILED,
+            skip_exception_verification=True,
         ),
     ]
 
