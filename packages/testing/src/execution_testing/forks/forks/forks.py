@@ -2157,13 +2157,17 @@ class Paris(
     def system_contracts(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> List[Address]:
-        """Paris introduces the system contract for block rewards."""
+        """Paris introduces system contracts for block rewards and deposit handling."""  # noqa: E501
         del block_number, timestamp
         return [
             Address(
                 0x2000000000000000000000000000000000000001,
                 label="BLOCK_REWARDS_CONTRACT_ADDRESS",
-            )
+            ),
+            Address(
+                0xBABE2BED00000000000000000000000000000003,
+                label="DEPOSIT_CONTRACT_ADDRESS",
+            ),
         ]
 
     @classmethod
@@ -2171,8 +2175,8 @@ class Paris(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> Mapping:
         """
-        Paris requires pre-allocation of the block rewards contract
-        on blockchain type tests.
+        Paris requires pre-allocation of the block rewards contract and the
+        deposit contract for processing on blockchain type tests.
         """
         del block_number, timestamp
 
@@ -2184,6 +2188,19 @@ class Paris(
             new_allocation.update(
                 {
                     0x2000000000000000000000000000000000000001: {
+                        "nonce": 1,
+                        "code": f.read(),
+                    }
+                }
+            )
+
+        # Add the beacon chain deposit contract
+        with open(
+            CURRENT_FOLDER / "contracts" / "deposit_contract.bin", mode="rb"
+        ) as f:
+            new_allocation.update(
+                {
+                    0xBABE2BED00000000000000000000000000000003: {
                         "nonce": 1,
                         "code": f.read(),
                     }
@@ -2295,49 +2312,6 @@ class Shanghai(Paris):
         """Return list of Opcodes that are valid to work on this fork."""
         del block_number, timestamp
         return [Opcodes.PUSH0] + super(Shanghai, cls).valid_opcodes()
-
-    @classmethod
-    def system_contracts(
-        cls, *, block_number: int = 0, timestamp: int = 0
-    ) -> List[Address]:
-        """Shanghai introduces the system contract for EIP-4895 withdrawals."""
-        return [
-            Address(
-                0xBABE2BED00000000000000000000000000000003,
-                label="DEPOSIT_CONTRACT_ADDRESS",
-            )
-        ] + super(Shanghai, cls).system_contracts(
-            block_number=block_number, timestamp=timestamp
-        )
-
-    @classmethod
-    def pre_allocation_blockchain(
-        cls, *, block_number: int = 0, timestamp: int = 0
-    ) -> Mapping:
-        """
-        Shanghai requires pre-allocation of the deposit contract for EIP-4895
-        withdrawals processing.
-        """
-        del block_number, timestamp
-        new_allocation = {}
-
-        # Add the deposit contract for EIP-4895 withdrawals
-        # The executeSystemWithdrawals function is called during block processing
-        with open(
-            CURRENT_FOLDER / "contracts" / "deposit_contract.bin", mode="rb"
-        ) as f:
-            new_allocation.update(
-                {
-                    0xBABE2BED00000000000000000000000000000003: {
-                        "nonce": 1,
-                        "code": f.read(),
-                    }
-                }
-            )
-
-        return (
-            new_allocation | super(Shanghai, cls).pre_allocation_blockchain()  # type: ignore
-        )
 
 
 class Cancun(Shanghai):
@@ -2953,8 +2927,7 @@ class Prague(Cancun):
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> List[Address]:
         """
-        Prague introduces the system contracts for EIP-7002, EIP-7251 and EIP-2935.
-        Note: The deposit contract is already introduced by Shanghai for EIP-4895.
+        Prague introduces system contracts for EIP-7002, EIP-7251 and EIP-2935.
         """
         return [
             Address(
