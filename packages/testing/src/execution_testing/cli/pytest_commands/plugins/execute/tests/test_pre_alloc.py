@@ -52,7 +52,7 @@ def test_address_stubs(input_value: Any, expected: AddressStubs) -> None:
         ),
         pytest.param(
             "one_address.json",
-            '{"DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003"}',
+            '{"DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003"}',  # noqa: E501
             AddressStubs(
                 {
                     "DEPOSIT_CONTRACT_ADDRESS": Address(
@@ -64,7 +64,7 @@ def test_address_stubs(input_value: Any, expected: AddressStubs) -> None:
         ),
         pytest.param(
             "one_address.yaml",
-            "DEPOSIT_CONTRACT_ADDRESS: 0xbabe2bed00000000000000000000000000000003",
+            "DEPOSIT_CONTRACT_ADDRESS: 0xbabe2bed00000000000000000000000000000003",  # noqa: E501
             AddressStubs(
                 {
                     "DEPOSIT_CONTRACT_ADDRESS": Address(
