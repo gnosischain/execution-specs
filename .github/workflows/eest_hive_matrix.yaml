@@ -50,7 +50,7 @@ jobs:
             # If entry is just digits (EIP number), find matching directories
             elif [[ "$ENTRY" =~ ^[0-9]+$ ]]; then
               # Find directories matching eip{number}_*
-              MATCHES=$(find tests/$FORK_LOWER -maxdepth 1 -type d -name "eip${ENTRY}_*" 2>/dev/null | sed "s|^tests/||" || true)
+              MATCHES=$(find "tests/$FORK_LOWER" -maxdepth 1 -type d -name "eip${ENTRY}_*" 2>/dev/null | sed 's|^tests/||' || true)
               if [ -z "$MATCHES" ]; then
                 echo "Warning: No directory found for EIP $ENTRY in tests/$FORK_LOWER" >&2
                 continue
@@ -72,7 +72,7 @@ jobs:
               # Check if it's a valid fork/test directory
               if [ -d "tests/$ENTRY" ]; then
                 # If it's a fork directory, list all EIP subdirectories
-                EIP_DIRS=$(find tests/$ENTRY -maxdepth 1 -type d -name "eip*" 2>/dev/null | sed "s|^tests/||" || true)
+                EIP_DIRS=$(find "tests/$ENTRY" -maxdepth 1 -type d -name "eip*" 2>/dev/null | sed 's|^tests/||' || true)
                 if [ -n "$EIP_DIRS" ]; then
                   while IFS= read -r EIP_DIR; do
                     if [ "$FIRST" = false ]; then
@@ -103,7 +103,7 @@ jobs:
           done
           
           MATRIX+="]}"
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "Generated matrix: $MATRIX"
 
   test:
@@ -150,7 +150,7 @@ jobs:
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH  # uv installs here on Ubuntu
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"  # uv installs here on Ubuntu
       
       - name: Bootstrap Python and install deps
         run: |
@@ -163,12 +163,12 @@ jobs:
       
       - name: Run fill
         run: |
-          uv run fill tests/${{ matrix.test_dir }} --fork ${{ github.event.inputs.fork }} --clean -v -x
+          uv run fill "tests/${{ matrix.test_dir }}" --fork "${{ github.event.inputs.fork }}" --clean -v -x
 
       - name: Run test against client
         env:
           HIVE_SIMULATOR: http://127.0.0.1:3000
-        run: uv run consume engine -v --input fixtures/blockchain_tests_engine/${{ matrix.test_dir }}
+        run: uv run consume engine -v --input "fixtures/blockchain_tests_engine/${{ matrix.test_dir }}"
 
       - name: Sanitize artifact name
         id: sanitize-name
@@ -188,7 +188,7 @@ jobs:
             ARTIFACT_NAME=$(echo "$TEST_DIR" | sed 's|/|-|g')
             ARTIFACT_NAME="hive-log-$ARTIFACT_NAME"
           fi
-          echo "name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Upload Hive logs
         if: always()
