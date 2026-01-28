@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
 
       - name: Install uv and Python
         uses: astral-sh/setup-uv@v3
@@ -59,7 +59,7 @@ jobs:
           mkdir -p "$(dirname "${{ inputs.html_report }}")"
 
       - name: Update seed account balance
-        uses: dmitriy-b/ethereum-testing-tools/.github/actions/transfer-eth@main
+        uses: dmitriy-b/ethereum-testing-tools/.github/actions/transfer-eth@078d552bd184c3d1180ce5053a6da58e1b8ffa10
         with:
           rpc_url: ${{ inputs.rpc_endpoint }}
           from_key: ${{ secrets.DEVNET_TREASURY_PRIVATE_KEY }}
@@ -81,7 +81,7 @@ jobs:
             ${{ inputs.extra_args }}
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: html-report
           path: ${{ inputs.html_report }}
