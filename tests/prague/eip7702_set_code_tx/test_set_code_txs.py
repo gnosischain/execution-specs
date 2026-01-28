@@ -3049,6 +3049,20 @@ def test_set_code_to_system_contract(
             # subtracted from the latest block number
             caller_payload = Hash(1)
             caller_code_storage[call_return_data_size_slot] = 32
+        case Address(0x2000000000000000000000000000000000000001):
+            # Block rewards system contract (Gnosis-specific).
+            # Call reward(address[],uint16[]) with empty lists.
+            # Function selector: 0xf91c2898
+            # Returns (address[], uint256[]) - ABI encoded as 128 bytes (0x80)
+            caller_payload = bytes.fromhex(
+                "f91c2898"
+                "0000000000000000000000000000000000000000000000000000000000000040"
+                "0000000000000000000000000000000000000000000000000000000000000060"
+                "0000000000000000000000000000000000000000000000000000000000000000"
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )
+            call_value = 0
+            caller_code_storage[call_return_data_size_slot] = 128
         case _:
             raise ValueError(
                 f"Not implemented system contract: {system_contract}"
@@ -3131,10 +3145,9 @@ def test_set_code_to_system_contract(
 
 @pytest.mark.with_all_tx_types(
     selector=lambda tx_type: tx_type != 4,
-    marks=lambda tx_type: [
-        pytest.mark.execute(pytest.mark.skip("incompatible tx")),
-        pytest.mark.blockchain_test_only,
-    ]
+    marks=lambda tx_type: pytest.mark.execute(
+        pytest.mark.skip("incompatible tx")
+    )
     if tx_type in [0, 3]
     else None,
 )
