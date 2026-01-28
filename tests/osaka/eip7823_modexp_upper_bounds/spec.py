@@ -21,4 +21,4 @@ class Spec:
     """Constants for the EIP-7825 Transaction Gas Limit Cap tests."""
 
     # Gas limit constants
-    tx_gas_limit_cap = 10000000
+    tx_gas_limit_cap = 2**24  # 16,777,216
