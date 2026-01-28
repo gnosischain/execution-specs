@@ -185,7 +185,7 @@ jobs:
             ARTIFACT_NAME="hive-log-$FORK-eip$EIP_NUM"
           else
             # Fallback: use full path with slashes replaced
-            ARTIFACT_NAME=$(echo "$TEST_DIR" | sed 's|/|-|g')
+            ARTIFACT_NAME=${TEST_DIR//\//-}
             ARTIFACT_NAME="hive-log-$ARTIFACT_NAME"
           fi
           echo "name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
