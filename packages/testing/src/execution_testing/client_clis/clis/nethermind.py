@@ -316,9 +316,15 @@ class NethermindExceptionMapper(ExceptionMapper):
             "Block gas limit exceeded"
         ),
         TransactionException.NONCE_IS_MAX: "NonceTooHigh",
-        TransactionException.INITCODE_SIZE_EXCEEDED: "max initcode size exceeded",
-        TransactionException.NONCE_MISMATCH_TOO_LOW: "transaction nonce is too low",
-        TransactionException.NONCE_MISMATCH_TOO_HIGH: "wrong transaction nonce",
+        TransactionException.INITCODE_SIZE_EXCEEDED: (
+            "max initcode size exceeded"
+        ),
+        TransactionException.NONCE_MISMATCH_TOO_LOW: (
+            "transaction nonce is too low"
+        ),
+        TransactionException.NONCE_MISMATCH_TOO_HIGH: (
+            "wrong transaction nonce"
+        ),
         TransactionException.INSUFFICIENT_MAX_FEE_PER_BLOB_GAS: (
             "InsufficientMaxFeePerBlobGas: Not enough to cover blob gas fee"
         ),
