@@ -973,6 +973,13 @@ class Frontier(BaseFork, solc_name="homestead"):
         return False
 
     @classmethod
+    def engine_payload_attribute_slot_number(cls) -> bool:
+        """
+        At genesis, payload attributes do not include the slot number.
+        """
+        return False
+
+    @classmethod
     def engine_forkchoice_updated_version(cls) -> Optional[int]:
         """
         At genesis, forkchoice updates cannot be sent through the engine API.
@@ -2920,4 +2927,14 @@ class Amsterdam(BPO2):
     @classmethod
     def header_slot_number_required(cls) -> bool:
         """Slot number in header required from Amsterdam (EIP-7843)."""
+        return True
+
+    @classmethod
+    def engine_forkchoice_updated_version(cls) -> Optional[int]:
+        """From Amsterdam, forkchoice updated calls must use version 4."""
+        return 4
+
+    @classmethod
+    def engine_payload_attribute_slot_number(cls) -> bool:
+        """From Amsterdam, payload attributes include the slot number."""
         return True

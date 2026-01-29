@@ -713,6 +713,14 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
 
     @classmethod
     @abstractmethod
+    def engine_payload_attribute_slot_number(cls) -> bool:
+        """
+        Return true if the payload attributes include the slot number.
+        """
+        pass
+
+    @classmethod
+    @abstractmethod
     def engine_forkchoice_updated_version(cls) -> Optional[int]:
         """
         Return `None` if the forks canonical chain cannot be set using the
