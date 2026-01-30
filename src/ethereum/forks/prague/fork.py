@@ -907,13 +907,6 @@ def process_transaction(
         block_env.state, sender, U256(sender_balance_after_gas_fee)
     )
 
-    collector_balance_after = get_account(
-        block_env.state, BLOB_FEE_COLLECTOR
-    ).balance + U256(blob_gas_fee)
-    set_account_balance(
-        block_env.state, BLOB_FEE_COLLECTOR, collector_balance_after
-    )
-
     access_list_addresses = set()
     access_list_storage_keys = set()
     access_list_addresses.add(block_env.coinbase)

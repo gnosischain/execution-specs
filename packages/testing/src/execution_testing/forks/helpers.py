@@ -1,5 +1,6 @@
 """Helper methods to resolve forks during test filling."""
 
+import os
 import re
 from typing import (
     Annotated,
@@ -80,11 +81,20 @@ def get_deployed_forks() -> List[Type[BaseFork]]:
     Chronologically ordered by deployment. BPO (Blob Parameter Only) forks
     are excluded as they are handled separately.
     """
-    return [
+    deployed = [
         fork
         for fork in get_forks()
         if fork.is_deployed() and not fork.ignore() and not fork.bpo_fork()
     ]
+
+    fork_from_name = os.environ.get("EEST_PYTEST_FORK_FROM")
+    fork_until_name = os.environ.get("EEST_PYTEST_FORK_UNTIL")
+    if fork_from_name and fork_until_name:
+        fork_from = get_fork_by_name(fork_from_name)
+        fork_until = get_fork_by_name(fork_until_name)
+        if fork_from is not None and fork_until is not None:
+            return forks_from_until(fork_from, fork_until)
+    return deployed
 
 
 def get_development_forks() -> List[Type[BaseFork]]:
