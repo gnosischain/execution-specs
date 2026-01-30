@@ -53,7 +53,7 @@ jobs:
       matrix:
         client:
           - reth-gnosis
-          - geth-gnosis
+          - go-ethereum-gnosis
           - nethermind-gnosis
           - erigon-gnosis
 
