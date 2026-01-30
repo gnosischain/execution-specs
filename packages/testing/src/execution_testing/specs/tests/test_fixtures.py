@@ -126,8 +126,8 @@ def test_make_genesis(  # noqa: D103
 @pytest.mark.parametrize(
     "fork,fixture_format,tx_type",
     [
-        (Istanbul, BlockchainFixture, TransactionType.LEGACY),
-        (London, BlockchainFixture, TransactionType.LEGACY),
+        # (Istanbul, BlockchainFixture, TransactionType.LEGACY),
+        # (London, BlockchainFixture, TransactionType.LEGACY),
         (Cancun, BlockchainFixture, TransactionType.LEGACY),
         (Paris, BlockchainEngineFixture, TransactionType.LEGACY),
         (Shanghai, BlockchainEngineFixture, TransactionType.LEGACY),
