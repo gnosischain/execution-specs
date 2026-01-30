@@ -2157,13 +2157,17 @@ class Paris(
     def system_contracts(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> List[Address]:
-        """Paris introduces the system contract for block rewards."""
+        """Paris introduces system contracts for block rewards and deposit handling."""  # noqa: E501
         del block_number, timestamp
         return [
             Address(
                 0x2000000000000000000000000000000000000001,
                 label="BLOCK_REWARDS_CONTRACT_ADDRESS",
-            )
+            ),
+            Address(
+                0xBABE2BED00000000000000000000000000000003,
+                label="DEPOSIT_CONTRACT_ADDRESS",
+            ),
         ]
 
     @classmethod
@@ -2171,8 +2175,8 @@ class Paris(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> Mapping:
         """
-        Paris requires pre-allocation of the block rewards contract
-        on blockchain type tests.
+        Paris requires pre-allocation of the block rewards contract and the
+        deposit contract for processing on blockchain type tests.
         """
         del block_number, timestamp
 
@@ -2184,6 +2188,19 @@ class Paris(
             new_allocation.update(
                 {
                     0x2000000000000000000000000000000000000001: {
+                        "nonce": 1,
+                        "code": f.read(),
+                    }
+                }
+            )
+
+        # Add the beacon chain deposit contract
+        with open(
+            CURRENT_FOLDER / "contracts" / "deposit_contract.bin", mode="rb"
+        ) as f:
+            new_allocation.update(
+                {
+                    0xBABE2BED00000000000000000000000000000003: {
                         "nonce": 1,
                         "code": f.read(),
                     }
@@ -2566,13 +2583,14 @@ class Cancun(Shanghai):
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> List[Address]:
         """Cancun introduces the system contract for EIP-4788."""
-        del block_number, timestamp
         return [
             Address(
                 0x000F3DF6D732807EF1319FB7B8BB8522D0BEAC02,
                 label="BEACON_ROOTS_ADDRESS",
             )
-        ]
+        ] + super(Cancun, cls).system_contracts(
+            block_number=block_number, timestamp=timestamp
+        )
 
     @classmethod
     def pre_allocation_blockchain(
@@ -2592,6 +2610,7 @@ class Cancun(Shanghai):
                 "5b62001fff42064281555f359062001fff015500",
             }
         }
+
         return new_allocation | super(Cancun, cls).pre_allocation_blockchain()  # type: ignore
 
     @classmethod
@@ -2745,35 +2764,6 @@ class Prague(Cancun):
             G_TX_DATA_FLOOR_TOKEN_COST=10,
             G_AUTHORIZATION=25_000,
             R_AUTHORIZATION_EXISTING_AUTHORITY=12_500,
-        )
-
-    @classmethod
-    def system_contracts(
-        cls, *, block_number: int = 0, timestamp: int = 0
-    ) -> List[Address]:
-        """
-        Prague introduces the system contracts for EIP-6110, EIP-7002, EIP-7251
-        and EIP-2935.
-        """
-        return [
-            Address(
-                0xBABE2BED00000000000000000000000000000003,
-                label="DEPOSIT_CONTRACT_ADDRESS",
-            ),
-            Address(
-                0x00000961EF480EB55E80D19AD83579A64C007002,
-                label="WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS",
-            ),
-            Address(
-                0x0000BBDDC7CE488642FB579F8B00F3A590007251,
-                label="CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS",
-            ),
-            Address(
-                0x0000F90827F1C53A10CB7A02335B175320002935,
-                label="HISTORY_STORAGE_ADDRESS",
-            ),
-        ] + super(Prague, cls).system_contracts(
-            block_number=block_number, timestamp=timestamp
         )
 
     @classmethod
@@ -2933,6 +2923,30 @@ class Prague(Cancun):
         return 2
 
     @classmethod
+    def system_contracts(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> List[Address]:
+        """
+        Prague introduces system contracts for EIP-7002, EIP-7251 and EIP-2935.
+        """
+        return [
+            Address(
+                0x00000961EF480EB55E80D19AD83579A64C007002,
+                label="WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS",
+            ),
+            Address(
+                0x0000BBDDC7CE488642FB579F8B00F3A590007251,
+                label="CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS",
+            ),
+            Address(
+                0x0000F90827F1C53A10CB7A02335B175320002935,
+                label="HISTORY_STORAGE_ADDRESS",
+            ),
+        ] + super(Prague, cls).system_contracts(
+            block_number=block_number, timestamp=timestamp
+        )
+
+    @classmethod
     def pre_allocation_blockchain(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> Mapping:
@@ -2944,7 +2958,7 @@ class Prague(Cancun):
         del block_number, timestamp
         new_allocation = {}
 
-        # Add the beacon chain deposit contract
+        deposit_contract_address = 0xBABE2BED00000000000000000000000000000003
         deposit_contract_tree_depth = 32
         storage = {}
         next_hash = sha256(b"\x00" * 64).digest()
@@ -2955,18 +2969,19 @@ class Prague(Cancun):
             storage[i] = next_hash
             next_hash = sha256(next_hash + next_hash).digest()
 
-        with open(
-            CURRENT_FOLDER / "contracts" / "deposit_contract.bin", mode="rb"
-        ) as f:
-            new_allocation.update(
-                {
-                    0xBABE2BED00000000000000000000000000000003: {
-                        "nonce": 1,
-                        "code": f.read(),
-                        "storage": storage,
-                    }
+        # Get the beacon chain deposit contract code from the parent allocation
+        parent_allocation = super(Prague, cls).pre_allocation_blockchain()
+        new_allocation.update(
+            {
+                deposit_contract_address: {
+                    "nonce": 1,
+                    "code": parent_allocation[deposit_contract_address][
+                        "code"
+                    ],
+                    "storage": storage,
                 }
-            )
+            }
+        )
 
         # EIP-7002: Add the withdrawal request contract
         with open(
