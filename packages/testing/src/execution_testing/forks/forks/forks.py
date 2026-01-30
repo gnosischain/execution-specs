@@ -2167,7 +2167,7 @@ class Paris(
             Address(
                 0xBABE2BED00000000000000000000000000000003,
                 label="DEPOSIT_CONTRACT_ADDRESS",
-            ),
+            )
         ]
 
     @classmethod
@@ -2941,7 +2941,7 @@ class Prague(Cancun):
             Address(
                 0x0000F90827F1C53A10CB7A02335B175320002935,
                 label="HISTORY_STORAGE_ADDRESS",
-            ),
+            )
         ] + super(Prague, cls).system_contracts(
             block_number=block_number, timestamp=timestamp
         )
