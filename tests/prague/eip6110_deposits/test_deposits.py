@@ -186,9 +186,9 @@ pytestmark = pytest.mark.valid_from("Prague")
                             amount=32_000_000_000,
                             signature=0x03,
                             index=0x0,
-                            # From traces, gas used by the first tx is 82,718
+                            # From traces, gas used by the first tx is 82,498
                             # so reduce by one here
-                            gas_limit=0x1431D,
+                            gas_limit=0x14241,
                             valid=False,
                         ),
                         DepositRequest(
@@ -220,9 +220,9 @@ pytestmark = pytest.mark.valid_from("Prague")
                             amount=32_000_000_000,
                             signature=0x03,
                             index=0x0,
-                            # From traces, gas used by the second tx is 68,594,
+                            # From traces, gas used by the second tx is 68,283,
                             # reduce by one here
-                            gas_limit=0x10BF1,
+                            gas_limit=0x10ABA,
                             valid=False,
                         ),
                     ],
@@ -317,7 +317,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                             signature=0x03,
                             index=i,
                         )
-                        for i in range(200)
+                        for i in range(400)
                     ],
                     tx_gas_limit=16_777_216,
                 ),
@@ -489,7 +489,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                             index=i,
                             valid=False,
                         )
-                        for i in range(200)
+                        for i in range(400)
                     ],
                     tx_gas_limit=10_000_000,
                 ),
