@@ -29,7 +29,6 @@ from execution_testing.forks import (
     Berlin,
     Cancun,
     Fork,
-    Istanbul,
     London,
     Paris,
     Shanghai,
