@@ -538,7 +538,17 @@ class TestFillBlockchainValidTxs:
             tag="my_blockchain_test_valid_txs",
         ).generate(t8n=default_t8n, fixture_format=fixture_format)
 
-    @pytest.mark.parametrize("fork", [London, Shanghai], indirect=True)
+    @pytest.mark.parametrize(
+        "fork",
+        [
+            pytest.param(
+                London,
+                marks=pytest.mark.skip(reason="London fork not supported"),
+            ),
+            Shanghai,
+        ],
+        indirect=True,
+    )
     def test_fill_blockchain_valid_txs(  # noqa: D102
         self,
         fork: Fork,
@@ -583,7 +593,16 @@ class TestFillBlockchainValidTxs:
 
         assert fixture[fixture_name] == expected[fixture_name]
 
-    @pytest.mark.parametrize("fork", [London], indirect=True)
+    @pytest.mark.parametrize(
+        "fork",
+        [
+            pytest.param(
+                London,
+                marks=pytest.mark.skip(reason="London fork not supported"),
+            ),
+        ],
+        indirect=True,
+    )
     def test_fixture_header_join(
         self, blockchain_test_fixture: BlockchainFixture
     ) -> None:

@@ -157,7 +157,7 @@ def env(test_dir: str) -> Environment:
 
 
 @pytest.mark.skip(
-    reason="Uses Berlin fork: ExecutionSpecsTransitionTool does not run for forks before Paris"  # noqa: E501
+    reason="Uses Berlin fork: ExecutionSpecsTransitionTool not supported for forks before Paris"  # noqa: E501
 )
 @pytest.mark.parametrize("test_dir", os.listdir(path=FIXTURES_ROOT))
 def test_evm_t8n(
