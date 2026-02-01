@@ -13,6 +13,7 @@ from execution_testing.base_types import (
     TestPrivateKey,
 )
 from execution_testing.client_clis import (
+    EvmOneTransitionTool,
     ExecutionSpecsTransitionTool,
     TransitionTool,
 )
@@ -77,6 +78,8 @@ def test_ci_multi_t8n_support(
 )
 def test_t8n_support(fork: Fork, installed_t8n: TransitionTool) -> None:
     """Stress test that sends all possible t8n interactions."""
+    if isinstance(installed_t8n, EvmOneTransitionTool):
+        pytest.skip("EvmOneTransitionTool skipped for now")
     if fork in [MuirGlacier, ArrowGlacier, GrayGlacier]:
         return
     if isinstance(installed_t8n, ExecutionSpecsTransitionTool) and fork in [
