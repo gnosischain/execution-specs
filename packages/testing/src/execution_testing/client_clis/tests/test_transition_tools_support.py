@@ -23,12 +23,18 @@ from execution_testing.forks import (
     Byzantium,
     Cancun,
     Constantinople,
+    ConstantinopleFix,
     Fork,
+    Frontier,
     GrayGlacier,
+    Homestead,
+    Istanbul,
     London,
     MuirGlacier,
     Paris,
     Prague,
+    SpuriousDragon,
+    TangerineWhistle,
     get_deployed_forks,
 )
 from execution_testing.specs import Block, BlockchainTest
@@ -74,7 +80,16 @@ def test_t8n_support(fork: Fork, installed_t8n: TransitionTool) -> None:
     if fork in [MuirGlacier, ArrowGlacier, GrayGlacier]:
         return
     if isinstance(installed_t8n, ExecutionSpecsTransitionTool) and fork in [
-        Constantinople
+        Frontier,
+        Homestead,
+        TangerineWhistle,
+        SpuriousDragon,
+        Byzantium,
+        Constantinople,
+        ConstantinopleFix,
+        Istanbul,
+        Berlin,
+        London,
     ]:
         return
     env = Environment()
@@ -86,7 +101,7 @@ def test_t8n_support(fork: Fork, installed_t8n: TransitionTool) -> None:
     code_account_2 = Address(0x1002)
     pre = Alloc(
         {
-            TestAddress: Account(balance=10_000_000),
+            TestAddress: Account(balance=200_000_000_000_000),
             code_account_1: Account(
                 code=Op.SSTORE(
                     storage_1.store_next(1, "blockhash_0_is_set"),
@@ -186,7 +201,7 @@ def test_t8n_support(fork: Fork, installed_t8n: TransitionTool) -> None:
             gas_limit=100_000,
             max_priority_fee_per_gas=5,
             max_fee_per_gas=10,
-            max_fee_per_blob_gas=30,
+            max_fee_per_blob_gas=1_500_000_000,
             blob_versioned_hashes=add_kzg_version(
                 [1], BLOB_COMMITMENT_VERSION_KZG
             ),
@@ -238,14 +253,14 @@ def test_t8n_support(fork: Fork, installed_t8n: TransitionTool) -> None:
         txs=[tx_2],
         expected_post_state={
             code_account_2: Account(
-                balance=1_000_000_000 if fork >= Cancun else 0,
+                balance=0,
                 storage=storage_2,
             ),
         }
         if fork < Prague
         else {
             code_account_2: Account(
-                balance=1_000_000_000 if fork >= Cancun else 0,
+                balance=0,
             ),
             sender: Account(
                 storage=storage_2,
