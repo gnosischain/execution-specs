@@ -197,7 +197,8 @@
         ],
         "sealEngine": "NoProof",
         "_info": {
-            "hash": "0x146e88fc9227a989608c555e205c9f27e5e44c1830339370d2a1a6b74aeb4955"
+            "hash": "0x146e88fc9227a989608c555e205c9f27e5e44c1830339370d2a1a6b74aeb4955",
+            "fixture_format": "blockchain_test"
         }
     }
 }

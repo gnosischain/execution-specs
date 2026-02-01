@@ -110,7 +110,8 @@
             "chainid": "0x01"
         },
         "_info": {
-            "hash": "0xb58e509f61be2d5f339749a1ec8972af7ac414628f48cd54d5e34976a8c30936"
+            "hash": "0xb58e509f61be2d5f339749a1ec8972af7ac414628f48cd54d5e34976a8c30936",
+            "fixture_format": "state_test"
         }
     }
 }

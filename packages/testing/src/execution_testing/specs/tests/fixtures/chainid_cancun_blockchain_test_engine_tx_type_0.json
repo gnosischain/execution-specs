@@ -160,7 +160,8 @@
             }
         ],
         "_info": {
-            "hash": "0xfc54740833e3bcbca0167fe7a27406e290d84f21456707940733807baa1d10b5"
+            "hash": "0xfc54740833e3bcbca0167fe7a27406e290d84f21456707940733807baa1d10b5",
+            "fixture_format": "blockchain_test_engine"
         }
     }
 }
