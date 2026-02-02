@@ -156,6 +156,9 @@ def env(test_dir: str) -> Environment:
         return Environment.model_validate_json(f.read())
 
 
+@pytest.mark.skip(
+    reason="Uses Berlin fork: ExecutionSpecsTransitionTool not supported for forks before Paris"  # noqa: E501
+)
 @pytest.mark.parametrize("test_dir", os.listdir(path=FIXTURES_ROOT))
 def test_evm_t8n(
     default_t8n: TransitionTool,

@@ -113,7 +113,7 @@ MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
-MAX_BLOB_GAS_PER_BLOCK = U64(1179648)
+MAX_BLOB_GAS_PER_BLOCK = U64(262144)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
 BLOB_FEE_COLLECTOR = hex_to_address(
     "0x1559000000000000000000000000000000000000"
@@ -905,13 +905,6 @@ def process_transaction(
     )
     set_account_balance(
         block_env.state, sender, U256(sender_balance_after_gas_fee)
-    )
-
-    collector_balance_after = get_account(
-        block_env.state, BLOB_FEE_COLLECTOR
-    ).balance + U256(blob_gas_fee)
-    set_account_balance(
-        block_env.state, BLOB_FEE_COLLECTOR, collector_balance_after
     )
 
     access_list_addresses = set()

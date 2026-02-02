@@ -65,6 +65,11 @@ class ForkLoad:
         return self._module("fork").process_block_rewards
 
     @property
+    def has_process_block_rewards(self) -> bool:
+        """Check if the fork has a `process_block_rewards` function."""
+        return hasattr(self._module("fork"), "process_block_rewards")
+
+    @property
     def process_withdrawals(self) -> Any:
         """process_withdrawals function of the given fork."""
         return self._module("fork").process_withdrawals

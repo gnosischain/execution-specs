@@ -747,16 +747,6 @@ def test_no_beacon_root_contract_at_transition(
         balance=0,
     )
     post = {
-        Spec.BEACON_ROOTS_ADDRESS: Account(
-            storage={
-                timestamp % Spec.HISTORY_BUFFER_LENGTH: 0,
-                (timestamp % Spec.HISTORY_BUFFER_LENGTH)
-                + Spec.HISTORY_BUFFER_LENGTH: 0,
-            },
-            code=b"",
-            nonce=0,
-            balance=int(1e9),
-        ),
         caller_address: Account(
             storage={
                 0: 1
@@ -916,17 +906,19 @@ def test_beacon_root_contract_deploy(
         balance=deployer_required_balance,
     )
 
+    # Withdrawals are system calls to withdrawal contract, not direct
+    # balance credits, so balance remains 0
     post[Spec.BEACON_ROOTS_ADDRESS] = Account(
         storage=beacon_root_contract_storage,
         code=expected_code,
         nonce=1,
-        balance=int(2e9),
+        balance=0,
     )
     post[Spec.SYSTEM_ADDRESS] = Account(
         storage={},
         code=b"",
         nonce=0,
-        balance=int(2e9),
+        balance=0,
     )
     post[deployer_address] = Account(
         balance=175916000000000000,  # It doesn't consume all the balance :(
