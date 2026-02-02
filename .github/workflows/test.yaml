@@ -90,6 +90,14 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           submodules: recursive
+      - name: Add swap space
+        run: |
+          sudo swapoff -a
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          sudo swapon --show
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
@@ -98,7 +106,7 @@ jobs:
       - name: Run pypy3 tests
         run: tox -e pypy3
         env:
-          PYPY_GC_MAX: "3G"
+          PYPY_GC_MAX: "2G"
           PYPY_GC_MIN: "1G"
 
   # json_infra:
