@@ -1,4 +1,4 @@
-name: EEST → Hive (Gnosis Multi-Client)
+name: EEST → Hive (Multi-Client)
 
 on:
   workflow_dispatch:

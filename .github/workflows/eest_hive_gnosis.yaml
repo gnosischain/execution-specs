@@ -1,4 +1,4 @@
-name: EEST → Hive (Gnosis)
+name: EEST → Hive
 
 on:
   workflow_dispatch:
@@ -6,15 +6,15 @@ on:
       fork:
         description: "Fork passed to --fork"
         required: true
-        default: "Prague"
+        default: "Osaka"
       client:
         description: "Client passed to --client"
         required: true
-        default: "reth-gnosis"
+        default: "nethermind-gnosis"
       test_dir:
         description: "Test directory to execute"
         required: true
-        default: "prague"
+        default: "osaka"
   
 jobs:
   test:
