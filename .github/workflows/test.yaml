@@ -84,8 +84,12 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   pypy3:
-    runs-on: ubuntu-latest-4-cores
+    runs-on: ubuntu-latest
     needs: static
+    strategy:
+      fail-fast: false
+      matrix:
+        fork: [Paris, Shanghai, Cancun, Prague, Osaka]
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
@@ -95,10 +99,10 @@ jobs:
         with:
           python-version: "pypy3.11"
       - uses: ./.github/actions/setup-env
-      - name: Run pypy3 tests
-        run: tox -e pypy3
+      - name: Run pypy3 tests (${{ matrix.fork }})
+        run: tox -e pypy3 -- --fork=${{ matrix.fork }}
         env:
-          PYPY_GC_MAX: "6G"
+          PYPY_GC_MAX: "2G"
           PYPY_GC_MIN: "1G"
 
   # json_infra:
