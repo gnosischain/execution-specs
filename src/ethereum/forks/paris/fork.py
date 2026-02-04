@@ -750,8 +750,10 @@ def process_block_rewards(
     block_env: vm.BlockEnvironment,
 ) -> None:
     """
-    Call BlockRewardAuRaBase contract reward function
-    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20.
+    Call BlockRewardAuRaBase contract reward function.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
     # reward(address[],uint16[]) with empty lists
     data = bytes.fromhex(
@@ -766,6 +768,10 @@ def process_block_rewards(
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         data=data,
     )
+    if out.error:
+        raise InvalidBlock(
+            f"Block rewards system call failed: {out.error}"
+        )
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
 
     for address, amount in zip(addresses, amounts, strict=False):

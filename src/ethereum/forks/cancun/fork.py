@@ -860,6 +860,8 @@ def process_withdrawals(
 ) -> None:
     """
     Make a system call to the deposit contract to process withdrawals.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
     amounts = []
     addresses = []
@@ -870,19 +872,25 @@ def process_withdrawals(
         ["uint256", "uint64[]", "address[]"],
         [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
     )
-    process_unchecked_system_transaction(
+    out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=DEPOSIT_CONTRACT_ADDRESS,
         data=bytes.fromhex("79d0c0bc") + payload,
     )
+    if out.error:
+        raise InvalidBlock(
+            f"Withdrawal system call failed: {out.error}"
+        )
 
 
 def process_block_rewards(
     block_env: vm.BlockEnvironment,
 ) -> None:
     """
-    Call BlockRewardAuRaBase contract reward function
-    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20.
+    Call BlockRewardAuRaBase contract reward function.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
     # reward(address[],uint16[]) with empty lists
     data = bytes.fromhex(
@@ -897,6 +905,10 @@ def process_block_rewards(
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         data=data,
     )
+    if out.error:
+        raise InvalidBlock(
+            f"Block rewards system call failed: {out.error}"
+        )
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
 
     for address, amount in zip(addresses, amounts, strict=False):
