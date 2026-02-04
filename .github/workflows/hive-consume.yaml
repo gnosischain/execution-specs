@@ -52,7 +52,7 @@ jobs:
 
       - name: Run fill to generate fixtures
         run: |
-          uv run fill tests/ --from Paris --until Osaka --clean -v -x
+          uv run fill tests/osaka --fork Osaka --clean -v -x
 
       - name: Upload generated fixtures
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -83,9 +83,9 @@ jobs:
         run: |
           git clone -b sync-eest https://github.com/gnosischain/hive.git
           cd hive
-          go install ./...
+          go build -o hive
 
-      - name: Start Hive dev API
+      - name: Start Hive (dev mode)
         id: start-hive
         uses: ./.github/actions/start-hive-dev
         with:
