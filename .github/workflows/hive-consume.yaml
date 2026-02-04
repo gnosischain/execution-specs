@@ -52,7 +52,7 @@ jobs:
 
       - name: Run fill to generate fixtures
         run: |
-          uv run fill tests/ --clean -v -x
+          uv run fill tests/ --from Paris --until Osaka --clean -v -x
 
       - name: Upload generated fixtures
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
