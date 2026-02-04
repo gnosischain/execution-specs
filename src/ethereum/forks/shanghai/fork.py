@@ -610,6 +610,16 @@ def apply_body(
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 
+    # Gnosis: populate withdrawals trie here because
+    # process_withdrawals() is a system call that doesn't
+    # receive block_output (upstream does this internally).
+    for i, wd in enumerate(withdrawals):
+        trie_set(
+            block_output.withdrawals_trie,
+            rlp.encode(Uint(i)),
+            rlp.encode(wd),
+        )
+
     process_withdrawals(block_env, withdrawals)
 
     return block_output
@@ -812,7 +822,7 @@ def process_block_rewards(
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
 
-    for address, amount in zip(addresses, amounts, strict=False):
+    for address, amount in zip(addresses, amounts, strict=True):
         balance_after = get_account(block_env.state, address).balance + U256(
             amount
         )

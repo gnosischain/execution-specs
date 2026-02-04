@@ -772,7 +772,7 @@ def process_block_rewards(
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
 
-    for address, amount in zip(addresses, amounts, strict=False):
+    for address, amount in zip(addresses, amounts, strict=True):
         balance_after = get_account(block_env.state, address).balance + U256(
             amount
         )

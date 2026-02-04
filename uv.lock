@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -943,7 +943,7 @@ test = [
 requires-dist = [
     { name = "coincurve", specifier = ">=20,<21" },
     { name = "cryptography", specifier = ">=45.0.1,<46" },
-    { name = "eth-abi", specifier = ">=5.2.0" },
+    { name = "eth-abi", specifier = ">=5.2.0,<6" },
     { name = "ethash", marker = "extra == 'optimized'", specifier = ">=1.1.0,<2" },
     { name = "ethereum-rlp", specifier = ">=0.1.5,<0.2" },
     { name = "ethereum-types", specifier = ">=0.3.0,<0.4" },
