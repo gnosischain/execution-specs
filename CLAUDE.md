@@ -62,11 +62,33 @@ uvx pre-commit install
 
 ### CI Workflows (`.github/workflows/`)
 
-**Core test pipeline** (`test.yaml`): Runs on PRs. Jobs: `static`, `py3` (fill Paris->Osaka), `pypy3`, `tests_pytest_py3`, `tests_pytest_pypy3`. Setup action (`.github/actions/setup-env/`) installs Rust, build-essential, tox, and downloads geth.
+There are two phases in the test pipeline: **fill** (generate fixtures from the EELS spec — proves spec is internally consistent) and **consume** (feed fixtures to a real client via Hive — proves client compatibility). Currently only fill runs automatically on PRs; consume has no working automated PR gate.
 
-**Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Tests generated fixtures against `go-ethereum-gnosis` via Hive (Docker-based client testing). Has 4 modes: Engine, RLP, Sync (simulator), Dev Mode (live Engine API). Uses `gnosischain/hive` repo (branch `sync-eest`) and `gnosis.yaml` client config.
+**Core test pipeline** (`test.yaml`): Runs on PRs. Fill only — no consume. Jobs: `static`, `py3` (fill Paris->Osaka), `pypy3`, `tests_pytest_py3`, `tests_pytest_pypy3`. Setup action (`.github/actions/setup-env/`) installs Rust, build-essential, tox, and downloads geth.
 
-**Manual hive workflows**: `eest_hive_gnosis.yaml` (single client, workflow_dispatch) and `eest_hive_gnosis_multi_client.yaml` (matrix of reth/geth/nethermind/erigon gnosis clients).
+**Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Intended to consume fixtures against `go-ethereum-gnosis` via Hive (4 modes: Engine, RLP, Sync, Dev Mode). Currently broken: it downloads upstream Ethereum fixtures (`FIXTURES_URL`) instead of generating Gnosis fixtures via fill, so the state roots never match. Uses `gnosischain/hive` repo (branch `sync-eest`) and `gnosis.yaml` client config.
+
+**Manual hive workflows** (workflow_dispatch only, not automated on PRs):
+- `eest_hive_gnosis.yaml` — fill then consume against a single Gnosis client. This is the correct pattern.
+- `eest_hive_gnosis_multi_client.yaml` — fill once, then consume against 4 Gnosis clients (reth/geth/nethermind/erigon).
+
+**All workflow files:**
+
+| File                               | Trigger                           | What it does                                                                       |
+|------------------------------------|-----------------------------------|------------------------------------------------------------------------------------|
+| test.yaml                          | PR, push to master                | Core pipeline: static checks, py3 fill, pypy3 fill, framework unit tests           |
+| test-docs.yaml                     | PR, push                          | mkdocs build, markdownlint, changelog validation                                   |
+| hive-consume.yaml                  | PR (hive paths), push to forks/** | Hive integration: Engine/RLP/Sync simulators + Dev Mode against go-ethereum-gnosis  |
+| benchmark.yaml                     | push to forks/**                  | Gas benchmarks, fixed opcode benchmarks                                            |
+| eest_hive_gnosis.yaml              | manual                            | Fill + consume against a single Gnosis client                                      |
+| eest_hive_gnosis_multi_client.yaml | manual                            | Fill once, then consume against 4 Gnosis clients (reth/geth/nethermind/erigon)     |
+| eest_hive_matrix.yaml              | manual                            | Upstream hive matrix testing                                                       |
+| run_eest_remote.yaml               | manual                            | Run EEST tests on a remote machine                                                 |
+| release_fixture_full.yaml          | manual                            | Generate and publish full fixture releases                                         |
+| release_fixture_feature.yaml       | manual                            | Generate fixtures for a feature branch                                             |
+| gh-pages.yaml                      | push to master                    | Deploy spec docs to GitHub Pages                                                   |
+| eip-rebase.yaml                    | manual                            | Rebase EIP feature branches                                                        |
+| update-devnet-branch.yaml          | manual                            | Update devnet branches                                                             |
 
 ## Architecture
 

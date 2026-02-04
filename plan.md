@@ -2,48 +2,28 @@
 
 ## Context
 
-PR #2 (`gnosis-osaka` -> `master`) implements the Gnosis spec differences across Paris through Osaka forks. The core spec implementation and test fill suite pass (50,738 tests). The remaining work is CI/infrastructure fixes to get all PR checks green.
+PR #2 (`gnosis-osaka` -> `master`) implements the Gnosis spec differences across Paris through Osaka forks. The core spec implementation and test fill suite pass (50,738 tests). However, **no consume step has ever run successfully against a Gnosis client in CI** — the fill proves the spec is internally consistent, but client compatibility is unverified in automated CI.
 
 ## Pending Tasks
 
-### 1. Fix Hive Dev Mode — Merkle root mismatch (critical)
+### 1. Add automated fill+consume to PR CI (critical)
 
-**Problem**: `hive-consume.yaml` Dev Mode job downloads **upstream Ethereum fixtures** from `ethereum/execution-spec-tests` and feeds them to `go-ethereum-gnosis`. The Gnosis client computes a different state root because Gnosis has additional state transitions (fee collection, block rewards, withdrawal system calls).
+**Problem**: `test.yaml` only runs fill (generates fixtures from EELS spec). There is no automated consume step on PRs that validates fixtures against a real Gnosis client. The `hive-consume.yaml` workflow was supposed to do this but it downloads upstream Ethereum fixtures instead of generating Gnosis ones, so it always fails.
 
-**File**: `.github/workflows/hive-consume.yaml` line 48:
-```yaml
-FIXTURES_URL: https://github.com/ethereum/execution-spec-tests/releases/download/v5.3.0/fixtures_develop.tar.gz
-```
+**The correct pattern already exists** in `eest_hive_gnosis.yaml` (manual workflow): fill first, then consume. This needs to become an automated PR check.
 
-**Options**:
-- **A**: Generate Gnosis-specific fixtures via a prior `fill` step (like `eest_hive_gnosis_multi_client.yaml` already does) and use those instead of upstream fixtures
-- **B**: Publish Gnosis fixture releases and point `FIXTURES_URL` at them
-- **C**: Disable the hive-consume workflow for now and rely on the manual hive workflows for integration testing
+**Proposed approach**: Rework `hive-consume.yaml` to:
+1. Add a `fill` job that generates Gnosis fixtures using the EELS spec (same as `eest_hive_gnosis.yaml` line 72-73)
+2. Upload the generated fixtures as an artifact
+3. In the consume jobs (Engine/RLP/Sync/Dev Mode), download those fixtures instead of `FIXTURES_URL`
+4. Remove or replace the `FIXTURES_URL` env var pointing at `ethereum/execution-spec-tests`
 
-### 2. Fix Hive Engine/RLP/Sync — Docker cache issue
+**Files to modify**:
+- `.github/workflows/hive-consume.yaml` — add fill job, wire artifacts, remove `FIXTURES_URL`
 
-**Problem**: The `cache-docker-images` / `load-docker-images` actions use a week-number-based cache key designed for persistent self-hosted runners. On ephemeral `ubuntu-latest` runners, cache restore can miss.
+**Alternative**: Merge `eest_hive_gnosis.yaml` logic into `hive-consume.yaml` and trigger it on PRs. The multi-client variant could remain manual.
 
-**File**: `.github/actions/load-docker-images/action.yaml` — hard fails if cache not found.
-
-**Options**:
-- **A**: Pull Docker images directly in each job instead of relying on cache (simpler, slightly slower)
-- **B**: Switch `load-docker-images` to pull images on cache miss instead of failing
-- **C**: Use self-hosted runners (requires infra setup)
-
-Note: Even if the cache issue is fixed, Engine/RLP/Sync will also hit the same fixtures mismatch problem as Dev Mode (task 1).
-
-### 3. Fix pypy3 CI timeout
-
-**Problem**: Exit code 143 (SIGTERM) — the PyPy fill run exceeds GitHub Actions resource limits.
-
-**Options**:
-- **A**: Reduce `--maxprocesses` for pypy3 to lower memory pressure (currently 7 in tox.ini)
-- **B**: Add `PYPY_GC_MAX` / `PYPY_GC_MIN` env vars in CI (already present in test.yaml but may need tuning)
-- **C**: Split pypy3 into multiple jobs by fork range
-- **D**: Use a larger runner or self-hosted runner
-
-### 4. Consider adding `gnosischain/specs` as a submodule
+### 2. Consider adding `gnosischain/specs` as a submodule
 
 **Rationale**: The Gnosis specs repo documents the delta from Ethereum. Adding it as a submodule at e.g. `specs/gnosis/` would:
 - Pin the spec version the implementation targets
@@ -53,15 +33,31 @@ Note: Even if the cache issue is fixed, Engine/RLP/Sync will also hit the same f
 **Steps**:
 - `git submodule add https://github.com/gnosischain/specs.git specs/gnosis`
 - Update `fork.py` "Gnosis diff" docstrings with references like `(ref: specs/gnosis/execution/withdrawals.md)`
-- Add a note in CONTRIBUTING.md or CLAUDE.md
 
-### 5. Upstream rebase strategy
+### 3. Upstream rebase strategy
 
 The `gnosis-osaka` branch is based on upstream `forks/osaka`. As upstream evolves (Amsterdam fork, etc.), the branch needs periodic rebases. Key files that will conflict:
 - `fork.py` files (Gnosis modifications in Paris through Osaka)
 - `tox.ini` (fork range, disabled environments)
 - `.github/workflows/` (Gnosis-specific workflow changes)
 - `src/ethereum_spec_tools/evm_tools/` (Gnosis tool modifications)
+
+### 6. Re-enable pypy3 fill in CI (`test.yaml`)
+
+**Status**: Commented out with TODO. The pypy3 job exceeds GitHub Actions resource limits (exit 143 / SIGTERM).
+
+**Options**:
+- Reduce `--maxprocesses` (currently 7 in tox.ini) to lower memory pressure
+- Tune `PYPY_GC_MAX` / `PYPY_GC_MIN` env vars
+- Split into multiple jobs by fork range
+- Use a larger runner
+
+### 7. Re-enable Hive consume in CI (`hive-consume.yaml`)
+
+**Status**: All jobs commented out with TODO. Two issues must be fixed:
+
+1. **Wrong fixtures**: `FIXTURES_URL` points at upstream Ethereum fixtures. Need a fill job that generates Gnosis fixtures first (see `eest_hive_gnosis.yaml` for the correct pattern), upload as artifact, then consume those.
+2. **Docker cache**: `load-docker-images` hard-fails on ephemeral `ubuntu-latest` runners when cache misses. Need fallback to `docker pull`.
 
 ## Completed
 

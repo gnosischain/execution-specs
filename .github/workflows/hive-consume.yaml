@@ -48,102 +48,114 @@ env:
   FIXTURES_URL: https://github.com/ethereum/execution-spec-tests/releases/download/v5.3.0/fixtures_develop.tar.gz
 
 jobs:
-  cache-docker-images:
-    name: Cache Docker Images
+  # TODO: Hive consume is disabled. Two issues to fix:
+  #   1. FIXTURES_URL points at upstream Ethereum fixtures — need a fill job to generate Gnosis fixtures first
+  #      (see eest_hive_gnosis.yaml for the correct fill+consume pattern)
+  #   2. Docker cache (load-docker-images) hard-fails on ephemeral runners — need fallback to docker pull
+  #
+  # cache-docker-images:
+  #   name: Cache Docker Images
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout execution-specs
+  #       uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #
+  #     - name: Cache Docker images
+  #       uses: ./.github/actions/cache-docker-images
+  #       with:
+  #         images: ${{ inputs.docker_images || 'ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine' }}
+  #
+  # test-hive:
+  #   name: ${{ matrix.name }}
+  #   needs: cache-docker-images
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: true
+  #     matrix:
+  #       include:
+  #         - name: Engine
+  #           mode: simulator
+  #           simulator: ethereum/eels/consume-engine
+  #         - name: RLP
+  #           mode: simulator
+  #           simulator: ethereum/eels/consume-rlp
+  #         - name: Sync
+  #           mode: simulator
+  #           simulator: ethereum/eels/consume-sync
+  #         - name: Dev Mode
+  #           mode: dev
+  #           consume_command: engine
+  #   steps:
+  #     - name: Checkout execution-specs
+  #       uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #       with:
+  #         path: execution-specs
+  #
+  #     - name: Checkout Hive
+  #       uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #       with:
+  #         repository: gnosischain/hive
+  #         ref: sync-eest
+  #         path: hive
+  #
+  #     - name: Setup go env and cache
+  #       uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+  #       with:
+  #         go-version: ">=1.24"
+  #         cache-dependency-path: hive/go.sum
+  #
+  #     - name: Install uv and python
+  #       if: matrix.mode == 'dev'
+  #       uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182
+  #       with:
+  #         enable-cache: true
+  #         cache-dependency-glob: "execution-specs/uv.lock"
+  #         version: ${{ vars.UV_VERSION }}
+  #         python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+  #
+  #     - name: Load cached Docker images
+  #       uses: ./execution-specs/.github/actions/load-docker-images
+  #
+  #     - name: Build hive
+  #       run: |
+  #         cd hive
+  #         go build .
+  #
+  #     - name: Run simulator tests
+  #       if: matrix.mode == 'simulator'
+  #       run: |
+  #         cd hive
+  #         ./hive --sim '${{ matrix.simulator }}' \
+  #           --sim.parallelism=1 \
+  #           --client go-ethereum-gnosis \
+  #           --client-file ../execution-specs/.github/configs/hive/gnosis.yaml \
+  #           --sim.buildarg fixtures=${{ env.FIXTURES_URL }} \
+  #           --sim.limit=".*test_block_at_rlp_limit_with_logs.*Osaka.*" \
+  #           --docker.output
+  #
+  #     - name: Start Hive in dev mode
+  #       if: matrix.mode == 'dev'
+  #       id: start-hive
+  #       uses: ./execution-specs/.github/actions/start-hive-dev
+  #       with:
+  #         clients: go-ethereum-gnosis
+  #         client-file: execution-specs/.github/configs/hive/gnosis.yaml
+  #         hive-path: hive
+  #         timeout: "120"
+  #
+  #     - name: Run consume in dev mode
+  #       if: matrix.mode == 'dev'
+  #       working-directory: execution-specs
+  #       env:
+  #         HIVE_SIMULATOR: ${{ steps.start-hive.outputs.hive-url }}
+  #       run: |
+  #         uv sync --all-extras
+  #         uv run consume ${{ matrix.consume_command }} --input ${{ env.FIXTURES_URL }} -k "Osaka and test_block_at_rlp_limit_with_logs"
+
+  # Placeholder job so the workflow file is valid with no active jobs
+  placeholder:
+    name: "Hive consume (disabled)"
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout execution-specs
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-
-      - name: Cache Docker images
-        uses: ./.github/actions/cache-docker-images
-        with:
-          images: ${{ inputs.docker_images || 'ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine' }}
-
-  test-hive:
-    name: ${{ matrix.name }}
-    needs: cache-docker-images
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - name: Engine
-            mode: simulator
-            simulator: ethereum/eels/consume-engine
-          - name: RLP
-            mode: simulator
-            simulator: ethereum/eels/consume-rlp
-          - name: Sync
-            mode: simulator
-            simulator: ethereum/eels/consume-sync
-          - name: Dev Mode
-            mode: dev
-            consume_command: engine
-    steps:
-      - name: Checkout execution-specs
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          path: execution-specs
-
-      - name: Checkout Hive
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          repository: gnosischain/hive
-          ref: sync-eest
-          path: hive
-
-      - name: Setup go env and cache
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: ">=1.24"
-          cache-dependency-path: hive/go.sum
-
-      - name: Install uv and python
-        if: matrix.mode == 'dev'
-        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182
-        with:
-          enable-cache: true
-          cache-dependency-glob: "execution-specs/uv.lock"
-          version: ${{ vars.UV_VERSION }}
-          python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-
-      - name: Load cached Docker images
-        uses: ./execution-specs/.github/actions/load-docker-images
-
-      - name: Build hive
-        run: |
-          cd hive
-          go build .
-
-      - name: Run simulator tests
-        if: matrix.mode == 'simulator'
-        run: |
-          cd hive
-          ./hive --sim '${{ matrix.simulator }}' \
-            --sim.parallelism=1 \
-            --client go-ethereum-gnosis \
-            --client-file ../execution-specs/.github/configs/hive/gnosis.yaml \
-            --sim.buildarg fixtures=${{ env.FIXTURES_URL }} \
-            --sim.limit=".*test_block_at_rlp_limit_with_logs.*Osaka.*" \
-            --docker.output
-
-      - name: Start Hive in dev mode
-        if: matrix.mode == 'dev'
-        id: start-hive
-        uses: ./execution-specs/.github/actions/start-hive-dev
-        with:
-          clients: go-ethereum-gnosis
-          client-file: execution-specs/.github/configs/hive/gnosis.yaml
-          hive-path: hive
-          timeout: "120"
-
-      - name: Run consume in dev mode
-        if: matrix.mode == 'dev'
-        working-directory: execution-specs
-        env:
-          HIVE_SIMULATOR: ${{ steps.start-hive.outputs.hive-url }}
-        run: |
-          uv sync --all-extras
-          uv run consume ${{ matrix.consume_command }} --input ${{ env.FIXTURES_URL }} -k "Osaka and test_block_at_rlp_limit_with_logs"
+      - run: echo "Hive consume is disabled. See TODO above."
 
