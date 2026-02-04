@@ -114,4 +114,7 @@ class ErigonExceptionMapper(ExceptionMapper):
         BlockException.INVALID_GAS_USED_ABOVE_LIMIT: (
             r"invalid gasUsed: have \d+, gasLimit \d+"
         ),
+        BlockException.SYSTEM_CONTRACT_CALL_FAILED: (
+            r"execution reverted|invalid opcode: INVALID"
+        ),
     }

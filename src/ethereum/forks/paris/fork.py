@@ -9,11 +9,18 @@ Introduction
 ------------
 
 Entry point for the Ethereum specification.
+
+Gnosis diff
+-----------
+
+   - Added logic to collect base fee into a collector address
+   - Added system call into block rewards contract that may mint tokens
 """
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from eth_abi import decode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
@@ -56,14 +63,28 @@ from .transactions import (
     validate_transaction,
 )
 from .trie import root, trie_set
+from .utils.hexadecimal import hex_to_address
 from .utils.message import prepare_message
-from .vm.interpreter import process_message_call
+from .vm import Message
+from .vm.interpreter import MessageCallOutput, process_message_call
 
 BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
 GAS_LIMIT_ADJUSTMENT_FACTOR = Uint(1024)
 GAS_LIMIT_MINIMUM = Uint(5000)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
+SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
+DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
+    "0xbabe2bed00000000000000000000000000000003"
+)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0x2000000000000000000000000000000000000001"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0x1559000000000000000000000000000000000000"
+)
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 
 
 @dataclass
@@ -444,6 +465,102 @@ def make_receipt(
     return encode_receipt(tx, receipt)
 
 
+def process_system_transaction(
+    block_env: vm.BlockEnvironment,
+    target_address: Address,
+    system_contract_code: Bytes,
+    data: Bytes,
+) -> MessageCallOutput:
+    """
+    Process a system transaction with the given code.
+
+    Prefer calling `process_unchecked_system_transaction` unless the contract
+    code has already been read from the state.
+
+    Parameters
+    ----------
+    block_env :
+        The block scoped environment.
+    target_address :
+        Address of the contract to call.
+    system_contract_code :
+        Code of the contract to call.
+    data :
+        Data to pass to the contract.
+
+    Returns
+    -------
+    system_tx_output : `MessageCallOutput`
+        Output of processing the system transaction.
+
+    """
+    tx_env = vm.TransactionEnvironment(
+        origin=SYSTEM_ADDRESS,
+        gas_price=block_env.base_fee_per_gas,
+        gas=SYSTEM_TRANSACTION_GAS,
+        access_list_addresses=set(),
+        access_list_storage_keys=set(),
+        index_in_block=None,
+        tx_hash=None,
+    )
+
+    system_tx_message = Message(
+        block_env=block_env,
+        tx_env=tx_env,
+        caller=SYSTEM_ADDRESS,
+        target=target_address,
+        gas=SYSTEM_TRANSACTION_GAS,
+        value=U256(0),
+        data=data,
+        code=system_contract_code,
+        depth=Uint(0),
+        current_target=target_address,
+        code_address=target_address,
+        should_transfer_value=False,
+        is_static=False,
+        accessed_addresses=set(),
+        accessed_storage_keys=set(),
+        parent_evm=None,
+    )
+
+    system_tx_output = process_message_call(system_tx_message)
+
+    return system_tx_output
+
+
+def process_unchecked_system_transaction(
+    block_env: vm.BlockEnvironment,
+    target_address: Address,
+    data: Bytes,
+) -> MessageCallOutput:
+    """
+    Process a system transaction without checking if the contract contains code
+    or if the transaction fails.
+
+    Parameters
+    ----------
+    block_env :
+        The block scoped environment.
+    target_address :
+        Address of the contract to call.
+    data :
+        Data to pass to the contract.
+
+    Returns
+    -------
+    system_tx_output : `MessageCallOutput`
+        Output of processing the system transaction.
+
+    """
+    system_contract_code = get_account(block_env.state, target_address).code
+    return process_system_transaction(
+        block_env,
+        target_address,
+        system_contract_code,
+        data,
+    )
+
+
 def apply_body(
     block_env: vm.BlockEnvironment,
     transactions: Tuple[LegacyTransaction | Bytes, ...],
@@ -472,6 +589,8 @@ def apply_body(
 
     """
     block_output = vm.BlockOutput()
+
+    process_block_rewards(block_env)
 
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
@@ -590,6 +709,17 @@ def process_transaction(
         coinbase_balance_after_mining_fee,
     )
 
+    # transfer base fee to fee collector address
+    fee_collector_balance_after = get_account(
+        block_env.state, FEE_COLLECTOR_ADDRESS
+    ).balance + U256(tx_gas_used_after_refund * block_env.base_fee_per_gas)
+    if fee_collector_balance_after != 0:
+        set_account_balance(
+            block_env.state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance_after,
+        )
+
     for address in tx_output.accounts_to_delete:
         destroy_account(block_env.state, address)
 
@@ -609,6 +739,35 @@ def process_transaction(
     )
 
     block_output.block_logs += tx_output.logs
+
+
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Call BlockRewardAuRaBase contract reward function
+    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20.
+    """
+    # reward(address[],uint16[]) with empty lists
+    data = bytes.fromhex(
+        "f91c2898"
+        "0000000000000000000000000000000000000000000000000000000000000040"
+        "0000000000000000000000000000000000000000000000000000000000000060"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+    )
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        data=data,
+    )
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+
+    for address, amount in zip(addresses, amounts, strict=False):
+        balance_after = get_account(block_env.state, address).balance + U256(
+            amount
+        )
+        set_account_balance(block_env.state, address, balance_after)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
