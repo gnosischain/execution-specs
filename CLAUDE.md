@@ -69,6 +69,7 @@ There are two phases in the test pipeline: **fill** (generate fixtures from the 
 **Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Intended to consume fixtures against `go-ethereum-gnosis` via Hive (4 modes: Engine, RLP, Sync, Dev Mode). Currently broken: it downloads upstream Ethereum fixtures (`FIXTURES_URL`) instead of generating Gnosis fixtures via fill, so the state roots never match. Uses `gnosischain/hive` repo (branch `sync-eest`) and `gnosis.yaml` client config.
 
 **Manual hive workflows** (workflow_dispatch only, not automated on PRs):
+
 - `eest_hive_gnosis.yaml` — fill then consume against a single Gnosis client. This is the correct pattern.
 - `eest_hive_gnosis_multi_client.yaml` — fill once, then consume against 4 Gnosis clients (reth/geth/nethermind/erigon).
 
@@ -97,6 +98,7 @@ There are two phases in the test pipeline: **fill** (generate fixtures from the 
 The core of the codebase. Each Ethereum hard fork has its own package under `src/ethereum/forks/` (frontier, homestead, ..., paris, shanghai, cancun, prague, osaka, amsterdam). Forks are ordered chronologically and each builds incrementally on the previous one — only files that change between forks are present.
 
 Each fork package follows a consistent internal structure:
+
 - `__init__.py` — `FORK_CRITERIA` (activation by block number or timestamp)
 - `fork.py` — Block validation, transaction processing, state transition logic
 - `blocks.py` — Block, Header, Receipt dataclasses
@@ -105,9 +107,9 @@ Each fork package follows a consistent internal structure:
 - `trie.py` — Merkle Patricia trie implementation
 - `fork_types.py` — Address, Account, and other fork-specific types
 - `vm/` — EVM implementation
-  - `interpreter.py` — EVM execution loop
-  - `instructions/` — Opcodes by category (arithmetic, bitwise, memory, storage, stack, system)
-  - `precompiled_contracts/` — Precompile implementations
+    - `interpreter.py` — EVM execution loop
+    - `instructions/` — Opcodes by category (arithmetic, bitwise, memory, storage, stack, system)
+    - `precompiled_contracts/` — Precompile implementations
 
 ### Gnosis-Specific Modifications
 
@@ -123,7 +125,8 @@ Gnosis changes are documented in `fork.py` docstrings (search for "Gnosis diff")
 | Blob fee collection to `BLOB_FEE_COLLECTOR` | N/A | N/A | N/A | Yes | Yes |
 
 **Key constants** (consistent across forks):
-```
+
+```python
 SYSTEM_ADDRESS                  = 0xfffffffffffffffffffffffffffffffffffffffe
 SYSTEM_TRANSACTION_GAS          = 30_000_000
 BLOCK_REWARDS_CONTRACT_ADDRESS  = 0x2000000000000000000000000000000000000001

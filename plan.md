@@ -13,12 +13,14 @@ PR #2 (`gnosis-osaka` -> `master`) implements the Gnosis spec differences across
 **The correct pattern already exists** in `eest_hive_gnosis.yaml` (manual workflow): fill first, then consume. This needs to become an automated PR check.
 
 **Proposed approach**: Rework `hive-consume.yaml` to:
+
 1. Add a `fill` job that generates Gnosis fixtures using the EELS spec (same as `eest_hive_gnosis.yaml` line 72-73)
 2. Upload the generated fixtures as an artifact
 3. In the consume jobs (Engine/RLP/Sync/Dev Mode), download those fixtures instead of `FIXTURES_URL`
 4. Remove or replace the `FIXTURES_URL` env var pointing at `ethereum/execution-spec-tests`
 
 **Files to modify**:
+
 - `.github/workflows/hive-consume.yaml` — add fill job, wire artifacts, remove `FIXTURES_URL`
 
 **Alternative**: Merge `eest_hive_gnosis.yaml` logic into `hive-consume.yaml` and trigger it on PRs. The multi-client variant could remain manual.
@@ -26,17 +28,20 @@ PR #2 (`gnosis-osaka` -> `master`) implements the Gnosis spec differences across
 ### 2. Consider adding `gnosischain/specs` as a submodule
 
 **Rationale**: The Gnosis specs repo documents the delta from Ethereum. Adding it as a submodule at e.g. `specs/gnosis/` would:
+
 - Pin the spec version the implementation targets
 - Allow agents and developers to grep specs locally
 - Enable potential CI validation that `fork.py` docstrings stay in sync with specs
 
 **Steps**:
+
 - `git submodule add https://github.com/gnosischain/specs.git specs/gnosis`
 - Update `fork.py` "Gnosis diff" docstrings with references like `(ref: specs/gnosis/execution/withdrawals.md)`
 
 ### 3. Upstream rebase strategy
 
 The `gnosis-osaka` branch is based on upstream `forks/osaka`. As upstream evolves (Amsterdam fork, etc.), the branch needs periodic rebases. Key files that will conflict:
+
 - `fork.py` files (Gnosis modifications in Paris through Osaka)
 - `tox.ini` (fork range, disabled environments)
 - `.github/workflows/` (Gnosis-specific workflow changes)
@@ -47,6 +52,7 @@ The `gnosis-osaka` branch is based on upstream `forks/osaka`. As upstream evolve
 **Status**: Commented out with TODO. The pypy3 job exceeds GitHub Actions resource limits (exit 143 / SIGTERM).
 
 **Options**:
+
 - Reduce `--maxprocesses` (currently 7 in tox.ini) to lower memory pressure
 - Tune `PYPY_GC_MAX` / `PYPY_GC_MIN` env vars
 - Split into multiple jobs by fork range
