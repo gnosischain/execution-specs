@@ -17,6 +17,7 @@ from execution_testing import (
     Alloc,
     Block,
     BlockchainTestFiller,
+    Bytecode,
     Op,
 )
 from execution_testing.exceptions import BlockException
