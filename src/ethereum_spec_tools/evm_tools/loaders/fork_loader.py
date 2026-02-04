@@ -60,6 +60,16 @@ class ForkLoad:
         return self._module("fork").process_unchecked_system_transaction
 
     @property
+    def process_block_rewards(self) -> Any:
+        """process_block_rewards function of the given fork."""
+        return self._module("fork").process_block_rewards
+
+    @property
+    def has_process_block_rewards(self) -> bool:
+        """Check if the fork has a `process_block_rewards` function."""
+        return hasattr(self._module("fork"), "process_block_rewards")
+
+    @property
     def process_withdrawals(self) -> Any:
         """process_withdrawals function of the given fork."""
         return self._module("fork").process_withdrawals
@@ -99,6 +109,11 @@ class ForkLoad:
     def state_transition(self) -> Any:
         """state_transition function of the fork."""
         return self._module("fork").state_transition
+
+    @property
+    def SYSTEM_ADDRESS(self) -> Any:
+        """SYSTEM_ADDRESS of the fork."""
+        return self._module("fork").SYSTEM_ADDRESS
 
     @property
     def signing_hash(self) -> Any:
@@ -322,6 +337,11 @@ class ForkLoad:
     def trie_get(self) -> Any:
         """trie_get function of the fork."""
         return self._module("trie").trie_get
+
+    @property
+    def trie_set(self) -> Any:
+        """trie_set function of the fork."""
+        return self._module("trie").trie_set
 
     @property
     def hex_to_address(self) -> Any:

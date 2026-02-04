@@ -2995,7 +2995,7 @@ def test_set_code_to_system_contract(
     # Setup the initial storage of the account to mimic the system contract if
     # required
     match system_contract:
-        case Address(0x00000000219AB540356CBB839CBE05303D7705FA):  # EIP-6110
+        case Address(0xBABE2BED00000000000000000000000000000003):  # EIP-6110
             # Deposit contract needs specific storage values, so we set them on
             # the account
             auth_signer = pre.fund_eoa(
@@ -3015,7 +3015,7 @@ def test_set_code_to_system_contract(
         case Address(0x000F3DF6D732807EF1319FB7B8BB8522D0BEAC02):  # EIP-4788
             caller_payload = Hash(1)
             caller_code_storage[call_return_data_size_slot] = 32
-        case Address(0x00000000219AB540356CBB839CBE05303D7705FA):  # EIP-6110
+        case Address(0xBABE2BED00000000000000000000000000000003):  # EIP-6110
             # Fabricate a valid deposit request to the set-code account
             deposit_request = DepositRequest(
                 pubkey=0x01,
@@ -3051,6 +3051,20 @@ def test_set_code_to_system_contract(
             # subtracted from the latest block number
             caller_payload = Hash(1)
             caller_code_storage[call_return_data_size_slot] = 32
+        case Address(0x2000000000000000000000000000000000000001):
+            # Block rewards system contract (Gnosis-specific).
+            # Call reward(address[],uint16[]) with empty lists.
+            # Function selector: 0xf91c2898
+            # Returns (address[], uint256[]) - ABI encoded as 128 bytes (0x80)
+            caller_payload = bytes.fromhex(
+                "f91c2898"
+                "0000000000000000000000000000000000000000000000000000000000000040"
+                "0000000000000000000000000000000000000000000000000000000000000060"
+                "0000000000000000000000000000000000000000000000000000000000000000"
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            )
+            call_value = 0
+            caller_code_storage[call_return_data_size_slot] = 128
         case _:
             raise ValueError(
                 f"Not implemented system contract: {system_contract}"

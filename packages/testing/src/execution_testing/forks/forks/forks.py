@@ -2153,6 +2153,70 @@ class Paris(
         del block_number, timestamp
         return 1
 
+    @classmethod
+    def system_contracts(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> List[Address]:
+        """Paris introduces system contracts for block rewards and deposit handling."""  # noqa: E501
+        del block_number, timestamp
+        return [
+            Address(
+                0x2000000000000000000000000000000000000001,
+                label="BLOCK_REWARDS_CONTRACT_ADDRESS",
+            ),
+            Address(
+                0xBABE2BED00000000000000000000000000000003,
+                label="DEPOSIT_CONTRACT_ADDRESS",
+            ),
+        ]
+
+    @classmethod
+    def pre_allocation_blockchain(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> Mapping:
+        """
+        Paris requires pre-allocation of the block rewards contract and the
+        deposit contract for processing on blockchain type tests.
+        """
+        del block_number, timestamp
+
+        new_allocation = {}
+        with open(
+            CURRENT_FOLDER / "contracts" / "block_reward_contract.bin",
+            mode="rb",
+        ) as f:
+            new_allocation.update(
+                {
+                    0x2000000000000000000000000000000000000001: {
+                        "nonce": 1,
+                        "code": f.read(),
+                    }
+                }
+            )
+
+        # Add the beacon chain deposit contract
+        with open(
+            CURRENT_FOLDER / "contracts" / "deposit_contract.bin", mode="rb"
+        ) as f:
+            new_allocation.update(
+                {
+                    0xBABE2BED00000000000000000000000000000003: {
+                        "nonce": 1,
+                        "code": f.read(),
+                    }
+                }
+            )
+
+        # Pre-allocate system address with empty state
+        new_allocation[0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE] = {
+            "nonce": 0,
+            "balance": 0,
+            "code": b"",
+            "storage": {},
+        }
+
+        return new_allocation | super(Paris, cls).pre_allocation_blockchain()  # type: ignore
+
 
 class Shanghai(Paris):
     """Shanghai fork."""
@@ -2385,7 +2449,7 @@ class Cancun(Shanghai):
     ) -> int:
         """Return the minimum base fee per blob gas for Cancun."""
         del block_number, timestamp
-        return 1
+        return 1000000000
 
     @classmethod
     def blob_base_fee_update_fraction(
@@ -2393,7 +2457,7 @@ class Cancun(Shanghai):
     ) -> int:
         """Return the blob base fee update fraction for Cancun."""
         del block_number, timestamp
-        return 3338477
+        return 1112826
 
     @classmethod
     def blob_gas_per_blob(
@@ -2416,22 +2480,22 @@ class Cancun(Shanghai):
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
         """
-        Blobs are enabled starting from Cancun, with a static target of 3 blobs
+        Blobs are enabled starting from Cancun, with a static target of 1 blob
         per block.
         """
         del block_number, timestamp
-        return 3
+        return 1
 
     @classmethod
     def max_blobs_per_block(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
         """
-        Blobs are enabled starting from Cancun, with a static max of 6 blobs
+        Blobs are enabled starting from Cancun, with a static max of 2 blobs
         per block.
         """
         del block_number, timestamp
-        return 6
+        return 2
 
     @classmethod
     def blob_reserve_price_active(
@@ -2519,13 +2583,14 @@ class Cancun(Shanghai):
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> List[Address]:
         """Cancun introduces the system contract for EIP-4788."""
-        del block_number, timestamp
         return [
             Address(
                 0x000F3DF6D732807EF1319FB7B8BB8522D0BEAC02,
                 label="BEACON_ROOTS_ADDRESS",
             )
-        ]
+        ] + super(Cancun, cls).system_contracts(
+            block_number=block_number, timestamp=timestamp
+        )
 
     @classmethod
     def pre_allocation_blockchain(
@@ -2545,6 +2610,7 @@ class Cancun(Shanghai):
                 "5b62001fff42064281555f359062001fff015500",
             }
         }
+
         return new_allocation | super(Cancun, cls).pre_allocation_blockchain()  # type: ignore
 
     @classmethod
@@ -2639,11 +2705,11 @@ class Prague(Cancun):
     # update some blob constants
     BLOB_CONSTANTS = {
         **Cancun.BLOB_CONSTANTS,  # same base constants as cancun
-        "MAX_BLOBS_PER_BLOCK": 9,  # but overwrite or add these
-        "TARGET_BLOBS_PER_BLOCK": 6,
-        "MAX_BLOB_GAS_PER_BLOCK": 1179648,
-        "TARGET_BLOB_GAS_PER_BLOCK": 786432,
-        "BLOB_BASE_FEE_UPDATE_FRACTION": 5007716,
+        "MAX_BLOBS_PER_BLOCK": 2,  # but overwrite or add these
+        "TARGET_BLOBS_PER_BLOCK": 1,
+        "MAX_BLOB_GAS_PER_BLOCK": 262144,
+        "TARGET_BLOB_GAS_PER_BLOCK": 131072,
+        "BLOB_BASE_FEE_UPDATE_FRACTION": 1112826,
     }
 
     @classmethod
@@ -2698,35 +2764,6 @@ class Prague(Cancun):
             G_TX_DATA_FLOOR_TOKEN_COST=10,
             G_AUTHORIZATION=25_000,
             R_AUTHORIZATION_EXISTING_AUTHORITY=12_500,
-        )
-
-    @classmethod
-    def system_contracts(
-        cls, *, block_number: int = 0, timestamp: int = 0
-    ) -> List[Address]:
-        """
-        Prague introduces the system contracts for EIP-6110, EIP-7002, EIP-7251
-        and EIP-2935.
-        """
-        return [
-            Address(
-                0x00000000219AB540356CBB839CBE05303D7705FA,
-                label="DEPOSIT_CONTRACT_ADDRESS",
-            ),
-            Address(
-                0x00000961EF480EB55E80D19AD83579A64C007002,
-                label="WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS",
-            ),
-            Address(
-                0x0000BBDDC7CE488642FB579F8B00F3A590007251,
-                label="CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS",
-            ),
-            Address(
-                0x0000F90827F1C53A10CB7A02335B175320002935,
-                label="HISTORY_STORAGE_ADDRESS",
-            ),
-        ] + super(Prague, cls).system_contracts(
-            block_number=block_number, timestamp=timestamp
         )
 
     @classmethod
@@ -2867,23 +2904,47 @@ class Prague(Cancun):
     ) -> int:
         """Return the blob base fee update fraction for Prague."""
         del block_number, timestamp
-        return 5007716
+        return 1112826
 
     @classmethod
     def target_blobs_per_block(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
-        """Blobs in Prague, have a static target of 6 blobs per block."""
+        """Blobs in Prague, have a static target of 1 blob per block."""
         del block_number, timestamp
-        return 6
+        return 1
 
     @classmethod
     def max_blobs_per_block(
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
-        """Blobs in Prague, have a static max of 9 blobs per block."""
+        """Blobs in Prague, have a static max of 2 blobs per block."""
         del block_number, timestamp
-        return 9
+        return 2
+
+    @classmethod
+    def system_contracts(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> List[Address]:
+        """
+        Prague introduces system contracts for EIP-7002, EIP-7251 and EIP-2935.
+        """
+        return [
+            Address(
+                0x00000961EF480EB55E80D19AD83579A64C007002,
+                label="WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS",
+            ),
+            Address(
+                0x0000BBDDC7CE488642FB579F8B00F3A590007251,
+                label="CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS",
+            ),
+            Address(
+                0x0000F90827F1C53A10CB7A02335B175320002935,
+                label="HISTORY_STORAGE_ADDRESS",
+            ),
+        ] + super(Prague, cls).system_contracts(
+            block_number=block_number, timestamp=timestamp
+        )
 
     @classmethod
     def pre_allocation_blockchain(
@@ -2897,7 +2958,7 @@ class Prague(Cancun):
         del block_number, timestamp
         new_allocation = {}
 
-        # Add the beacon chain deposit contract
+        deposit_contract_address = 0xBABE2BED00000000000000000000000000000003
         deposit_contract_tree_depth = 32
         storage = {}
         next_hash = sha256(b"\x00" * 64).digest()
@@ -2908,18 +2969,19 @@ class Prague(Cancun):
             storage[i] = next_hash
             next_hash = sha256(next_hash + next_hash).digest()
 
-        with open(
-            CURRENT_FOLDER / "contracts" / "deposit_contract.bin", mode="rb"
-        ) as f:
-            new_allocation.update(
-                {
-                    0x00000000219AB540356CBB839CBE05303D7705FA: {
-                        "nonce": 1,
-                        "code": f.read(),
-                        "storage": storage,
-                    }
+        # Get the beacon chain deposit contract code from the parent allocation
+        parent_allocation = super(Prague, cls).pre_allocation_blockchain()
+        new_allocation.update(
+            {
+                deposit_contract_address: {
+                    "nonce": 1,
+                    "code": parent_allocation[deposit_contract_address][
+                        "code"
+                    ],
+                    "storage": storage,
                 }
-            )
+            }
+        )
 
         # EIP-7002: Add the withdrawal request contract
         with open(
@@ -3172,11 +3234,11 @@ class Osaka(Prague, solc_name="cancun"):
         cls, *, block_number: int = 0, timestamp: int = 0
     ) -> int:
         """
-        Blobs in Osaka, have a static max of 6 blobs per tx. Differs from the
+        Blobs in Osaka, have a static max of 2 blobs per tx. Differs from the
         max per block.
         """
         del block_number, timestamp
-        return 6
+        return 2
 
     @classmethod
     def blob_reserve_price_active(
