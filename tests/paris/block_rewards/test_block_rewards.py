@@ -23,9 +23,7 @@ from execution_testing.exceptions import BlockException
 
 pytestmark = pytest.mark.valid_from("Paris")
 
-BLOCK_REWARDS_CONTRACT = Address(
-    0x2000000000000000000000000000000000000001
-)
+BLOCK_REWARDS_CONTRACT = Address(0x2000000000000000000000000000000000000001)
 
 
 def get_minimal_rewards_contract_code():

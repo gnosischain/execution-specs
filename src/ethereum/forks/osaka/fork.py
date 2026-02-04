@@ -1067,9 +1067,7 @@ def process_withdrawals(
         data=bytes.fromhex("79d0c0bc") + payload,
     )
     if out.error:
-        raise InvalidBlock(
-            f"Withdrawal system call failed: {out.error}"
-        )
+        raise InvalidBlock(f"Withdrawal system call failed: {out.error}")
 
 
 def process_block_rewards(
@@ -1095,9 +1093,7 @@ def process_block_rewards(
         data=data,
     )
     if out.error:
-        raise InvalidBlock(
-            f"Block rewards system call failed: {out.error}"
-        )
+        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
 
     for address, amount in zip(addresses, amounts, strict=False):
