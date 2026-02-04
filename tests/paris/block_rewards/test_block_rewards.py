@@ -26,7 +26,7 @@ pytestmark = pytest.mark.valid_from("Paris")
 BLOCK_REWARDS_CONTRACT = Address(0x2000000000000000000000000000000000000001)
 
 
-def get_minimal_rewards_contract_code():
+def get_minimal_rewards_contract_code() -> Bytecode:
     """
     Return bytecode that returns empty arrays for reward().
 
