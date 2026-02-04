@@ -31,7 +31,7 @@ System transactions are special EVM calls made by `SYSTEM_ADDRESS` that bypass n
 
 ## Constants
 
-```
+```text
 SYSTEM_ADDRESS                    = 0xfffffffffffffffffffffffffffffffffffffffe
 SYSTEM_TRANSACTION_GAS            = 30_000_000
 BLOCK_REWARDS_CONTRACT_ADDRESS    = 0x2000000000000000000000000000000000000001
