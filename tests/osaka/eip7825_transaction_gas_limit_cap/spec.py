@@ -24,8 +24,7 @@ class Spec:
     """
 
     # Gas limit constants
-    # tx_gas_limit_cap = 2**24  # 16,777,216
-    tx_gas_limit_cap = 10000000
+    tx_gas_limit_cap = 2**24  # 16,777,216
 
     # Blob transaction constants
     blob_commitment_version_kzg = 1

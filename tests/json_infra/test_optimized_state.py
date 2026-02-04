@@ -29,7 +29,7 @@ except ImportError:
     pass
 
 
-ADDRESS_FOO = hex_to_address("0x00000000219ab540356cbb839cbe05303d7705fa")
+ADDRESS_FOO = hex_to_address("0xBABE2BED00000000000000000000000000000003")
 STORAGE_FOO = U256(101).to_be_bytes32()
 
 

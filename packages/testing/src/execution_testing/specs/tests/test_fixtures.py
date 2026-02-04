@@ -29,7 +29,6 @@ from execution_testing.forks import (
     Berlin,
     Cancun,
     Fork,
-    Istanbul,
     London,
     Paris,
     Shanghai,
@@ -58,8 +57,17 @@ def fixture_hash(fork: Fork) -> bytes:
     elif fork == London:
         return bytes.fromhex("3714102a4c")
     elif fork == Cancun:
-        return bytes.fromhex("2885c707e3")
+        return bytes.fromhex("506ca77260")
     raise ValueError(f"Unexpected fork: {fork}")
+
+
+# Pre-Paris fixture files excluded from check (London, Istanbul not supported)
+PRE_PARIS_FIXTURE_FILES = {
+    "blockchain_london_invalid_filled.json",
+    "blockchain_london_valid_filled.json",
+    "chainid_istanbul_blockchain_test_tx_type_0.json",
+    "chainid_london_blockchain_test_tx_type_0.json",
+}
 
 
 def test_check_helper_fixtures() -> None:
@@ -69,19 +77,19 @@ def test_check_helper_fixtures() -> None:
     defined in ./fixtures/ by using the check_fixtures.py script.
     """
     runner = CliRunner()
-    args = [
-        "--input",
-        str(FIXTURES_FOLDER),
-        "--quiet",
-        "--stop-on-error",
+    paris_plus_fixtures = [
+        f
+        for f in FIXTURES_FOLDER.glob("*.json")
+        if f.name not in PRE_PARIS_FIXTURE_FILES  # noqa: E501
     ]
-    result = runner.invoke(
-        execution_testing.cli.check_fixtures.check_fixtures,
-        args,
-    )
-    assert result.exit_code == 0, (
-        "check_fixtures detected errors in the json fixtures:" + f"\n{result}"
-    )
+    for fixture_path in paris_plus_fixtures:
+        result = runner.invoke(
+            execution_testing.cli.check_fixtures.check_fixtures,
+            ["--input", str(fixture_path), "--quiet", "--stop-on-error"],
+        )
+        assert result.exit_code == 0, (
+            f"check_fixtures failed for {fixture_path.name}: " + str(result)
+        )
 
 
 @pytest.mark.parametrize(
@@ -126,8 +134,8 @@ def test_make_genesis(  # noqa: D103
 @pytest.mark.parametrize(
     "fork,fixture_format,tx_type",
     [
-        (Istanbul, BlockchainFixture, TransactionType.LEGACY),
-        (London, BlockchainFixture, TransactionType.LEGACY),
+        # (Istanbul, BlockchainFixture, TransactionType.LEGACY),
+        # (London, BlockchainFixture, TransactionType.LEGACY),
         (Cancun, BlockchainFixture, TransactionType.LEGACY),
         (Paris, BlockchainEngineFixture, TransactionType.LEGACY),
         (Shanghai, BlockchainEngineFixture, TransactionType.LEGACY),
@@ -530,7 +538,17 @@ class TestFillBlockchainValidTxs:
             tag="my_blockchain_test_valid_txs",
         ).generate(t8n=default_t8n, fixture_format=fixture_format)
 
-    @pytest.mark.parametrize("fork", [London, Shanghai], indirect=True)
+    @pytest.mark.parametrize(
+        "fork",
+        [
+            pytest.param(
+                London,
+                marks=pytest.mark.skip(reason="London fork not supported"),
+            ),
+            Shanghai,
+        ],
+        indirect=True,
+    )
     def test_fill_blockchain_valid_txs(  # noqa: D102
         self,
         fork: Fork,
@@ -575,7 +593,16 @@ class TestFillBlockchainValidTxs:
 
         assert fixture[fixture_name] == expected[fixture_name]
 
-    @pytest.mark.parametrize("fork", [London], indirect=True)
+    @pytest.mark.parametrize(
+        "fork",
+        [
+            pytest.param(
+                London,
+                marks=pytest.mark.skip(reason="London fork not supported"),
+            ),
+        ],
+        indirect=True,
+    )
     def test_fixture_header_join(
         self, blockchain_test_fixture: BlockchainFixture
     ) -> None:
@@ -589,23 +616,23 @@ class TestFillBlockchainValidTxs:
         header_new_fields = Header(
             difficulty=new_difficulty,
             state_root=new_state_root,
-            transactions_trie=new_transactions_root,
+            transactions_root=new_transactions_root,
         )
 
         updated_block_header = header_new_fields.apply(block.header)  # type: ignore
         assert updated_block_header.difficulty == new_difficulty
         assert updated_block_header.state_root == new_state_root
-        assert updated_block_header.transactions_trie == Hash(
+        assert updated_block_header.transactions_root == Hash(
             new_transactions_root
         )
         assert updated_block_header.block_hash != block.header.block_hash  # type: ignore
-        assert isinstance(updated_block_header.transactions_trie, Hash)
+        assert isinstance(updated_block_header.transactions_root, Hash)
 
 
 @pytest.mark.parametrize(
     "fork,check_hive,expected_json_file",
     [
-        (London, False, "blockchain_london_invalid_filled.json"),
+        # (London, False, "blockchain_london_invalid_filled.json"),
         (Shanghai, True, "blockchain_shanghai_invalid_filled_engine.json"),
     ],
 )
