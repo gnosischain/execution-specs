@@ -9,9 +9,12 @@ and writes the generated fixtures to file.
 import atexit
 import configparser
 import datetime
+import gc
 import json
 import os
 import signal
+import sys
+import time
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +53,10 @@ from execution_testing.fixtures import (
     StateFixture,
     TestInfo,
     merge_partial_fixture_files,
+)
+from execution_testing.fixtures.pre_alloc_groups import (
+    _get_worker_id,
+    merge_partial_group_files,
 )
 from execution_testing.forks import (
     Fork,
@@ -402,13 +409,17 @@ class FillingSession:
         self.pre_alloc_group_builders.root[hash_key] = group_builder
 
     def save_pre_alloc_groups(self) -> None:
-        """Save pre-allocation groups to disk."""
+        """Save pre-allocation groups to disk as partial files."""
         if self.pre_alloc_group_builders is None:
             return
 
         pre_alloc_folder = self.fixture_output.pre_alloc_groups_folder_path
         pre_alloc_folder.mkdir(parents=True, exist_ok=True)
-        self.pre_alloc_group_builders.to_folder(pre_alloc_folder)
+        # Pass worker_id so each worker writes its own partial files
+        # (no lock contention). Master merges them after all workers finish.
+        self.pre_alloc_group_builders.to_folder(
+            pre_alloc_folder, worker_id=_get_worker_id()
+        )
 
 
 def calculate_post_state_diff(
@@ -901,21 +912,30 @@ def pytest_terminal_summary(
         session_instance: FillingSession = config.filling_session  # type: ignore[attr-defined]
         if session_instance.phase_manager.is_pre_alloc_generation:
             # Generate summary stats
-            pre_alloc_groups: PreAllocGroups
+            # For xdist, count files and accounts without fully loading groups
+            # (avoids expensive state_root computation just for summary stats)
             if config.pluginmanager.hasplugin("xdist"):
-                # Load pre-allocation groups from disk
-                pre_alloc_groups = PreAllocGroups.from_folder(
-                    config.fixture_output.pre_alloc_groups_folder_path,  # type: ignore[attr-defined]
-                    lazy_load=False,
+                pre_alloc_folder = (
+                    config.fixture_output.pre_alloc_groups_folder_path  # type: ignore[attr-defined]
                 )
+                group_files = list(pre_alloc_folder.glob("*.json"))
+                total_groups = len(group_files)
+                # Count accounts by loading as builder (no genesis computation)
+                total_accounts = 0
+                for group_file in group_files:
+                    builder = PreAllocGroupBuilder.model_validate_json(
+                        group_file.read_text()
+                    )
+                    total_accounts += builder.get_pre_account_count()
             else:
-                assert session_instance.pre_alloc_groups is not None
-                pre_alloc_groups = session_instance.pre_alloc_groups
-
-            total_groups = len(pre_alloc_groups.root)
-            total_accounts = sum(
-                group.pre_account_count for group in pre_alloc_groups.values()
-            )
+                assert session_instance.pre_alloc_group_builders is not None
+                total_groups = len(
+                    session_instance.pre_alloc_group_builders.root
+                )
+                total_accounts = sum(
+                    builder.get_pre_account_count()
+                    for builder in session_instance.pre_alloc_group_builders.root.values()  # noqa: E501
+                )
 
             terminalreporter.write_sep(
                 "=",
@@ -1746,13 +1766,45 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     - Generate index file for all produced fixtures.
     - Create tarball of the output directory if the output is a tarball.
     """
+
+    def _log_timing(msg: str) -> None:
+        """Log with timestamp and flush immediately for CI visibility."""
+        log_line = f"[sessionfinish] {time.strftime('%H:%M:%S')} {msg}"
+        # Print to stderr (unbuffered) for immediate CI visibility
+        print(log_line, file=sys.stderr, flush=True)
+
+    # Log immediately when hook is entered (before any early returns)
+    is_worker = xdist.is_xdist_worker(session)
+    _log_timing(f"pytest_sessionfinish ENTERED (worker={is_worker})")
+
     del exitstatus
 
     # Save pre-allocation groups after phase 1
     fixture_output: FixtureOutput = session.config.fixture_output  # type: ignore[attr-defined]
     session_instance: FillingSession = session.config.filling_session  # type: ignore[attr-defined]
     if session_instance.phase_manager.is_pre_alloc_generation:
+        _log_timing("Phase 1: saving pre-alloc groups (partial)...")
+        t0 = time.time()
         session_instance.save_pre_alloc_groups()
+        _log_timing(
+            f"Phase 1: save_pre_alloc_groups done in {time.time() - t0:.1f}s"
+        )
+
+        # Master merges all worker partial files after all workers finish
+        if not is_worker:
+            _log_timing("Phase 1 (master): merging partial group files...")
+            t0 = time.time()
+            pre_alloc_folder = fixture_output.pre_alloc_groups_folder_path
+            merge_partial_group_files(pre_alloc_folder)
+            _log_timing(
+                f"Phase 1 (master): merge done in {time.time() - t0:.1f}s"
+            )
+        else:
+            # Workers: clear in-memory state to reduce memory pressure while
+            # waiting for other workers to finish
+            session_instance.pre_alloc_group_builders = None
+            gc.collect()
+
         return
 
     if session.config.getoption("optimize_gas", False):
@@ -1771,21 +1823,44 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
                 json.dumps(gas_optimized_tests, indent=2, sort_keys=True)
             )
 
-    if xdist.is_xdist_worker(session):
+    if is_worker:
+        # Workers: clear in-memory state to reduce memory pressure while
+        # waiting for other workers to finish
+        session_instance.pre_alloc_groups = None
+        if hasattr(session.config, "fixture_collector"):
+            fc = session.config.fixture_collector
+            fc.all_fixtures.clear()
+            fc._fixtures_to_verify.clear()
+        gc.collect()
         return
 
     if fixture_output.is_stdout or is_help_or_collectonly_mode(session.config):
         return
 
+    _log_timing("Finalization (master): starting...")
+
     # Merge partial fixture files from all workers into final JSON files
+    _log_timing("merge_partial_fixture_files: starting...")
+    t0 = time.time()
     merge_partial_fixture_files(fixture_output.directory)
+    _log_timing(
+        f"merge_partial_fixture_files: done in {time.time() - t0:.1f}s"
+    )
 
     # Remove any lock files that may have been created.
+    _log_timing("Removing lock files...")
+    t0 = time.time()
     for file in fixture_output.directory.rglob("*.lock"):
         file.unlink()
+    _log_timing(f"Lock files removed in {time.time() - t0:.1f}s")
 
     # Verify fixtures after merge if verification is enabled
+    _log_timing("_verify_fixtures_post_merge: starting...")
+    t0 = time.time()
     _verify_fixtures_post_merge(session.config, fixture_output.directory)
+    _log_timing(
+        f"_verify_fixtures_post_merge: done in {time.time() - t0:.1f}s"
+    )
 
     # Generate index file for all produced fixtures by merging partial indexes.
     # Only merge if partial indexes were actually written (i.e., tests produced
@@ -1797,7 +1872,17 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     ):
         meta_dir = fixture_output.directory / ".meta"
         if meta_dir.exists() and any(meta_dir.glob("partial_index*.jsonl")):
+            _log_timing("merge_partial_indexes: starting...")
+            t0 = time.time()
             merge_partial_indexes(fixture_output.directory, quiet_mode=True)
+            _log_timing(
+                f"merge_partial_indexes: done in {time.time() - t0:.1f}s"
+            )
 
     # Create tarball of the output directory if the output is a tarball.
+    _log_timing("create_tarball: starting...")
+    t0 = time.time()
     fixture_output.create_tarball()
+    _log_timing(f"create_tarball: done in {time.time() - t0:.1f}s")
+
+    _log_timing("Finalization (master): COMPLETE")
