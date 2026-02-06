@@ -8,6 +8,7 @@ from execution_testing import (
     EOA,
     Address,
     Alloc,
+    Bytecode,
     BytesConcatenation,
     FixedIterationsBytecode,
     Fork,
@@ -221,32 +222,40 @@ def calculate_optimal_input_length(
     return optimal_input_length
 
 
-class MaxSizedContractInitcode(FixedIterationsBytecode):
+class CustomSizedContractInitcode(FixedIterationsBytecode):
     """
-    Initcode that deploys a random and maximum-sized contract for the given
-    fork's limits.
+    Initcode that deploys a random contract with a custom size.
+
+    If no contract size is provided, the maximum contract size for the given
+    fork is used.
     """
 
     _cached_address: Address
     """Cached address to avoid expensive recomputation."""
+    contract_size: int
+    """The size of the contract to deploy."""
 
-    def __new__(cls, *, pre: Alloc, fork: Fork) -> Self:
+    def __new__(
+        cls, *, pre: Alloc, fork: Fork, contract_size: int | None = None
+    ) -> Self:
         """
-        Create a new MaxSizedContractInitcode instance.
+        Create a new CustomSizedContractInitcode instance.
 
         Args:
             pre: The pre-allocation state where the contract will be
                 deployed.
             fork: The fork to use for determining maximum contract size
                 limits.
+            contract_size: The size of the contract to deploy. If None,
+                the maximum contract size for the fork is used.
 
         Returns:
-            A new MaxSizedContractInitcode instance.
+            A new CustomSizedContractInitcode instance.
 
         """
-        max_contract_size = fork.max_code_size()
+        if contract_size is None:
+            contract_size = fork.max_code_size()
         xor_table_byte_size = XOR_TABLE_SIZE * 32
-        iteration_count = ((max_contract_size - 32) // xor_table_byte_size) + 1
         setup = Op.MSTORE(
             0,
             Op.ADDRESS,
@@ -254,25 +263,33 @@ class MaxSizedContractInitcode(FixedIterationsBytecode):
             old_memory_size=0,
             new_memory_size=32,
         )
-        iterating = While(
-            body=(
-                Op.SHA3(Op.SUB(Op.MSIZE, 32), 32, data_size=32)
-                # Use a xor table to avoid having to call the "expensive" sha3
-                # opcode as much
-                + sum(
-                    (
-                        Op.PUSH32[xor_value]
-                        + Op.XOR
-                        + Op.DUP1
-                        + Op.MSIZE
-                        + Op.MSTORE
+        iterating: While | Bytecode
+        if contract_size > 32:
+            iteration_count = ((contract_size - 32) // xor_table_byte_size) + 1
+            iterating = While(
+                body=(
+                    Op.SHA3(Op.SUB(Op.MSIZE, 32), 32, data_size=32)
+                    # Use a xor table to avoid having to call the "expensive"
+                    # sha3 opcode as much
+                    + sum(
+                        (
+                            Op.PUSH32[xor_value]
+                            + Op.XOR
+                            + Op.DUP1
+                            + Op.MSIZE
+                            + Op.MSTORE
+                        )
+                        for xor_value in XOR_TABLE
                     )
-                    for xor_value in XOR_TABLE
-                )
-                + Op.POP
-            ),
-            condition=Op.LT(Op.MSIZE, max_contract_size),
-        )
+                    + Op.POP
+                ),
+                condition=Op.LT(Op.MSIZE, contract_size),
+            )
+            final_memory_size = (xor_table_byte_size * iteration_count) + 32
+        else:
+            iteration_count = 0
+            iterating = Bytecode()
+            final_memory_size = 32
         cleanup = (
             # Despite the whole contract has random bytecode, we need the first
             # opcode be a STOP so CALL-like attacks return as soon as possible.
@@ -280,15 +297,15 @@ class MaxSizedContractInitcode(FixedIterationsBytecode):
             # are always zero, so no need to do anything but return.
             Op.RETURN(
                 0,
-                max_contract_size,
+                contract_size,
                 # Gas accounting
-                code_deposit_size=max_contract_size,
+                code_deposit_size=contract_size,
                 # Memory is not expanded here, but it is expanded in the loop.
                 old_memory_size=32,
-                new_memory_size=(xor_table_byte_size * iteration_count) + 32,
+                new_memory_size=final_memory_size,
             )
         )
-        instance = super(MaxSizedContractInitcode, cls).__new__(
+        instance = super(CustomSizedContractInitcode, cls).__new__(
             cls,
             setup=setup,
             iterating=iterating,
@@ -301,6 +318,7 @@ class MaxSizedContractInitcode(FixedIterationsBytecode):
             initcode=Initcode(deploy_code=instance),
             fork=fork,
         )
+        instance.contract_size = contract_size
         deployed_address = pre.deterministic_deploy_contract(
             deploy_code=instance
         )
@@ -312,39 +330,49 @@ class MaxSizedContractInitcode(FixedIterationsBytecode):
         return self._cached_address
 
 
-class MaxSizedContractFactory(IteratingBytecode):
+class CustomSizedContractFactory(IteratingBytecode):
     """
-    Factory contract that creates maximum-sized contracts.
+    Factory contract that creates contracts with a custom size.
 
     The contract takes two 32-byte arguments in the calldata:
     - start_index: the starting index of the contract to deploy
     - end_index: the ending index of the contract to deploy
 
-    The contract will deploy a maximum-sized contract for each index in the
-    range, inclusive.
+    The contract will deploy a contract for each index in the range, inclusive.
+
+    If no contract size is provided, the maximum contract size for the given
+    fork is used.
     """
 
-    initcode: MaxSizedContractInitcode
-    """The initcode used to deploy maximum-sized contracts via CREATE2."""
+    initcode: CustomSizedContractInitcode
+    """The initcode used to deploy contracts via CREATE2."""
 
     _cached_address: Address
     """Cached address to avoid expensive recomputation."""
+    contract_size: int
+    """The size of the contracts to deploy."""
 
-    def __new__(cls, *, pre: Alloc, fork: Fork) -> Self:
+    def __new__(
+        cls, *, pre: Alloc, fork: Fork, contract_size: int | None = None
+    ) -> Self:
         """
-        Create a new MaxSizedContractFactory instance.
+        Create a new CustomSizedContractFactory instance.
 
         Args:
             pre: The pre-allocation state where the factory will be
                 deployed.
             fork: The fork to use for gas calculations and contract
                 size limits.
+            contract_size: The size of the contracts to deploy. If None,
+                the maximum contract size for the fork is used.
 
         Returns:
-            A new MaxSizedContractFactory instance.
+            A new CustomSizedContractFactory instance.
 
         """
-        initcode = MaxSizedContractInitcode(pre=pre, fork=fork)
+        initcode = CustomSizedContractInitcode(
+            pre=pre, fork=fork, contract_size=contract_size
+        )
         initcode_address = initcode.address()
         setup = (
             Op.EXTCODECOPY(
@@ -373,15 +401,10 @@ class MaxSizedContractFactory(IteratingBytecode):
                     init_code_size=len(initcode),
                 )
             ),
-            condition=Op.PUSH1(1)
-            + Op.ADD
-            + Op.DUP1
-            + Op.DUP3
-            + Op.LT
-            + Op.ISZERO,
+            condition=Op.PUSH1(1) + Op.ADD + Op.DUP1 + Op.DUP3 + Op.GT,
         )
         cleanup = Op.STOP
-        instance = super(MaxSizedContractFactory, cls).__new__(
+        instance = super(CustomSizedContractFactory, cls).__new__(
             cls,
             setup=setup,
             iterating=iterating,
@@ -395,6 +418,7 @@ class MaxSizedContractFactory(IteratingBytecode):
             initcode=Initcode(deploy_code=instance),
             fork=fork,
         )
+        instance.contract_size = initcode.contract_size
         deployed_address = pre.deterministic_deploy_contract(
             deploy_code=instance
         )
