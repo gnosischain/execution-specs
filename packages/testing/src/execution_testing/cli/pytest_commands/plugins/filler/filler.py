@@ -30,9 +30,9 @@ from pytest_metadata.plugin import metadata_key
 from execution_testing.base_types import (
     Account,
     Address,
-    Alloc,
     ReferenceSpec,
 )
+from execution_testing.base_types import Alloc as BaseAlloc
 from execution_testing.cli.gen_index import (
     merge_partial_indexes,
 )
@@ -81,6 +81,7 @@ from ..spec_version_checker.spec_version_checker import (
     get_ref_spec_from_module,
 )
 from .fixture_output import FixtureOutput
+from .pre_alloc import Alloc
 
 # Fixture output dir for keyboard interrupt cleanup (set in pytest_configure).
 # Used by _merge_on_exit to merge partial JSONL files on Ctrl+C or SIGTERM.
@@ -423,8 +424,8 @@ class FillingSession:
 
 
 def calculate_post_state_diff(
-    post_state: Alloc, genesis_state: Alloc
-) -> Alloc:
+    post_state: BaseAlloc, genesis_state: BaseAlloc
+) -> BaseAlloc:
     """
     Calculate the state difference between post_state and genesis_state.
 
@@ -470,7 +471,7 @@ def calculate_post_state_diff(
 
         # Account unchanged - don't include in diff
 
-    return Alloc(diff)
+    return BaseAlloc(diff)
 
 
 def default_output_directory() -> str:
@@ -1478,24 +1479,52 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
 
                 # Get the filling session from config
                 session: FillingSession = request.config.filling_session  # type: ignore
+                assert isinstance(session, FillingSession)
 
+                group_salt: str | None = None
+                if pre_alloc_group_marker := request.node.get_closest_marker(
+                    "pre_alloc_group"
+                ):
+                    # Get the group name/salt from marker args
+                    if pre_alloc_group_marker.args:
+                        group_salt = str(pre_alloc_group_marker.args[0])
+                    else:
+                        # We got the marker but unspecified, pass test name
+                        group_salt = request.node.nodeid
+
+                pre_alloc_hash: str | None = None
                 # Phase 1: Generate pre-allocation groups
                 if session.phase_manager.is_pre_alloc_generation:
                     # Use the original update_pre_alloc_groups method which
                     # returns the groups
-                    self.update_pre_alloc_groups(
-                        session.pre_alloc_group_builders, request.node.nodeid
+                    assert session.pre_alloc_group_builders is not None
+                    test_id = str(request.node.nodeid)
+                    genesis_environment = self.get_genesis_environment()
+                    pre_alloc_hash = pre.compute_pre_alloc_group_hash(
+                        fork=fork,
+                        genesis_environment=genesis_environment,
+                        group_salt=group_salt,
+                    )
+                    session.pre_alloc_group_builders.add_test_pre(
+                        pre_alloc_hash=pre_alloc_hash,
+                        test_id=test_id,
+                        fork=fork,
+                        environment=genesis_environment,
+                        pre=pre,
                     )
                     return  # Skip fixture generation in phase 1
 
                 # Phase 2: Use pre-allocation groups (only for
                 # BlockchainEngineXFixture)
-                pre_alloc_hash = None
                 if (
                     FixtureFillingPhase.PRE_ALLOC_GENERATION
                     in fixture_format.format_phases
                 ):
-                    pre_alloc_hash = self.compute_pre_alloc_group_hash()
+                    pre_alloc_hash = pre.compute_pre_alloc_group_hash(
+                        fork=fork,
+                        genesis_environment=self.get_genesis_environment(),
+                        group_salt=group_salt,
+                    )
                     group = session.get_pre_alloc_group(pre_alloc_hash)
                     self.pre = group.pre
                 try:
