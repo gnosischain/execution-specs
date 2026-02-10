@@ -1,4 +1,4 @@
-# Unless filling for special features, all features should fill for previous forks (starting from Frontier) too
+# Unless filling for special features, all features should fill for previous forks (starting from Paris) too
 stable:
   evm-type: stable
   fill-params: --until=Prague --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest

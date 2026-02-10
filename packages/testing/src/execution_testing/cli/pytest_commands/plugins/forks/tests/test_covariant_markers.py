@@ -251,7 +251,7 @@ import pytest
             def test_case(state_test, system_contract):
                 pass
             """,
-            {"passed": 1, "failed": 0, "skipped": 0, "errors": 0},
+            {"passed": 3, "failed": 0, "skipped": 0, "errors": 0},
             None,
             id="with_all_system_contracts",
         ),

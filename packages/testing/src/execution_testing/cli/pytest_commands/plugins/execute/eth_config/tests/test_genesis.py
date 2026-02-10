@@ -47,12 +47,12 @@ def genesis_contents(genesis_file_name: str) -> str:
         pytest.param(
             "genesis_example.json",
             Hash(
-                0x3A8C8CEF63859865AA1D40DED77B083EEF06A1702B8188D5586434B9C3ADC4BE
+                0xB812FD2B9086D9F3DD3F5C39E836CC910AF08EB21D326CABCBD41F852299A091
             ),
             NetworkConfig(
                 chain_id=7023102237,
                 genesis_hash=Hash(
-                    0x3A8C8CEF63859865AA1D40DED77B083EEF06A1702B8188D5586434B9C3ADC4BE
+                    0xB812FD2B9086D9F3DD3F5C39E836CC910AF08EB21D326CABCBD41F852299A091
                 ),
                 fork_activation_times=ForkActivationTimes(
                     root={

@@ -1,62 +1,185 @@
 # CLAUDE.md
 
-Ethereum Execution Layer Specification written in Python. This is a **specification**, not production code — readability over performance.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Tooling
+## Project Overview
 
-- **uv** is the package manager. **tox** orchestrates test environments (`uvx tox -al`).
-- The `execution_testing` package under `packages/testing/` is a UV workspace member.
+This is the **Gnosis chain fork** of the Ethereum Execution Layer Specifications (EELS) — a Python reference implementation of Ethereum's execution client. It prioritizes readability and correctness over performance. The Gnosis fork adds chain-specific logic (base fee collection, block rewards contract minting, modified withdrawals via system calls).
 
-## Linting
+Current branch `gnosis-osaka` tracks upstream through the Osaka hard fork. The `master` branch is the main branch. The open PR is #2 (`gnosis-osaka` -> `master`).
 
-When done with changes, ask the user if they'd like to run `/lint` before committing. Don't skip this unless the user explicitly says to.
+Gnosis specs are documented at https://github.com/gnosischain/specs (execution layer specs in `execution/` directory). The spec approach is delta-based: only differences from Ethereum are documented.
 
-## Code Style
+## Build and Development
 
-- 79 char lines, strict mypy, `pathlib` over `os.path`
-- `snake_case` for variables/functions, `PascalCase` for classes, `UPPER_CASE` for constants
-- Docstrings: imperative mood ("Return" not "Returns"), blank line after summary for multi-line
-- Descriptive English names — avoid EIP numbers in identifiers
-- Custom spell-check dictionary: `whitelist.txt`
+Requires: Python 3.11+, `uv` (>=0.7.0), `geth` in `$PATH`. PyPy 7.3.19+ needed for full CI.
+
+If system Python is < 3.11, install via `uv python install 3.11` and prefix tox commands with `UV_PYTHON_PREFERENCE=managed UV_PYTHON=3.11`.
+
+```bash
+# Clone with submodules (required for shared test fixtures)
+git clone --recursive <repo-url>
+# Or fetch submodules after clone
+git submodule update --init --recursive
+```
+
+### Common Commands
+
+```bash
+# Run all tox environments (full CI suite)
+uvx --with=tox-uv tox
+
+# Run all checks in parallel
+uvx --with=tox-uv tox run-parallel
+
+# Static analysis only (codespell, ruff, mypy, ethereum-spec-lint, actionlint)
+uvx --with=tox-uv tox -e static
+
+# Fill tests (main test suite, Paris through Osaka)
+uvx --with=tox-uv tox -e py3
+
+# Run a specific test with pytest
+uv run pytest tests/path/to/test.py::test_name -n auto --maxprocesses 6
+
+# Run a single state test with EVM trace (useful for debugging)
+uv run pytest 'tests/json_infra/test_state_tests.py::test_state_tests_frontier[stAttackTest - ContractCreationSpam - 0]' --evm_trace
+
+# Lint and format
+uv run ruff check              # check for issues
+uv run ruff check --fix        # auto-fix fixable issues
+uv run ruff format             # format code
+uv run mypy                    # type checking
+
+# Build spec documentation
+uvx --with=tox-uv tox -e spec-docs
+
+# Serve docs locally (localhost:8000)
+uv run mkdocs serve
+
+# Install pre-commit hooks
+uvx pre-commit install
+```
+
+### CI Workflows (`.github/workflows/`)
+
+There are two phases in the test pipeline: **fill** (generate fixtures from the EELS spec — proves spec is internally consistent) and **consume** (feed fixtures to a real client via Hive — proves client compatibility). Currently only fill runs automatically on PRs; consume has no working automated PR gate.
+
+**Core test pipeline** (`test.yaml`): Runs on PRs. Fill only — no consume. Jobs: `static`, `py3` (fill Paris->Osaka), `pypy3`, `tests_pytest_py3`, `tests_pytest_pypy3`. Setup action (`.github/actions/setup-env/`) installs Rust, build-essential, tox, and downloads geth.
+
+**Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Intended to consume fixtures against `go-ethereum-gnosis` via Hive (4 modes: Engine, RLP, Sync, Dev Mode). Currently broken: it downloads upstream Ethereum fixtures (`FIXTURES_URL`) instead of generating Gnosis fixtures via fill, so the state roots never match. Uses `gnosischain/hive` repo (branch `sync-eest`) and `gnosis.yaml` client config.
+
+**Manual hive workflows** (workflow_dispatch only, not automated on PRs):
+
+- `eest_hive_gnosis.yaml` — fill then consume against a single Gnosis client. This is the correct pattern.
+- `eest_hive_gnosis_multi_client.yaml` — fill once, then consume against 4 Gnosis clients (reth/geth/nethermind/erigon).
+
+**All workflow files:**
+
+| File                               | Trigger                           | What it does                                                                       |
+|------------------------------------|-----------------------------------|------------------------------------------------------------------------------------|
+| test.yaml                          | PR, push to master                | Core pipeline: static checks, py3 fill, pypy3 fill, framework unit tests           |
+| test-docs.yaml                     | PR, push                          | mkdocs build, markdownlint, changelog validation                                   |
+| hive-consume.yaml                  | PR (hive paths), push to forks/** | Hive integration: Engine/RLP/Sync simulators + Dev Mode against go-ethereum-gnosis  |
+| benchmark.yaml                     | push to forks/**                  | Gas benchmarks, fixed opcode benchmarks                                            |
+| eest_hive_gnosis.yaml              | manual                            | Fill + consume against a single Gnosis client                                      |
+| eest_hive_gnosis_multi_client.yaml | manual                            | Fill once, then consume against 4 Gnosis clients (reth/geth/nethermind/erigon)     |
+| eest_hive_matrix.yaml              | manual                            | Upstream hive matrix testing                                                       |
+| run_eest_remote.yaml               | manual                            | Run EEST tests on a remote machine                                                 |
+| release_fixture_full.yaml          | manual                            | Generate and publish full fixture releases                                         |
+| release_fixture_feature.yaml       | manual                            | Generate fixtures for a feature branch                                             |
+| gh-pages.yaml                      | push to master                    | Deploy spec docs to GitHub Pages                                                   |
+| eip-rebase.yaml                    | manual                            | Rebase EIP feature branches                                                        |
+| update-devnet-branch.yaml          | manual                            | Update devnet branches                                                             |
 
 ## Architecture
 
-- Each fork under `src/ethereum/forks/` is a **complete copy** of its predecessor (WET principle). Do NOT abstract across forks.
-- Import isolation (enforced by `ethereum-spec-lint`): relative imports within a fork, absolute from previous fork only, shared modules (`ethereum.crypto`, `ethereum.utils`) always OK. Never import from future or ancient (2+ back) forks.
+### Fork Structure (`src/ethereum/forks/`)
 
-## Branches
+The core of the codebase. Each Ethereum hard fork has its own package under `src/ethereum/forks/` (frontier, homestead, ..., paris, shanghai, cancun, prague, osaka, amsterdam). Forks are ordered chronologically and each builds incrementally on the previous one — only files that change between forks are present.
 
-- **There is no `main` branch.** Default branch = most active fork (currently `forks/amsterdam`). Run `git remote show origin | grep HEAD` to check.
-- `mainnet` = stable specs for forks live on mainnet
-- PRs target the default branch
+Each fork package follows a consistent internal structure:
 
-## PR Reviews
+- `__init__.py` — `FORK_CRITERIA` (activation by block number or timestamp)
+- `fork.py` — Block validation, transaction processing, state transition logic
+- `blocks.py` — Block, Header, Receipt dataclasses
+- `transactions.py` — Transaction types and encoding/decoding
+- `state.py` — State management and account operations
+- `trie.py` — Merkle Patricia trie implementation
+- `fork_types.py` — Address, Account, and other fork-specific types
+- `vm/` — EVM implementation
+    - `interpreter.py` — EVM execution loop
+    - `instructions/` — Opcodes by category (arithmetic, bitwise, memory, storage, stack, system)
+    - `precompiled_contracts/` — Precompile implementations
 
-When reviewing PRs that implement or test EIPs:
+### Gnosis-Specific Modifications
 
-1. Identify the EIP number(s) from the branch name, PR title, or changed file paths
-2. Fetch each EIP spec from `https://eips.ethereum.org/EIPS/eip-<number>` before starting the review
-3. Verify the implementation matches the EIP's specification requirements
+Gnosis changes are documented in `fork.py` docstrings (search for "Gnosis diff"). All forks Paris through Osaka are fully implemented.
 
-## When to Use Skills
+**Per-fork Gnosis features:**
 
-- Writing or modifying tests → run `/write-test` first
-- Filling test fixtures → run `/fill-tests` first
-- Implementing an EIP or modifying fork code in `src/` → run `/implement-eip` first
-- Modifying GitHub Actions workflows → run `/edit-workflow` first
-- Assessing EIP complexity or scope → run `/assess-eip`
-- Working on EIP test coverage or checklists → run `/eip-checklist` first
-- Checking if config/skills are stale → run `/audit-config`
-- Done with changes and ready to lint → run `/lint`
+| Feature | Paris | Shanghai | Cancun | Prague | Osaka |
+|---|---|---|---|---|---|
+| Base fee collection to `FEE_COLLECTOR_ADDRESS` | Yes | Yes | Yes | Yes | Yes |
+| Block rewards system call (`BLOCK_REWARDS_CONTRACT_ADDRESS`) | Yes | Yes | Yes | Yes | Yes |
+| Withdrawals via system call to `DEPOSIT_CONTRACT_ADDRESS` | N/A | Yes | Yes | Yes | Yes |
+| Blob fee collection to `BLOB_FEE_COLLECTOR` | N/A | N/A | N/A | Yes | Yes |
 
-## Available Skills
+**Key constants** (consistent across forks):
 
-- `/write-test` — test writing patterns, fixtures, markers, bytecode helpers
-- `/fill-tests` — `fill` CLI reference, flags, debugging, benchmark tests
-- `/implement-eip` — fork structure, import rules, adding opcodes/precompiles/tx types
-- `/edit-workflow` — GitHub Actions conventions and version pinning
-- `/assess-eip` — structured EIP complexity assessment
-- `/eip-checklist` — EIP testing checklist system for tracking coverage
-- `/lint` — full static analysis suite with auto-fix workflow
-- `/audit-config` — verify CLAUDE.md and skills are still accurate
-- `/grammar-check` — audit grammar in documentation and code comments
+```python
+SYSTEM_ADDRESS                  = 0xfffffffffffffffffffffffffffffffffffffffe
+SYSTEM_TRANSACTION_GAS          = 30_000_000
+BLOCK_REWARDS_CONTRACT_ADDRESS  = 0x2000000000000000000000000000000000000001
+DEPOSIT_CONTRACT_ADDRESS        = 0xbabe2bed00000000000000000000000000000003
+FEE_COLLECTOR_ADDRESS           = 0x1559000000000000000000000000000000000000
+BLOB_FEE_COLLECTOR              = 0x1559000000000000000000000000000000000000
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
+```
+
+**Gnosis-specific limits** (Osaka): `BLOB_COUNT_LIMIT = 2`, `MAX_BLOB_GAS_PER_BLOCK = 262144`.
+
+**System transaction pattern**: `process_block_rewards()` calls reward contract with selector `f91c2898`, decodes `(address[], uint256[])` response. `process_withdrawals()` calls deposit contract with selector `79d0c0bc` and ABI-encoded withdrawal data.
+
+**Spec references**: See `gnosischain/specs` repo — `execution/posdao-post-merge.md` (block rewards), `execution/withdrawals.md` (withdrawal system calls).
+
+### Other Source Packages
+
+- `src/ethereum_spec_tools/` — CLI tools: linter (`lint/`), sync tool, new fork scaffolding (`new_fork/`), EVM tools (`evm_tools/` — t8n transition tool, b11r, state tests)
+- `src/ethereum_optimized/` — Performance-optimized alternative implementations
+- `src/ethereum/crypto/` — Cryptographic primitives (keccak256, ECDSA, BLS, KZG)
+- `src/ethereum/utils/` — Shared utilities (hex, numeric, byte operations)
+- `packages/testing/` — Separate workspace package (`ethereum-execution-testing`) for test generation framework
+
+### Gnosis-Specific Tool Modifications
+
+- `src/ethereum_spec_tools/evm_tools/t8n/__init__.py` — Calls `process_block_rewards()` if fork supports it; manually builds withdrawals trie and calls `process_withdrawals()` for system calls
+- `src/ethereum_spec_tools/evm_tools/loaders/fork_loader.py` — Added properties: `process_block_rewards()`, `has_process_block_rewards`, `SYSTEM_ADDRESS`
+- `src/ethereum_spec_tools/evm_tools/loaders/fixture_loader.py` — Allows `SYSTEM_ADDRESS` as empty account in PoS forks
+
+### Type System
+
+Uses `ethereum-types` package for domain types: `U256`, `Uint`, `Bytes`, `Address`, etc. Full type annotations throughout; mypy runs in strict mode.
+
+## Code Conventions
+
+- **Line length**: 79 characters (enforced by ruff)
+- **Max cyclomatic complexity**: 7
+- **Imports**: explicit only (no star imports), relative within packages
+- **Docstrings**: Google-style, imperative mood ("Return" not "Returns")
+- **Naming**: Avoid EIP numbers in identifiers; use descriptive English words
+- **Cross-fork changes**: Keep differences between forks minimal for clean diffs. When modifying multiple forks, start with one fork, get feedback, then propagate
+- **Patch tool**: Use `python src/ethereum_spec_tools/patch_tool.py <source_fork> <target_fork1> <target_fork2>` to propagate unstaged changes across forks
+- **Custom dictionary**: `whitelist.txt` for codespell exceptions
+
+## Current Status (as of 2026-02-03)
+
+**PR #2** (`gnosis-osaka` -> `master`): "Implement Gnosis spec post-shangai on forks/osaka"
+
+- `static`: PASS (all lint/type checks)
+- `py3`: PASS (50,738 tests, Paris->Osaka)
+- `tests_pytest_py3` / `tests_pytest_pypy3`: PASS
+- `pypy3`: FAIL — exit code 143 (killed by CI, timeout/OOM, not a test failure)
+- Hive Engine/RLP/Sync: FAIL — Docker cache miss (ephemeral runners can't reliably share week-based cache keys)
+- Hive Dev Mode: FAIL — merkle root mismatch because it uses **upstream Ethereum fixtures** (`FIXTURES_URL` points to `ethereum/execution-spec-tests`) against a Gnosis-configured client
+
+See `plan.md` for pending tasks.
