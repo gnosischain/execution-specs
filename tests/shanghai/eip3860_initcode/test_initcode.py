@@ -46,7 +46,6 @@ def initcode(fork: Fork, initcode_name: str) -> Initcode:
     if initcode_name == "max_size_ones":
         return Initcode(
             name=initcode_name,
-            fork=fork,
             deploy_code=INITCODE_RESULTING_DEPLOYED_CODE,
             initcode_length=fork.max_initcode_size(),
             padding_byte=0x01,
@@ -54,7 +53,6 @@ def initcode(fork: Fork, initcode_name: str) -> Initcode:
     elif initcode_name == "max_size_zeros":
         return Initcode(
             name=initcode_name,
-            fork=fork,
             deploy_code=INITCODE_RESULTING_DEPLOYED_CODE,
             initcode_length=fork.max_initcode_size(),
             padding_byte=0x00,
@@ -62,7 +60,6 @@ def initcode(fork: Fork, initcode_name: str) -> Initcode:
     elif initcode_name == "over_limit_ones":
         return Initcode(
             name=initcode_name,
-            fork=fork,
             deploy_code=INITCODE_RESULTING_DEPLOYED_CODE,
             initcode_length=fork.max_initcode_size() + 1,
             padding_byte=0x01,
@@ -70,7 +67,6 @@ def initcode(fork: Fork, initcode_name: str) -> Initcode:
     elif initcode_name == "over_limit_zeros":
         return Initcode(
             name=initcode_name,
-            fork=fork,
             deploy_code=INITCODE_RESULTING_DEPLOYED_CODE,
             initcode_length=fork.max_initcode_size() + 1,
             padding_byte=0x00,
@@ -78,7 +74,6 @@ def initcode(fork: Fork, initcode_name: str) -> Initcode:
     elif initcode_name == "32_bytes":
         return Initcode(
             name=initcode_name,
-            fork=fork,
             deploy_code=INITCODE_RESULTING_DEPLOYED_CODE,
             initcode_length=32,
             padding_byte=0x00,
@@ -86,7 +81,6 @@ def initcode(fork: Fork, initcode_name: str) -> Initcode:
     elif initcode_name == "33_bytes":
         return Initcode(
             name=initcode_name,
-            fork=fork,
             deploy_code=INITCODE_RESULTING_DEPLOYED_CODE,
             initcode_length=33,
             padding_byte=0x00,
@@ -94,7 +88,6 @@ def initcode(fork: Fork, initcode_name: str) -> Initcode:
     elif initcode_name == "max_size_minus_word":
         return Initcode(
             name=initcode_name,
-            fork=fork,
             deploy_code=INITCODE_RESULTING_DEPLOYED_CODE,
             initcode_length=fork.max_initcode_size() - 32,
             padding_byte=0x00,
@@ -102,22 +95,16 @@ def initcode(fork: Fork, initcode_name: str) -> Initcode:
     elif initcode_name == "max_size_minus_word_plus_byte":
         return Initcode(
             name=initcode_name,
-            fork=fork,
             deploy_code=INITCODE_RESULTING_DEPLOYED_CODE,
             initcode_length=fork.max_initcode_size() - 32 + 1,
             padding_byte=0x00,
         )
-    elif initcode_name == "empty":
-        ic = Initcode(name=initcode_name, fork=fork)
-        ic._bytes_ = bytes()
-        ic.deployment_gas = 0
-        ic.execution_gas = 0
-        return ic
-    elif initcode_name == "single_byte":
-        ic = Initcode(name=initcode_name, fork=fork)
-        ic._bytes_ = bytes(Op.STOP)
-        ic.deployment_gas = 0
-        ic.execution_gas = 0
+    elif initcode_name == "empty" or initcode_name == "single_byte":
+        ic_bytecode = Op.STOP if initcode_name == "single_byte" else Bytecode()
+        # We insist on using `Initcode` to preserve `initcode.deploy_code`
+        ic = Initcode(name=initcode_name)
+        ic._bytes_ = bytes(ic_bytecode)
+        ic.opcode_list = ic_bytecode.opcode_list
         return ic
     else:
         raise ValueError(f"Unknown initcode_name: {initcode_name}")
@@ -284,16 +271,12 @@ class TestContractCreationGasUsage:
 
     @pytest.fixture
     def exact_execution_gas(
-        self, exact_intrinsic_gas: int, initcode: Initcode
+        self, fork: Fork, exact_intrinsic_gas: int, initcode: Initcode
     ) -> int:
         """
         Calculate total execution gas cost.
         """
-        return (
-            exact_intrinsic_gas
-            + initcode.deployment_gas
-            + initcode.execution_gas
-        )
+        return exact_intrinsic_gas + initcode.gas_cost(fork)
 
     @pytest.fixture
     def tx_error(self, gas_test_case: str) -> TransactionException | None:
@@ -517,23 +500,16 @@ class TestCreateInitcode:
         )
 
     @pytest.fixture
-    def contract_creation_gas_cost(self, fork: Fork, opcode: Op) -> int:
+    def contract_creation_gas_cost(
+        self, fork: Fork, opcode: Op, create2_salt: int
+    ) -> int:
         """Calculate gas cost of the contract creation operation."""
-        gas_costs = fork.gas_costs()
-
-        create_contract_base_gas = gas_costs.G_CREATE
-        gas_opcode_gas = gas_costs.G_BASE
-        push_dup_opcode_gas = gas_costs.G_VERY_LOW
-        calldatasize_opcode_gas = gas_costs.G_BASE
-        contract_creation_gas_usage = (
-            create_contract_base_gas
-            + gas_opcode_gas
-            + (2 * push_dup_opcode_gas)
-            + calldatasize_opcode_gas
+        create_code = (
+            opcode(size=Op.CALLDATASIZE, salt=create2_salt)
+            if opcode == Op.CREATE2
+            else opcode(size=Op.CALLDATASIZE)
         )
-        if opcode == Op.CREATE2:  # Extra push operation
-            contract_creation_gas_usage += push_dup_opcode_gas
-        return contract_creation_gas_usage
+        return (create_code + Op.GAS).gas_cost(fork)
 
     @pytest.fixture
     def initcode_word_cost(self, fork: Fork, initcode: Initcode) -> int:
@@ -600,9 +576,7 @@ class TestCreateInitcode:
         else:
             expected_gas_usage = contract_creation_gas_cost
             # The initcode is only executed if the length check succeeds
-            expected_gas_usage += initcode.execution_gas
-            # The code is only deployed if the length check succeeds
-            expected_gas_usage += initcode.deployment_gas
+            expected_gas_usage += initcode.gas_cost(fork)
 
             # CREATE2 hashing cost should only be deducted if the initcode
             # does not exceed the max length
