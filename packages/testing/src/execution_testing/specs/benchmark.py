@@ -343,9 +343,14 @@ class BenchmarkTest(BaseTest):
 
         blocks: List[Block] = self.setup_blocks
 
-        if self.fixed_opcode_count is not None and self.code_generator is None:
+        if (
+            self.fixed_opcode_count is not None
+            and self.code_generator is None
+            and self.target_opcode is None
+        ):
             pytest.skip(
-                "Cannot run fixed opcode count tests without a code generator"
+                "Cannot run fixed opcode count tests without a "
+                "code generator or a target opcode set"
             )
 
         if self.code_generator is not None:
@@ -534,7 +539,9 @@ class BenchmarkTest(BaseTest):
                 self.target_opcode is not None
                 and self.fixed_opcode_count is not None
             ):
-                self._verify_target_opcode_count(blockchain_test._opcode_count)
+                self._verify_target_opcode_count(
+                    blockchain_test._benchmark_opcode_count
+                )
             return fixture
         else:
             raise Exception(f"Unsupported fixture format: {fixture_format}")
