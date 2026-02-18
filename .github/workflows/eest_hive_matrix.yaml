@@ -128,7 +128,6 @@ jobs:
 
       - name: Build and install Hive
         run: |
-          git clone -b master https://github.com/gnosischain/hive.git
           cd hive
           go install ./...
           cd ..
