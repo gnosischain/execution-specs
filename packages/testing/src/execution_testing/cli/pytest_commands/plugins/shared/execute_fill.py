@@ -304,6 +304,27 @@ def alloc_flags(
     return alloc_flags_from_test_markers
 
 
+@pytest.fixture(scope="function")
+def is_tx_gas_heavy_test(request: pytest.FixtureRequest) -> bool:
+    """
+    Check, given the test node properties, whether the test is gas-heavy
+    for transaction execution.
+    """
+    node = request.node
+    has_slow_marker = node.get_closest_marker("slow") is not None
+    has_benchmark_marker = node.get_closest_marker("benchmark") is not None
+    return has_slow_marker or has_benchmark_marker
+
+
+@pytest.fixture(scope="function")
+def is_exception_test(request: pytest.FixtureRequest) -> bool:
+    """
+    Check, given the test node properties, whether the test is an exception
+    test (invalid block, invalid transaction).
+    """
+    return request.node.get_closest_marker("exception_test") is not None
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add command-line options to pytest."""
     static_filler_group = parser.getgroup(
