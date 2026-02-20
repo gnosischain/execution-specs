@@ -4,7 +4,17 @@ import hashlib
 import json
 from enum import Enum, auto
 from functools import cached_property
-from typing import Annotated, Any, ClassVar, Dict, List, Set, Type, Union
+from typing import (
+    Annotated,
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Protocol,
+    Set,
+    Type,
+    Union,
+)
 
 import pytest
 from pydantic import (
@@ -71,6 +81,7 @@ class BaseFixture(CamelModel):
     format_phases: ClassVar[Set[FixtureFillingPhase]] = {
         FixtureFillingPhase.FILL
     }
+    transition_tool_cache_key: ClassVar[str] = ""
 
     @classmethod
     def output_base_dir_name(cls) -> str:
@@ -230,6 +241,11 @@ class LabeledFixtureFormat:
         """Get the filling format phases where it should be included."""
         return self.format.format_phases
 
+    @property
+    def transition_tool_cache_key(self) -> str:
+        """Get the transition tool cache key."""
+        return self.format.transition_tool_cache_key
+
     def __eq__(self, other: Any) -> bool:
         """
         Check if two labeled fixture formats are equal.
@@ -252,3 +268,40 @@ FixtureFormat = Annotated[
         lambda f: BaseFixture.formats[f] if f in BaseFixture.formats else f
     ),
 ]
+
+
+class PytestItemProtocol(Protocol):
+    """Protocol that resembles pytest.Item."""
+
+    @property
+    def nodeid(self) -> str:
+        """Return the nodeid of the item."""
+        ...
+
+    def get_closest_marker(self, name: str) -> pytest.Mark | None:
+        """Return the closest marker with the given name."""
+        ...
+
+
+def strip_fixture_format_from_node(
+    item: PytestItemProtocol,
+) -> str:
+    """
+    Remove fixture format suffix from a test nodeid.
+
+    Used for cache keys and xdist grouping to ensure related fixture formats
+    (e.g., blockchain_test and blockchain_test_engine) share the same key.
+
+    Example:
+        'test.py::test[fork_Osaka-state_test]' -> 'test.py::test[fork_Osaka]'
+
+    """
+    fixture_format_id_marker = item.get_closest_marker("fixture_format_id")
+    nodeid = item.nodeid
+    if fixture_format_id_marker is None:
+        return nodeid
+    assert len(fixture_format_id_marker.args) == 1
+    fixture_id = fixture_format_id_marker.args[0]
+    if fixture_id not in nodeid:
+        return nodeid
+    return nodeid.replace(fixture_id, "")

@@ -646,17 +646,8 @@ class BlockchainTest(BaseTest):
                 ),
                 blob_schedule=self.fork.blob_schedule(),
             ),
-            debug_output_path=self.get_next_transition_tool_output_path(),
             slow_request=self.is_tx_gas_heavy_test(),
         )
-
-        if transition_tool_output.result.opcode_count is not None:
-            if self._opcode_count is None:
-                self._opcode_count = transition_tool_output.result.opcode_count
-            else:
-                self._opcode_count += (
-                    transition_tool_output.result.opcode_count
-                )
 
         # One special case of the invalid transactions is the blob gas used,
         # since this value is not included in the transition tool result, but
@@ -929,8 +920,8 @@ class BlockchainTest(BaseTest):
         alloc = alloc.get() if isinstance(alloc, LazyAlloc) else alloc
         self.verify_post_state(t8n, t8n_state=alloc)
         info = {}
-        if self._opcode_count is not None:
-            info["opcode_count"] = self._opcode_count.model_dump()
+        if t8n.opcode_count is not None:
+            info["opcode_count"] = t8n.opcode_count.model_dump()
         return BlockchainFixture(
             fork=self.fork,
             genesis=genesis.header,
@@ -1017,8 +1008,8 @@ class BlockchainTest(BaseTest):
 
         # Create base fixture data, common to all fixture formats
         info = {}
-        if self._opcode_count is not None:
-            info["opcode_count"] = self._opcode_count.model_dump()
+        if t8n.opcode_count is not None:
+            info["opcode_count"] = t8n.opcode_count.model_dump()
         fixture_data = {
             "fork": self.fork,
             "genesis": genesis.header,
@@ -1096,7 +1087,6 @@ class BlockchainTest(BaseTest):
         fixture_format: FixtureFormat,
     ) -> BaseFixture:
         """Generate the BlockchainTest fixture."""
-        t8n.reset_traces()
         if fixture_format in [
             BlockchainEngineFixture,
             BlockchainEngineXFixture,

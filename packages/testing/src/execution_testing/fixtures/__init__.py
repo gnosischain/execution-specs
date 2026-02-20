@@ -5,6 +5,7 @@ from .base import (
     FixtureFillingPhase,
     FixtureFormat,
     LabeledFixtureFormat,
+    strip_fixture_format_from_node,
 )
 from .blockchain import (
     BlockchainEngineFixture,
@@ -49,6 +50,7 @@ __all__ = [
     "PreAllocGroupBuilders",
     "PreAllocGroups",
     "StateFixture",
+    "strip_fixture_format_from_node",
     "TestInfo",
     "TransactionFixture",
     "merge_partial_fixture_files",

@@ -730,6 +730,7 @@ class BlockchainFixture(BlockchainFixtureCommon):
     genesis_rlp: Bytes = Field(..., alias="genesisRLP")
     blocks: List[FixtureBlock | InvalidFixtureBlock]
     seal_engine: Literal["NoProof"] = Field("NoProof")
+    transition_tool_cache_key: ClassVar[str] = "blockchain_test"
 
 
 @post_state_validator()
@@ -774,6 +775,7 @@ class BlockchainEngineFixture(BlockchainEngineFixtureCommon):
     payloads: List[FixtureEngineNewPayload] = Field(
         ..., alias="engineNewPayloads"
     )
+    transition_tool_cache_key: ClassVar[str] = "blockchain_test"
 
 
 @post_state_validator(alternate_field="post_state_diff")
@@ -797,6 +799,7 @@ class BlockchainEngineXFixture(BlockchainEngineFixtureCommon):
         FixtureFillingPhase.FILL,
         FixtureFillingPhase.PRE_ALLOC_GENERATION,
     }
+    transition_tool_cache_key: ClassVar[str] = ""
 
     pre_hash: str
     """Hash of the pre-allocation group this test belongs to."""
@@ -861,6 +864,7 @@ class BlockchainEngineSyncFixture(BlockchainEngineFixture):
         "Tests that generate a blockchain test fixture for Engine API "
         "testing with client sync."
     )
+    transition_tool_cache_key: ClassVar[str] = ""
     sync_payload: FixtureEngineNewPayload | None = None
 
     @classmethod

@@ -184,6 +184,15 @@ def pytest_configure(config: pytest.Config) -> None:
         "pre_alloc_mutable: Marks a test to allow impossible mutations in the "
         "pre-state.",
     )
+    config.addinivalue_line(
+        "markers",
+        "fixture_format_id: ID used to describe the fixture format.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "transition_tool_cache_key: Key used to match the transition tool "
+        "cache for the test during fill.",
+    )
 
 
 @pytest.fixture(scope="function")
