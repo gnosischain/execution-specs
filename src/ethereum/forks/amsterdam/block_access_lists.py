@@ -21,9 +21,9 @@ from ethereum_types.frozen import slotted_freezable
 from ethereum_types.numeric import U16, U64, U256, Uint
 
 from ethereum.crypto.hash import Hash32, keccak256
-from ethereum.state import Account, Address, PreState
+from ethereum.state import EMPTY_CODE_HASH, Account, Address, PreState
 
-from .state_tracker import BlockState, TransactionState
+from .state_tracker import BlockState, TransactionState, get_code
 
 # TODO: Either remove or generalize these type aliases (#2260).
 
@@ -675,9 +675,14 @@ def update_builder_from_tx(
         if pre_nonce != post_nonce:
             add_nonce_change(builder, address, idx, U64(post_nonce))
 
-        pre_code = pre_account.code if pre_account else b""
-        post_code = post_account.code if post_account else b""
-        if pre_code != post_code:
+        pre_code_hash = (
+            pre_account.code_hash if pre_account else EMPTY_CODE_HASH
+        )
+        post_code_hash = (
+            post_account.code_hash if post_account else EMPTY_CODE_HASH
+        )
+        if pre_code_hash != post_code_hash:
+            post_code = get_code(tx_state, post_code_hash)
             add_code_change(builder, address, idx, post_code)
 
     # Compare storage writes against block cumulative state

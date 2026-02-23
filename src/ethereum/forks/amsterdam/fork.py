@@ -27,7 +27,7 @@ from ethereum.exceptions import (
     InvalidSenderError,
     NonceMismatchError,
 )
-from ethereum.state import Address
+from ethereum.state import EMPTY_CODE_HASH, Address
 
 from . import vm
 from .block_access_lists import (
@@ -68,6 +68,7 @@ from .state_tracker import (
     destroy_account,
     extract_block_diffs,
     get_account,
+    get_code,
     incorporate_tx_into_block,
     increment_nonce,
     set_account_balance,
@@ -256,11 +257,15 @@ def state_transition(chain: BlockChain, block: Block) -> None:
         transactions=block.transactions,
         withdrawals=block.withdrawals,
     )
-    account_changes, storage_changes = extract_block_diffs(block_state)
+    account_changes, storage_changes, code_changes = extract_block_diffs(
+        block_state
+    )
     block_state_root, _ = chain.state.compute_state_root_and_trie_changes(
         account_changes, storage_changes
     )
-    apply_changes_to_state(chain.state, account_changes, storage_changes)
+    apply_changes_to_state(
+        chain.state, account_changes, storage_changes, code_changes
+    )
     transactions_root = root(block_output.transactions_trie)
     receipt_root = root(block_output.receipts_trie)
     block_logs_bloom = logs_bloom(block_output.block_logs)
@@ -563,7 +568,10 @@ def check_transaction(
 
     if Uint(sender_account.balance) < max_gas_fee + Uint(tx.value):
         raise InsufficientBalanceError("insufficient sender balance")
-    if sender_account.code and not is_valid_delegation(sender_account.code):
+    sender_code = get_code(tx_state, sender_account.code_hash)
+    if sender_account.code_hash != EMPTY_CODE_HASH and not is_valid_delegation(
+        sender_code
+    ):
         raise InvalidSenderError("not EOA")
 
     return (
@@ -644,7 +652,10 @@ def process_checked_system_transaction(
     # does its own get_account on the TransactionState that we do incorporate
     # into BlockState.
     untracked_state = TransactionState(parent=block_env.state)
-    system_contract_code = get_account(untracked_state, target_address).code
+    system_contract_code = get_code(
+        untracked_state,
+        get_account(untracked_state, target_address).code_hash,
+    )
 
     if len(system_contract_code) == 0:
         raise InvalidBlock(
@@ -692,7 +703,10 @@ def process_unchecked_system_transaction(
 
     """
     system_tx_state = TransactionState(parent=block_env.state)
-    system_contract_code = get_account(system_tx_state, target_address).code
+    system_contract_code = get_code(
+        system_tx_state,
+        get_account(system_tx_state, target_address).code_hash,
+    )
 
     tx_env = vm.TransactionEnvironment(
         origin=SYSTEM_ADDRESS,
