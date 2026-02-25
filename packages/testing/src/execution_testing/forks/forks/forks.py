@@ -2883,6 +2883,16 @@ class Amsterdam(BPO2):
         return 5
 
     @classmethod
+    def max_code_size(cls) -> int:
+        """From Amsterdam, max contract code size is 32 KiB. See EIP-7954."""
+        return 32 * 1024
+
+    @classmethod
+    def max_initcode_size(cls) -> int:
+        """From Amsterdam, max initcode size is 64 KiB. See EIP-7954."""
+        return 64 * 1024
+
+    @classmethod
     def engine_get_payload_version(cls) -> Optional[int]:
         """From Amsterdam, get payload calls must use version 6."""
         return 6
