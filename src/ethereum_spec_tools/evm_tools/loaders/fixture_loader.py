@@ -67,7 +67,7 @@ class Load(BaseLoad):
         set_storage = self.fork.set_storage
         EMPTY_ACCOUNT = self.fork.EMPTY_ACCOUNT  # noqa N806
         SYSTEM_ADDRESS = self.fork.SYSTEM_ADDRESS  # noqa N806
-        
+
         # TODO: backport to previous forks.
         # block_state is only in amsterdam, so its a
         # good proxy for check for code_hash
