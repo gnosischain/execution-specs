@@ -66,9 +66,13 @@ class Load(BaseLoad):
         state = self.fork.State()
         set_storage = self.fork.set_storage
         EMPTY_ACCOUNT = self.fork.EMPTY_ACCOUNT  # noqa N806
-        SYSTEM_ADDRESS = (  # noqa N806
-            self.fork.SYSTEM_ADDRESS if self.fork.proof_of_stake else None
-        )
+        SYSTEM_ADDRESS = self.fork.SYSTEM_ADDRESS  # noqa N806
+
+        # TODO: backport to previous forks.
+        # block_state is only in amsterdam, so its a
+        # good proxy for check for code_hash
+
+        uses_code_hash = self.fork.has_block_state
 
         for address_hex, account_state in raw.items():
             address = self.fork.hex_to_address(address_hex)
