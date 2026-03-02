@@ -8,8 +8,6 @@ block MUST be considered invalid.
 Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
 """
 
-from typing import Dict, List, Tuple
-
 import pytest
 from execution_testing import (
     Account,
