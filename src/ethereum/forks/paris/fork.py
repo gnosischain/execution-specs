@@ -763,6 +763,7 @@ def process_block_rewards(
         "0000000000000000000000000000000000000000000000000000000000000000"
         "0000000000000000000000000000000000000000000000000000000000000000"
     )
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
@@ -771,7 +772,13 @@ def process_block_rewards(
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
 
-    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    try:
+        addresses, amounts = decode(
+            ["address[]", "uint256[]"], out.return_data
+        )
+    except Exception as exc:
+        raise InvalidBlock(f"Block rewards system call failed: {exc}") from exc
+
     for addr, amount in zip(addresses, amounts, strict=True):
         address = hex_to_address(addr)
         balance_after = get_account(block_env.state, address).balance + U256(
