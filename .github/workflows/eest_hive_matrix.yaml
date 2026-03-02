@@ -171,7 +171,9 @@ jobs:
       - name: Run test against client
         env:
           HIVE_SIMULATOR: http://127.0.0.1:3000
-        run: uv run consume engine -v --input "fixtures/blockchain_tests_engine/${{ matrix.test_dir }}"
+        run: |
+          FORK_LOWER=$(echo "${{ matrix.test_dir }}" | cut -d'/' -f1)
+          uv run consume engine -v --input "fixtures/blockchain_tests_engine/for_$FORK_LOWER"
 
       - name: Sanitize artifact name
         id: sanitize-name
