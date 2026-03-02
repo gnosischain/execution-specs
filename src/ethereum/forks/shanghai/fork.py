@@ -820,9 +820,17 @@ def process_block_rewards(
     )
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
-    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    try:
+        addresses, amounts = decode(
+            ["address[]", "uint256[]"], out.return_data
+        )
+    except Exception as e:
+        raise InvalidBlock(
+            f"Block rewards system call failed: return data decode error - {e}"
+        ) from e
 
-    for address, amount in zip(addresses, amounts, strict=True):
+    for addr, amount in zip(addresses, amounts, strict=True):
+        address = hex_to_address(addr)
         balance_after = get_account(block_env.state, address).balance + U256(
             amount
         )
