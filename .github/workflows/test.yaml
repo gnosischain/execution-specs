@@ -59,6 +59,7 @@ jobs:
           config-variables:
             - DEFAULT_PYTHON_VERSION
             - UV_VERSION
+            - GOPROXY
           EOF
           uvx --from actionlint-py actionlint
 
