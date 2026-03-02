@@ -8,7 +8,7 @@ block MUST be considered invalid.
 Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
 """
 
-from typing import Any, Dict
+from typing import Dict, List, Tuple
 
 import pytest
 from execution_testing import (
@@ -22,9 +22,13 @@ from execution_testing import (
 )
 from execution_testing.exceptions import BlockException
 
-pytestmark = pytest.mark.valid_from("Paris")
+pytestmark = [
+    pytest.mark.valid_from("Paris"),
+    pytest.mark.pre_alloc_mutable,
+]
 
 BLOCK_REWARDS_CONTRACT = Address(0x2000000000000000000000000000000000000001)
+SYSTEM_ADDRESS = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
 
 
 def get_minimal_rewards_contract_code() -> Bytecode:
@@ -71,6 +75,67 @@ def test_block_rewards_system_call_succeeds(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
+def test_block_rewards_call_data(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+) -> None:
+    """
+    Test that system transaction calldata is correctly formed.
+    """
+    code: Bytecode = (
+        Op.SSTORE(0, Op.CALLDATASIZE)
+        + sum(Op.SSTORE(i + 1, Op.CALLDATALOAD(i * 32)) for i in range(5))
+        + get_minimal_rewards_contract_code()
+    )
+
+    pre[BLOCK_REWARDS_CONTRACT] = Account(
+        code=code,
+        nonce=1,
+        balance=0,
+    )
+
+    blockchain_test(
+        pre=pre,
+        post={
+            BLOCK_REWARDS_CONTRACT: Account(
+                storage={
+                    0x00: 0x84,  # noqa: E501
+                    0x01: 0xF91C289800000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                    0x02: 0x0000004000000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                    0x03: 0x0000006000000000000000000000000000000000000000000000000000000000,  # noqa: E501
+                    0x04: 0x00,
+                    0x05: 0x00,
+                }
+            ),
+        },
+        blocks=[Block()],
+    )
+
+
+def test_block_rewards_caller_is_system_address(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+) -> None:
+    """
+    Test that msg.sender for the system call is SYSTEM_ADDRESS.
+    """
+    pre[BLOCK_REWARDS_CONTRACT] = Account(
+        code=Op.SSTORE(0, Op.CALLER) + get_minimal_rewards_contract_code(),
+        nonce=1,
+        balance=0,
+    )
+
+    blockchain_test(
+        pre=pre,
+        post={
+            BLOCK_REWARDS_CONTRACT: Account(
+                storage={0x00: SYSTEM_ADDRESS},
+            ),
+        },
+        blocks=[Block()],
+    )
+
+
 @pytest.mark.exception_test
 @pytest.mark.blockchain_test_engine_only
 def test_block_rewards_system_call_with_revert(
@@ -91,9 +156,31 @@ def test_block_rewards_system_call_with_revert(
         ),
     ]
 
-    post: Dict[str, Any] = {}
+    blockchain_test(pre=pre, post={}, blocks=blocks)
 
-    blockchain_test(pre=pre, post=post, blocks=blocks)
+
+@pytest.mark.exception_test
+@pytest.mark.blockchain_test_engine_only
+def test_block_rewards_system_call_with_no_contract(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+) -> None:
+    """
+    Test that a block rewards contract with no code invalidates the block.
+    """
+    pre[BLOCK_REWARDS_CONTRACT] = Account(
+        code=b"",
+        nonce=0,
+        balance=0,
+    )
+
+    blocks = [
+        Block(
+            exception=BlockException.SYSTEM_CONTRACT_CALL_FAILED,
+        ),
+    ]
+
+    blockchain_test(pre=pre, post={}, blocks=blocks)
 
 
 @pytest.mark.exception_test
@@ -117,6 +204,4 @@ def test_block_rewards_system_call_out_of_gas(
         ),
     ]
 
-    post: Dict[str, Any] = {}
-
-    blockchain_test(pre=pre, post=post, blocks=blocks)
+    blockchain_test(pre=pre, post={}, blocks=blocks)
