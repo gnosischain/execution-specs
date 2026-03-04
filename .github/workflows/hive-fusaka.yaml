@@ -56,7 +56,7 @@ env:
   GOPROXY: "${{ vars.GOPROXY }}"
   GCS_BUCKET: gnosis-hive-ui-staging
   GCS_PATH: test-results
-  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging
+  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging/test-results
   INSTALL_RCLONE_VERSION: v1.68.2
   EELS_BUILD_ARG_FIXTURES: https://github.com/gnosischain/execution-spec-tests/releases/download/v0.1.0/fixtures_osaka.tar.gz
   EELS_BUILD_ARG_BRANCH: forks/amsterdam
@@ -99,7 +99,7 @@ jobs:
           steps.client_config_dispatch.outputs.client_config
         }}
     steps:
-      - uses: gnosischain/hive-github-action/helpers/client-config@1d88652e508626aaefa085d830ea05f422384300
+      - uses: gnosischain/hive-github-action/helpers/client-config@9f65ec1bd266757a681c38d38b7fc9e341b08f0a
         if: github.event_name == 'schedule'
         name: 'Client config: schedule'
         id: client_config_schedule
@@ -108,7 +108,7 @@ jobs:
           hive_version: 'gnosischain/hive@master'
           goproxy: ${{ env.GOPROXY }}
 
-      - uses: gnosischain/hive-github-action/helpers/client-config@1d88652e508626aaefa085d830ea05f422384300
+      - uses: gnosischain/hive-github-action/helpers/client-config@9f65ec1bd266757a681c38d38b7fc9e341b08f0a
         if: github.event_name == 'workflow_dispatch'
         name: 'Client config: workflow_dispatch'
         id: client_config_dispatch
