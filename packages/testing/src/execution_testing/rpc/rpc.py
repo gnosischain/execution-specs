@@ -85,7 +85,14 @@ class SendTransactionExceptionError(Exception):
         if self.tx is not None:
             return f"{base} Transaction={self.tx.model_dump_json()}"
         elif self.tx_rlp is not None:
-            return f"{base} Transaction RLP={self.tx_rlp.hex()}"
+            rlp_hex = self.tx_rlp.hex()
+            # Cap RLP output at 200 characters to avoid overwhelming output
+            max_rlp_length = 200
+            if len(rlp_hex) > max_rlp_length:
+                rlp_display = f"{rlp_hex[:max_rlp_length]}... (truncated)"
+            else:
+                rlp_display = rlp_hex
+            return f"{base} Transaction RLP={rlp_display}"
         return base
 
 
@@ -178,6 +185,7 @@ class BaseRPC:
         self.url = url
         self.request_id_counter = count(1)
         self.response_validation_context = response_validation_context
+        self.session = requests.Session()
 
     def __init_subclass__(cls, namespace: str | None = None) -> None:
         """
@@ -218,7 +226,7 @@ class BaseRPC:
           application-level issues rather than transient network problems
         """
         logger.debug(f"Making HTTP request to {url}, timeout={timeout}")
-        return requests.post(
+        return self.session.post(
             url, json=json_payload, headers=headers, timeout=timeout
         )
 

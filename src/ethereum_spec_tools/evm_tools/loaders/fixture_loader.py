@@ -68,11 +68,6 @@ class Load(BaseLoad):
         EMPTY_ACCOUNT = self.fork.EMPTY_ACCOUNT  # noqa N806
         SYSTEM_ADDRESS = self.fork.SYSTEM_ADDRESS  # noqa N806
 
-        # TODO: backport to previous forks.
-        # block_state is only in amsterdam, so its a
-        # good proxy for check for code_hash
-
-        uses_code_hash = self.fork.has_block_state
 
         for address_hex, account_state in raw.items():
             address = self.fork.hex_to_address(address_hex)
@@ -80,19 +75,12 @@ class Load(BaseLoad):
             balance = U256(hex_to_uint(account_state.get("balance", "0x0")))
             code = hex_to_bytes(account_state.get("code", ""))
 
-            if uses_code_hash:
-                code_hash = self.fork.set_code(state, code)
-                account = self.fork.Account(
-                    nonce=nonce,
-                    balance=balance,
-                    code_hash=code_hash,
-                )
-            else:
-                account = self.fork.Account(
-                    nonce=nonce,
-                    balance=balance,
-                    code=code,
-                )
+            code_hash = self.fork.store_code(state, code)
+            account = self.fork.Account(
+                nonce=nonce,
+                balance=balance,
+                code_hash=code_hash,
+            )
 
             if (
                 self.fork.proof_of_stake

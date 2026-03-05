@@ -36,6 +36,7 @@ from ethereum.exceptions import (
     InvalidSenderError,
     NonceMismatchError,
 )
+from ethereum.state import EMPTY_CODE_HASH, Account, Address
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
@@ -51,7 +52,7 @@ from .exceptions import (
     PriorityFeeGreaterThanMaxFeeError,
     TransactionTypeContractCreationError,
 )
-from .fork_types import Address, Authorization, VersionedHash
+from .fork_types import Authorization, VersionedHash
 from .requests import (
     CONSOLIDATION_REQUEST_TYPE,
     DEPOSIT_REQUEST_TYPE,
@@ -64,6 +65,7 @@ from .state import (
     TransientStorage,
     destroy_account,
     get_account,
+    get_code,
     increment_nonce,
     set_account_balance,
     state_root,
@@ -555,7 +557,10 @@ def check_transaction(
 
     if Uint(sender_account.balance) < max_gas_fee + Uint(tx.value):
         raise InsufficientBalanceError("insufficient sender balance")
-    if sender_account.code and not is_valid_delegation(sender_account.code):
+    sender_code = get_code(block_env.state, sender_account.code_hash)
+    if sender_account.code_hash != EMPTY_CODE_HASH and not is_valid_delegation(
+        sender_code
+    ):
         raise InvalidSenderError("not EOA")
 
     return (
@@ -695,7 +700,10 @@ def process_checked_system_transaction(
         Output of processing the system transaction.
 
     """
-    system_contract_code = get_account(block_env.state, target_address).code
+    system_contract_code = get_code(
+        block_env.state,
+        get_account(block_env.state, target_address).code_hash,
+    )
 
     if len(system_contract_code) == 0:
         raise InvalidBlock(
@@ -743,7 +751,10 @@ def process_unchecked_system_transaction(
         Output of processing the system transaction.
 
     """
-    system_contract_code = get_account(block_env.state, target_address).code
+    system_contract_code = get_code(
+        block_env.state,
+        get_account(block_env.state, target_address).code_hash,
+    )
     return process_system_transaction(
         block_env,
         target_address,

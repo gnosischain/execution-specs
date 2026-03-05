@@ -16,6 +16,7 @@ from typing import List, Tuple
 
 from ethereum_types.numeric import U64, U256, Uint
 
+from ethereum.forks.bpo5.blocks import Header as PreviousHeader
 from ethereum.trace import GasAndRefund, evm_trace
 from ethereum.utils.numeric import ceil32, taylor_exponential
 
@@ -83,6 +84,8 @@ GAS_BLS_G1_MAP = Uint(5500)
 GAS_BLS_G2_ADD = Uint(600)
 GAS_BLS_G2_MUL = Uint(22500)
 GAS_BLS_G2_MAP = Uint(23800)
+
+GAS_BLOCK_ACCESS_LIST_ITEM = Uint(2000)
 
 
 @dataclass
@@ -303,7 +306,9 @@ def init_code_cost(init_code_length: Uint) -> Uint:
     return GAS_CODE_INIT_PER_WORD * ceil32(init_code_length) // Uint(32)
 
 
-def calculate_excess_blob_gas(parent_header: Header) -> U64:
+def calculate_excess_blob_gas(
+    parent_header: Header | PreviousHeader,
+) -> U64:
     """
     Calculates the excess blob gas for the current block based
     on the gas used in the parent block.

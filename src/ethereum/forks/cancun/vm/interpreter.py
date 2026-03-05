@@ -18,6 +18,7 @@ from ethereum_types.bytes import Bytes, Bytes0
 from ethereum_types.numeric import U256, Uint, ulen
 
 from ethereum.exceptions import EthereumException
+from ethereum.state import Address
 from ethereum.trace import (
     EvmStop,
     OpEnd,
@@ -30,7 +31,6 @@ from ethereum.trace import (
 )
 
 from ..blocks import Log
-from ..fork_types import Address
 from ..state import (
     account_has_code_or_nonce,
     account_has_storage,
@@ -110,12 +110,12 @@ def process_message_call(message: Message) -> MessageCallOutput:
         ) or account_has_storage(block_env.state, message.current_target)
         if is_collision:
             return MessageCallOutput(
-                Uint(0),
-                U256(0),
-                tuple(),
-                set(),
-                AddressCollision(),
-                Bytes(b""),
+                gas_left=Uint(0),
+                refund_counter=U256(0),
+                logs=tuple(),
+                accounts_to_delete=set(),
+                error=AddressCollision(),
+                return_data=Bytes(b""),
             )
         else:
             evm = process_create_message(message)
