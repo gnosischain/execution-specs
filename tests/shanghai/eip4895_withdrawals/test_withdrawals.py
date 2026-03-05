@@ -35,6 +35,7 @@ def get_minimal_deposit_contract_code() -> Bytecode:
     return Op.PUSH0 + Op.PUSH0 + Op.RETURN
 
 
+@pytest.mark.pre_alloc_mutable
 def test_withdrawal_system_call_succeeds(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -76,6 +77,7 @@ def test_withdrawal_system_call_succeeds(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
+@pytest.mark.pre_alloc_mutable
 def test_store_withdrawal_values_in_contract(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -128,6 +130,7 @@ def test_store_withdrawal_values_in_contract(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
+@pytest.mark.pre_alloc_mutable
 def test_withdrawal_index_order(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -159,6 +162,7 @@ def test_withdrawal_index_order(
 
 @pytest.mark.exception_test
 @pytest.mark.blockchain_test_engine_only
+@pytest.mark.pre_alloc_mutable
 def test_withdrawal_system_call_with_revert(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -194,6 +198,7 @@ def test_withdrawal_system_call_with_revert(
 
 @pytest.mark.exception_test
 @pytest.mark.blockchain_test_engine_only
+@pytest.mark.pre_alloc_mutable
 def test_withdrawal_system_call_out_of_gas(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -227,6 +232,7 @@ def test_withdrawal_system_call_out_of_gas(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
+@pytest.mark.pre_alloc_mutable
 def test_empty_withdrawals_list(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,

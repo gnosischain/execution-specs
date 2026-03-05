@@ -23,5 +23,5 @@ class Spec:
     https://eips.ethereum.org/EIPS/eip-7594.
     """
 
-    MAX_BLOBS_PER_TX = 6
+    MAX_BLOBS_PER_TX = 2
     BLOB_COMMITMENT_VERSION_KZG = 1

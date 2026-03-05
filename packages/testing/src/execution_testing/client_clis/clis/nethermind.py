@@ -83,7 +83,7 @@ class Nethtest(EthereumCLI):
         )
 
         dump_files_to_directory(
-            str(debug_output_path),
+            debug_output_path,
             {
                 "consume_direct_args.py": command,
                 "consume_direct_returncode.txt": result.returncode,
@@ -396,6 +396,7 @@ class NethermindExceptionMapper(ExceptionMapper):
         BlockException.INVALID_STATE_ROOT: (
             "InvalidStateRoot: State root in header does not match"
         ),
+        BlockException.GAS_USED_OVERFLOW: ("Block gas limit exceeded"),
     }
     mapping_regex = {
         TransactionException.INSUFFICIENT_ACCOUNT_FUNDS: (

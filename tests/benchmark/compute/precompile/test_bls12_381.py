@@ -10,8 +10,9 @@ from execution_testing import (
     Op,
 )
 
-from tests.benchmark.compute.helpers import concatenate_parameters
 from tests.prague.eip2537_bls_12_381_precompiles import spec as bls12381_spec
+
+from ..helpers import concatenate_parameters
 
 
 @pytest.mark.parametrize(
@@ -177,6 +178,7 @@ def test_bls12_g1_msm(
 def test_bls12_g2_msm(
     benchmark_test: BenchmarkTestFiller,
     fork: Fork,
+    gas_benchmark_value: int,
     k: int,
 ) -> None:
     """Benchmark BLS12_G2_MSM precompile with varying number of points."""
@@ -189,6 +191,13 @@ def test_bls12_g2_msm(
         (bls12381_spec.Spec.P2 + bls12381_spec.Scalar(bls12381_spec.Spec.Q))
         * k
     )
+
+    intrinsic_gas_cost = fork.transaction_intrinsic_cost_calculator()(
+        calldata=calldata
+    )
+
+    if intrinsic_gas_cost > gas_benchmark_value:
+        pytest.skip("k configuration exceeds the gas limit")
 
     attack_block = Op.POP(
         Op.STATICCALL(

@@ -9,9 +9,13 @@ and writes the generated fixtures to file.
 import atexit
 import configparser
 import datetime
+import gc
+import hashlib
 import json
+import logging
 import os
 import signal
+import time
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,9 +31,9 @@ from pytest_metadata.plugin import metadata_key
 from execution_testing.base_types import (
     Account,
     Address,
-    Alloc,
     ReferenceSpec,
 )
+from execution_testing.base_types import Alloc as BaseAlloc
 from execution_testing.cli.gen_index import (
     merge_partial_indexes,
 )
@@ -38,6 +42,7 @@ from execution_testing.client_clis.clis.geth import FixtureConsumerTool
 from execution_testing.fixtures import (
     BaseFixture,
     BlockchainEngineFixture,
+    BlockchainEngineXFixture,
     BlockchainFixture,
     FixtureCollector,
     FixtureConsumer,
@@ -50,6 +55,11 @@ from execution_testing.fixtures import (
     StateFixture,
     TestInfo,
     merge_partial_fixture_files,
+    strip_fixture_format_from_node,
+)
+from execution_testing.fixtures.pre_alloc_groups import (
+    _get_worker_id,
+    merge_partial_group_files,
 )
 from execution_testing.forks import (
     Fork,
@@ -57,7 +67,7 @@ from execution_testing.forks import (
     get_transition_forks,
 )
 from execution_testing.specs import BaseTest
-from execution_testing.specs.base import OpMode
+from execution_testing.specs.base import FillResult, OpMode
 from execution_testing.test_types import EnvironmentDefaults
 from execution_testing.tools.utility.versioning import (
     generate_github_url,
@@ -65,6 +75,10 @@ from execution_testing.tools.utility.versioning import (
 )
 
 from ..shared.execute_fill import ALL_FIXTURE_PARAMETERS
+from ..shared.fixture_output import (
+    FixtureOutput,
+    resolve_fixture_subfolder,
+)
 from ..shared.helpers import (
     get_spec_format_for_item,
     is_help_or_collectonly_mode,
@@ -73,7 +87,7 @@ from ..shared.helpers import (
 from ..spec_version_checker.spec_version_checker import (
     get_ref_spec_from_module,
 )
-from .fixture_output import FixtureOutput
+from .pre_alloc import Alloc
 
 # Fixture output dir for keyboard interrupt cleanup (set in pytest_configure).
 # Used by _merge_on_exit to merge partial JSONL files on Ctrl+C or SIGTERM.
@@ -402,18 +416,74 @@ class FillingSession:
         self.pre_alloc_group_builders.root[hash_key] = group_builder
 
     def save_pre_alloc_groups(self) -> None:
-        """Save pre-allocation groups to disk."""
+        """Save pre-allocation groups to disk as partial files."""
         if self.pre_alloc_group_builders is None:
             return
 
         pre_alloc_folder = self.fixture_output.pre_alloc_groups_folder_path
         pre_alloc_folder.mkdir(parents=True, exist_ok=True)
-        self.pre_alloc_group_builders.to_folder(pre_alloc_folder)
+        # Pass worker_id so each worker writes its own partial files
+        # (no lock contention). Master merges them after all workers finish.
+        self.pre_alloc_group_builders.to_folder(
+            pre_alloc_folder, worker_id=_get_worker_id()
+        )
+
+
+@dataclass(kw_only=True)
+class TransitionToolCacheStats:
+    """Stats for caching of the transition tool requests."""
+
+    key_test_hits: int = 0
+    key_test_miss: int = 0
+    subkey_test_hits: int = 0
+    subkey_test_miss: int = 0
+    unique_keys: int = 0
+    _seen_keys: Set[str] = field(default_factory=set, repr=False)
+
+    def record_key(self, key: str) -> None:
+        """Record a cache key and update unique_keys count."""
+        self._seen_keys.add(key)
+        self.unique_keys = len(self._seen_keys)
+
+    @property
+    def expected_hits(self) -> int:
+        """Number of tests expected to hit the cache."""
+        total_cacheable = self.key_test_hits + self.key_test_miss
+        return total_cacheable - self.unique_keys
+
+    def to_dict(self) -> Dict[str, int]:
+        """Convert stats to dict for xdist worker transfer."""
+        return {
+            "key_test_hits": self.key_test_hits,
+            "key_test_miss": self.key_test_miss,
+            "subkey_test_hits": self.subkey_test_hits,
+            "subkey_test_miss": self.subkey_test_miss,
+            "unique_keys": self.unique_keys,
+        }
+
+    def add(self, other: "TransitionToolCacheStats") -> None:
+        """Add another stats object to this one."""
+        self.key_test_hits += other.key_test_hits
+        self.key_test_miss += other.key_test_miss
+        self.subkey_test_hits += other.subkey_test_hits
+        self.subkey_test_miss += other.subkey_test_miss
+        self.unique_keys += other.unique_keys
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, int]) -> "TransitionToolCacheStats":
+        """Create stats from dict (xdist worker transfer)."""
+        return cls(
+            key_test_hits=data.get("key_test_hits", 0),
+            key_test_miss=data.get("key_test_miss", 0),
+            subkey_test_hits=data.get("subkey_test_hits", 0),
+            subkey_test_miss=data.get("subkey_test_miss", 0),
+            unique_keys=data.get("unique_keys", 0),
+        )
 
 
 def calculate_post_state_diff(
-    post_state: Alloc, genesis_state: Alloc
-) -> Alloc:
+    post_state: BaseAlloc, genesis_state: BaseAlloc
+) -> BaseAlloc:
     """
     Calculate the state difference between post_state and genesis_state.
 
@@ -459,7 +529,7 @@ def calculate_post_state_diff(
 
         # Account unchanged - don't include in diff
 
-    return Alloc(diff)
+    return BaseAlloc(diff)
 
 
 def default_output_directory() -> str:
@@ -847,6 +917,16 @@ def pytest_configure(config: pytest.Config) -> None:
         f"<code>{command_line_args}</code>"
     )
 
+    # Initialize aggregated cache stats on xdist controller.
+    # Controller = xdist active but not a worker.
+    numprocesses = config.getoption("numprocesses", None)
+    is_xdist_active = isinstance(numprocesses, int) and numprocesses > 0
+    is_controller = is_xdist_active and not hasattr(config, "workerinput")
+    if is_controller:
+        config.t8n_cache_stats_aggregated = (  # type: ignore[attr-defined]
+            TransitionToolCacheStats()
+        )
+
 
 @pytest.hookimpl(trylast=True)
 def pytest_report_header(config: pytest.Config) -> List[str]:
@@ -895,27 +975,66 @@ def pytest_terminal_summary(
     yield
     if config.fixture_output.is_stdout or hasattr(config, "workerinput"):  # type: ignore[attr-defined]
         return
+
+    # Get cache stats: try aggregated (xdist), else local (sequential)
+    t8n_cache_stats: TransitionToolCacheStats | None = getattr(
+        config, "t8n_cache_stats_aggregated", None
+    ) or getattr(config, "transition_tool_cache_stats", None)
+
+    if t8n_cache_stats is not None:
+        expected = t8n_cache_stats.expected_hits
+        actual = t8n_cache_stats.key_test_hits
+        if expected > 0:
+            efficiency = actual / expected * 100
+            terminalreporter.write_sep(
+                "=",
+                (
+                    f" T8n cache: {efficiency:.0f}% hit rate"
+                    f" ({actual}/{expected} tests expected),"
+                    f" {t8n_cache_stats.subkey_test_hits} t8n calls saved"
+                ),
+                bold=True,
+                green=efficiency == 100,
+            )
+        elif t8n_cache_stats.unique_keys > 0:
+            terminalreporter.write_sep(
+                "=",
+                (
+                    f" T8n cache: {t8n_cache_stats.unique_keys} unique"
+                    " test groups, no cache sharing possible"
+                ),
+                bold=True,
+            )
     stats = terminalreporter.stats
     if "passed" in stats and stats["passed"]:
         # Custom message for Phase 1 (pre-allocation group generation)
         session_instance: FillingSession = config.filling_session  # type: ignore[attr-defined]
         if session_instance.phase_manager.is_pre_alloc_generation:
             # Generate summary stats
-            pre_alloc_groups: PreAllocGroups
+            # For xdist, count files and accounts without fully loading groups
+            # (avoids expensive state_root computation just for summary stats)
             if config.pluginmanager.hasplugin("xdist"):
-                # Load pre-allocation groups from disk
-                pre_alloc_groups = PreAllocGroups.from_folder(
-                    config.fixture_output.pre_alloc_groups_folder_path,  # type: ignore[attr-defined]
-                    lazy_load=False,
+                pre_alloc_folder = (
+                    config.fixture_output.pre_alloc_groups_folder_path  # type: ignore[attr-defined]
                 )
+                group_files = list(pre_alloc_folder.glob("*.json"))
+                total_groups = len(group_files)
+                # Count accounts by loading as builder (no genesis computation)
+                total_accounts = 0
+                for group_file in group_files:
+                    builder = PreAllocGroupBuilder.model_validate_json(
+                        group_file.read_text()
+                    )
+                    total_accounts += builder.get_pre_account_count()
             else:
-                assert session_instance.pre_alloc_groups is not None
-                pre_alloc_groups = session_instance.pre_alloc_groups
-
-            total_groups = len(pre_alloc_groups.root)
-            total_accounts = sum(
-                group.pre_account_count for group in pre_alloc_groups.values()
-            )
+                assert session_instance.pre_alloc_group_builders is not None
+                total_groups = len(
+                    session_instance.pre_alloc_group_builders.root
+                )
+                total_accounts = sum(
+                    builder.get_pre_account_count()
+                    for builder in session_instance.pre_alloc_group_builders.root.values()  # noqa: E501
+                )
 
             terminalreporter.write_sep(
                 "=",
@@ -938,6 +1057,15 @@ def pytest_terminal_summary(
                 bold=True,
                 yellow=True,
             )
+
+
+def _aggregate_cache_stats(node: Any) -> None:
+    """Aggregate t8n cache stats from an xdist worker."""
+    worker_stats = getattr(node, "workeroutput", {}).get("t8n_cache_stats")
+    if worker_stats and hasattr(node.config, "t8n_cache_stats_aggregated"):
+        node.config.t8n_cache_stats_aggregated.add(
+            TransitionToolCacheStats.from_dict(worker_stats)
+        )
 
 
 def pytest_metadata(metadata: Any) -> None:
@@ -1056,10 +1184,10 @@ def verify_fixtures_bin(request: pytest.FixtureRequest) -> Path | None:
 
 
 @pytest.fixture(autouse=True, scope="session")
-def t8n(
+def session_t8n(
     request: pytest.FixtureRequest,
 ) -> Generator[TransitionTool, None, None]:
-    """Return configured transition tool."""
+    """Return configured transition tool for the session."""
     t8n: TransitionTool = request.config.t8n  # type: ignore
     if not t8n.exception_mapper.reliable:
         t8n_name = t8n.__class__.__name__
@@ -1072,6 +1200,70 @@ def t8n(
         )
     yield t8n
     t8n.shutdown()
+
+
+def get_t8n_cache_key(request: pytest.FixtureRequest) -> str | None:
+    """Get the cache key to be used for the current test, if any."""
+    mark: pytest.Mark = request.node.get_closest_marker(
+        "transition_tool_cache_key"
+    )
+    if mark is not None and len(mark.args) == 1:
+        return f"{strip_fixture_format_from_node(request.node)}-{mark.args[0]}"
+    return None
+
+
+@pytest.fixture(autouse=True, scope="session")
+def transition_tool_cache_stats(
+    request: pytest.FixtureRequest,
+) -> Generator[TransitionToolCacheStats, None, None]:
+    """Get the transition tool cache stats."""
+    stats = TransitionToolCacheStats()
+    yield stats
+    # Store stats for later access
+    request.config.transition_tool_cache_stats = stats  # type: ignore[attr-defined]
+    # For xdist workers, send stats to controller via workeroutput
+    if hasattr(request.config, "workeroutput"):
+        request.config.workeroutput["t8n_cache_stats"] = stats.to_dict()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def t8n(
+    request: pytest.FixtureRequest,
+    session_t8n: TransitionTool,
+    dump_dir_parameter_level: Path | None,
+    transition_tool_cache_stats: TransitionToolCacheStats,
+) -> Generator[TransitionTool, None, None]:
+    """Set the transition tool up for the current test."""
+    if transition_tool_cache_key := get_t8n_cache_key(request):
+        # This test is allowed to cache results
+        transition_tool_cache_stats.record_key(transition_tool_cache_key)
+        if session_t8n.set_cache(key=transition_tool_cache_key):
+            transition_tool_cache_stats.key_test_hits += 1
+        else:
+            transition_tool_cache_stats.key_test_miss += 1
+    else:
+        # Test cannot use output cache, remove it
+        session_t8n.remove_cache()
+    # Reset the traces
+    session_t8n.reset_traces()
+    session_t8n.call_counter = 0
+    session_t8n.debug_dump_dir = dump_dir_parameter_level
+    # TODO: Configure the transition tool to count opcodes only when required.
+    session_t8n.reset_opcode_count()
+    yield session_t8n
+    # Only collect subkey stats for cacheable tests (non-cacheable tests
+    # still interact with the OutputCache after remove_cache, producing
+    # phantom misses that would skew the hit rate).
+    if transition_tool_cache_key and session_t8n.output_cache is not None:
+        transition_tool_cache_stats.subkey_test_hits += (
+            session_t8n.output_cache.hits
+        )
+        transition_tool_cache_stats.subkey_test_miss += (
+            session_t8n.output_cache.misses
+        )
+        # Reset counters to avoid double-counting (cache persists across tests)
+        session_t8n.output_cache.hits = 0
+        session_t8n.output_cache.misses = 0
 
 
 @pytest.fixture(scope="session")
@@ -1325,11 +1517,21 @@ def filler_path(request: pytest.FixtureRequest) -> Path:
     return request.config.getoption("filler_path")
 
 
+def _strip_xdist_group_suffix(s: str) -> str:
+    """Strip @t8n-cache-* suffix, preserving other xdist_group markers."""
+    if "@" in s:
+        base, suffix = s.rsplit("@", 1)
+        if suffix.startswith("t8n-cache-"):
+            return base
+    return s
+
+
 def node_to_test_info(node: pytest.Item) -> TestInfo:
     """Return test info of the current node item."""
+    # Strip xdist group suffix (@groupname) that may be added during execution.
     return TestInfo(
-        name=node.name,
-        id=node.nodeid,
+        name=_strip_xdist_group_suffix(node.name),
+        id=_strip_xdist_group_suffix(node.nodeid),
         original_name=node.originalname,  # type: ignore
         module_path=Path(node.path),
     )
@@ -1397,13 +1599,13 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
         reference_spec: ReferenceSpec,
         pre: Alloc,
         output_dir: Path,
-        dump_dir_parameter_level: Path | None,
         fixture_collector: FixtureCollector,
         test_case_description: str,
         fixture_source_url: str,
         gas_benchmark_value: int,
         fixed_opcode_count: int | None,
-        witness_generator: Any,
+        is_tx_gas_heavy_test: bool,
+        is_exception_test: bool,
     ) -> Any:
         """
         Fixture used to instantiate an auto-fillable BaseTest object from
@@ -1427,13 +1629,27 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
             fork = request.node.fork
 
         class BaseTestWrapper(cls):  # type: ignore
+            __is_base_test_wrapper__ = True
+
             def __init__(self, *args: Any, **kwargs: Any) -> None:
-                kwargs["t8n_dump_dir"] = dump_dir_parameter_level
                 if "pre" not in kwargs:
                     kwargs["pre"] = pre
                 if "expected_benchmark_gas_used" not in kwargs:
                     kwargs["expected_benchmark_gas_used"] = gas_benchmark_value
                 kwargs["fork"] = fork
+                op_mode: OpMode = request.config.op_mode  # type: ignore
+                kwargs["operation_mode"] = op_mode
+                kwargs["is_tx_gas_heavy_test"] = is_tx_gas_heavy_test
+                kwargs["is_exception_test"] = is_exception_test
+                if (
+                    op_mode == OpMode.OPTIMIZE_GAS
+                    or op_mode == OpMode.OPTIMIZE_GAS_POST_PROCESSING
+                ):
+                    kwargs["gas_optimization_max_gas_limit"] = (
+                        request.config.getoption(
+                            "optimize_gas_max_gas_limit", None
+                        )
+                    )
                 kwargs |= {
                     p: request.getfixturevalue(p)
                     for p in cls_fixture_parameters
@@ -1441,53 +1657,69 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                 }
 
                 super(BaseTestWrapper, self).__init__(*args, **kwargs)
-                self._request = request
-                self._operation_mode = (
-                    request.config.op_mode  # type: ignore[attr-defined]
-                )
-                if (
-                    self._operation_mode == OpMode.OPTIMIZE_GAS
-                    or self._operation_mode
-                    == OpMode.OPTIMIZE_GAS_POST_PROCESSING
-                ):
-                    self._gas_optimization_max_gas_limit = (
-                        request.config.getoption(
-                            "optimize_gas_max_gas_limit", None
-                        )
-                    )
 
                 # Get the filling session from config
                 session: FillingSession = request.config.filling_session  # type: ignore
+                assert isinstance(session, FillingSession)
 
+                group_salt: str | None = None
+                if pre_alloc_group_marker := request.node.get_closest_marker(
+                    "pre_alloc_group"
+                ):
+                    # Get the group name/salt from marker args
+                    if pre_alloc_group_marker.args:
+                        group_salt = str(pre_alloc_group_marker.args[0])
+                    else:
+                        # We got the marker but unspecified, pass test name
+                        group_salt = _strip_xdist_group_suffix(
+                            request.node.nodeid
+                        )
+
+                pre_alloc_hash: str | None = None
                 # Phase 1: Generate pre-allocation groups
                 if session.phase_manager.is_pre_alloc_generation:
                     # Use the original update_pre_alloc_groups method which
                     # returns the groups
-                    self.update_pre_alloc_groups(
-                        session.pre_alloc_group_builders, request.node.nodeid
+                    assert session.pre_alloc_group_builders is not None
+                    test_id = _strip_xdist_group_suffix(request.node.nodeid)
+                    genesis_environment = self.get_genesis_environment()
+                    pre_alloc_hash = pre.compute_pre_alloc_group_hash(
+                        fork=fork,
+                        genesis_environment=genesis_environment,
+                        group_salt=group_salt,
+                    )
+                    session.pre_alloc_group_builders.add_test_pre(
+                        pre_alloc_hash=pre_alloc_hash,
+                        test_id=test_id,
+                        fork=fork,
+                        environment=genesis_environment,
+                        pre=pre,
                     )
                     return  # Skip fixture generation in phase 1
 
                 # Phase 2: Use pre-allocation groups (only for
                 # BlockchainEngineXFixture)
-                pre_alloc_hash = None
                 if (
                     FixtureFillingPhase.PRE_ALLOC_GENERATION
                     in fixture_format.format_phases
                 ):
-                    pre_alloc_hash = self.compute_pre_alloc_group_hash()
+                    pre_alloc_hash = pre.compute_pre_alloc_group_hash(
+                        fork=fork,
+                        genesis_environment=self.get_genesis_environment(),
+                        group_salt=group_salt,
+                    )
                     group = session.get_pre_alloc_group(pre_alloc_hash)
                     self.pre = group.pre
+                fill_result: FillResult | None = None
                 try:
-                    fixture = self.generate(
+                    fill_result = self.generate(
                         t8n=t8n,
                         fixture_format=fixture_format,
                     )
                 finally:
                     if (
-                        request.config.op_mode  # type: ignore[attr-defined]
-                        == OpMode.OPTIMIZE_GAS
-                        or request.config.op_mode  # type: ignore[attr-defined]
+                        self.operation_mode == OpMode.OPTIMIZE_GAS
+                        or self.operation_mode
                         == OpMode.OPTIMIZE_GAS_POST_PROCESSING
                     ):
                         gas_optimized_tests = (
@@ -1498,8 +1730,17 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                         # None, to keep track of failed tests in the output
                         # file.
                         gas_optimized_tests[request.node.nodeid] = (
-                            self._gas_optimization
+                            fill_result.gas_optimization
+                            if fill_result is not None
+                            else None
                         )
+                assert fill_result is not None
+                fixture = fill_result.fixture
+                # If operation mode is benchmarking, check the gas used.
+                self.validate_benchmark_gas(
+                    benchmark_gas_used=fill_result.benchmark_gas_used,
+                    gas_benchmark_value=gas_benchmark_value,
+                )
 
                 # Post-process for Engine X format (add pre_hash and state
                 # diff)
@@ -1508,6 +1749,9 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                     in fixture_format.format_phases
                     and pre_alloc_hash is not None
                 ):
+                    # TODO: This should be handled by the `generate` method
+                    # of the spec.
+                    assert isinstance(fixture, BlockchainEngineXFixture)
                     fixture.pre_hash = pre_alloc_hash
 
                     # Calculate state diff for efficiency
@@ -1524,18 +1768,19 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                     t8n.version(),
                     test_case_description,
                     fixture_source_url=fixture_source_url,
+                    opcode_count=t8n.opcode_count,
                     ref_spec=reference_spec,
                     _info_metadata=t8n._info_metadata,
                 )
 
-                # Generate witness data if witness functionality is enabled via
-                # the witness plugin
-                if witness_generator is not None:
-                    witness_generator(fixture)
+                output_subdir = resolve_fixture_subfolder(
+                    list(request.node.iter_markers("fixture_subfolder"))
+                )
 
                 fixture_path = fixture_collector.add_fixture(
                     node_to_test_info(request.node),
                     fixture,
+                    output_subdir=output_subdir,
                 )
 
                 # NOTE: Use str for compatibility with pytest-dist
@@ -1553,7 +1798,12 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
 
 
 # Dynamically generate a pytest fixture for each test spec type.
-for cls in BaseTest.spec_types.values():
+for name, cls in BaseTest.spec_types.items():
+    if getattr(cls, "__is_base_test_wrapper__", False):
+        raise RuntimeError(
+            f"Test spec type {name}: {cls.__name__} is already wrapped. "
+            f"{BaseTest.spec_types.items()}."
+        )
     # Fixture needs to be defined in the global scope so pytest can detect it.
     globals()[cls.pytest_parameter_name()] = base_test_parametrizer(cls)
 
@@ -1591,6 +1841,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
             )
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(
     config: pytest.Config, items: List[pytest.Item | pytest.Function]
 ) -> None:
@@ -1604,8 +1855,6 @@ def pytest_collection_modifyitems(
     These can't be handled in this plugins pytest_generate_tests() as the fork
     parametrization occurs in the forks plugin.
     """
-    del config
-
     items_for_removal = []
     for i, item in enumerate(items):
         item.name = item.name.strip().replace(" ", "-")
@@ -1664,18 +1913,61 @@ def pytest_collection_modifyitems(
     for i in reversed(items_for_removal):
         items.pop(i)
 
-    # Schedule slow-marked tests first (Longest Processing Time First).
-    # Workers each grab the next test from the queue, so slow tests get
-    # distributed across workers and finish before the fast-test tail.
-    slow_items = []
-    normal_items = []
+    # Build base_nodeid cache and identify slow groups.
+    # If ANY fixture format variant is marked slow, treat ALL variants as slow
+    # to keep them grouped together for cache locality.
+    item_base_nodeids: Dict[int, str] = {}
+    slow_base_nodeids: set[str] = set()
     for item in items:
+        base_nodeid = strip_fixture_format_from_node(item)
+        item_base_nodeids[id(item)] = base_nodeid
         if item.get_closest_marker("slow") is not None:
-            slow_items.append(item)
-        else:
-            normal_items.append(item)
-    if slow_items:
-        items[:] = slow_items + normal_items
+            slow_base_nodeids.add(base_nodeid)
+
+    # Sort items for optimal execution order:
+    # 1. Slow groups first (LPT scheduling for xdist load balance)
+    # 2. Related fixture formats together (cache locality)
+    # 3. Cacheable formats first within a group (so non-cacheable formats
+    #    don't clear the cache between two cacheable ones; e.g., for
+    #    StateTest the _from_state_test labels sort engine_x between the
+    #    two cacheable formats alphabetically, breaking cache hits)
+    # 4. Deterministic order within groups (alphabetical by nodeid)
+    def sort_key(item: pytest.Item) -> tuple[bool, str, bool, str]:
+        base = item_base_nodeids[id(item)]
+        is_slow = base in slow_base_nodeids
+        has_cache_key = (
+            item.get_closest_marker("transition_tool_cache_key") is not None
+        )
+        return (not is_slow, base, not has_cache_key, item.nodeid)
+
+    items.sort(key=sort_key)
+
+    # Group related fixture formats for cache locality with xdist.
+    # Detect xdist: check for -n in original args (collection happens before
+    # xdist initializes, so config.option.numprocesses is None).
+    orig_args = (
+        config.invocation_params.args
+        if hasattr(config, "invocation_params")
+        else []
+    )
+    is_xdist = any(arg == "-n" or arg.startswith("-n") for arg in orig_args)
+
+    if is_xdist:
+        # Add xdist_group markers for --dist=loadgroup.
+        # Skip if test already has an xdist_group marker (e.g., bigmem).
+        # Tests with existing markers still benefit from the cache within their
+        # worker, just with potentially more interleaving.
+        # IMPORTANT: Use hash for group name because loadgroup's _split_scope
+        # uses rfind("]") to detect group suffix, and our base_nodeid contains
+        # "]" characters which would break the detection.
+        for item in items:
+            if not item.get_closest_marker("xdist_group"):
+                base_nodeid = item_base_nodeids[id(item)]
+                h = hashlib.md5(
+                    base_nodeid.encode(), usedforsecurity=False
+                ).hexdigest()[:8]
+                group_name = f"t8n-cache-{h}"
+                item.add_marker(pytest.mark.xdist_group(name=group_name))
 
 
 def _verify_fixtures_post_merge(
@@ -1746,13 +2038,53 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     - Generate index file for all produced fixtures.
     - Create tarball of the output directory if the output is a tarball.
     """
+    logger = logging.getLogger("fill.sessionfinish")
+    is_worker = xdist.is_xdist_worker(session)
+
+    # Workers collect logs to forward to master via workeroutput
+    worker_timing_logs: list[str] = []
+
+    def _log_timing(msg: str) -> None:
+        """Log with timestamp. Workers collect logs; master logs directly."""
+        log_line = f"[sessionfinish] {time.strftime('%H:%M:%S')} {msg}"
+        if is_worker:
+            worker_timing_logs.append(log_line)
+        else:
+            logger.debug(log_line)
+
+    # Log immediately when hook is entered (before any early returns)
+    _log_timing(f"pytest_sessionfinish ENTERED (worker={is_worker})")
+
     del exitstatus
 
     # Save pre-allocation groups after phase 1
     fixture_output: FixtureOutput = session.config.fixture_output  # type: ignore[attr-defined]
     session_instance: FillingSession = session.config.filling_session  # type: ignore[attr-defined]
     if session_instance.phase_manager.is_pre_alloc_generation:
+        _log_timing("Phase 1: saving pre-alloc groups (partial)...")
+        t0 = time.time()
         session_instance.save_pre_alloc_groups()
+        _log_timing(
+            f"Phase 1: save_pre_alloc_groups done in {time.time() - t0:.1f}s"
+        )
+
+        # Master merges all worker partial files after all workers finish
+        if not is_worker:
+            _log_timing("Phase 1 (master): merging partial group files...")
+            t0 = time.time()
+            pre_alloc_folder = fixture_output.pre_alloc_groups_folder_path
+            merge_partial_group_files(pre_alloc_folder)
+            _log_timing(
+                f"Phase 1 (master): merge done in {time.time() - t0:.1f}s"
+            )
+        else:
+            # Workers: clear in-memory state to reduce memory pressure while
+            # waiting for other workers to finish
+            session_instance.pre_alloc_group_builders = None
+            gc.collect()
+            # Store timing logs for master to print when this worker finishes
+            session.config.workeroutput["timing_logs"] = worker_timing_logs  # type: ignore[attr-defined] # noqa: E501
+
         return
 
     if session.config.getoption("optimize_gas", False):
@@ -1771,21 +2103,49 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
                 json.dumps(gas_optimized_tests, indent=2, sort_keys=True)
             )
 
-    if xdist.is_xdist_worker(session):
+    if is_worker:
+        # Workers: clear in-memory state to reduce memory pressure while
+        # waiting for other workers to finish
+        session_instance.pre_alloc_groups = None
+        if hasattr(session.config, "fixture_collector"):
+            fc = session.config.fixture_collector
+            fc.all_fixtures.clear()
+            fc._fixtures_to_verify.clear()
+        gc.collect()
+        # Store timing logs for master to print when this worker finishes
+        session.config.workeroutput["timing_logs"] = worker_timing_logs  # type: ignore[attr-defined] # noqa: E501
         return
 
     if fixture_output.is_stdout or is_help_or_collectonly_mode(session.config):
         return
 
+    _log_timing("Finalization (master): starting...")
+
     # Merge partial fixture files from all workers into final JSON files
+    _log_timing("merge_partial_fixture_files: starting...")
+    t0 = time.time()
     merge_partial_fixture_files(fixture_output.directory)
+    _log_timing(
+        f"merge_partial_fixture_files: done in {time.time() - t0:.1f}s"
+    )
 
     # Remove any lock files that may have been created.
-    for file in fixture_output.directory.rglob("*.lock"):
-        file.unlink()
+    lock_files = list(fixture_output.directory.rglob("*.lock"))
+    if lock_files:
+        _log_timing(f"Removing {len(lock_files)} lock files...")
+        t0 = time.time()
+        for file in lock_files:
+            file.unlink()
+        _log_timing(f"Lock files removed in {time.time() - t0:.1f}s")
 
     # Verify fixtures after merge if verification is enabled
-    _verify_fixtures_post_merge(session.config, fixture_output.directory)
+    if session.config.getoption("verify_fixtures"):
+        _log_timing("_verify_fixtures_post_merge: starting...")
+        t0 = time.time()
+        _verify_fixtures_post_merge(session.config, fixture_output.directory)
+        _log_timing(
+            f"_verify_fixtures_post_merge: done in {time.time() - t0:.1f}s"
+        )
 
     # Generate index file for all produced fixtures by merging partial indexes.
     # Only merge if partial indexes were actually written (i.e., tests produced
@@ -1797,7 +2157,33 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     ):
         meta_dir = fixture_output.directory / ".meta"
         if meta_dir.exists() and any(meta_dir.glob("partial_index*.jsonl")):
+            _log_timing("merge_partial_indexes: starting...")
+            t0 = time.time()
             merge_partial_indexes(fixture_output.directory, quiet_mode=True)
+            _log_timing(
+                f"merge_partial_indexes: done in {time.time() - t0:.1f}s"
+            )
 
     # Create tarball of the output directory if the output is a tarball.
-    fixture_output.create_tarball()
+    if fixture_output.is_tarball:
+        _log_timing("create_tarball: starting...")
+        t0 = time.time()
+        fixture_output.create_tarball()
+        _log_timing(f"create_tarball: done in {time.time() - t0:.1f}s")
+
+    _log_timing("Finalization (master): COMPLETE")
+
+
+def pytest_testnodedown(node: Any, error: Any) -> None:
+    """
+    Called on master when a worker node finishes.
+
+    Aggregate cache stats and print timing logs from the worker.
+    """
+    del error
+    _aggregate_cache_stats(node)
+    logger = logging.getLogger("fill.sessionfinish")
+    worker_id = getattr(node, "workerinput", {}).get("workerid", "unknown")
+    timing_logs = getattr(node, "workeroutput", {}).get("timing_logs", [])
+    for log_line in timing_logs:
+        logger.debug(f"[worker {worker_id}] {log_line}")

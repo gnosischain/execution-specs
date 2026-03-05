@@ -20,6 +20,9 @@ from typing import (
 )
 
 from execution_testing.base_types import to_json
+from execution_testing.cli.pytest_commands.plugins.shared.fixture_output import (  # noqa: E501
+    SUBFOLDER_LEVEL_SEPARATOR,
+)
 
 from .base import BaseFixture
 from .consume import FixtureConsumer
@@ -32,6 +35,9 @@ def merge_partial_fixture_files(output_dir: Path) -> None:
 
     Called at session end after all workers have written their partials.
     Each partial file contains JSONL lines: {"k": fixture_id, "v": json_str}
+
+    Processes one target file at a time, reading its partials sequentially
+    into a dict. Memory = O(entries per target), freed before next target.
     """
     # Find all partial files
     partial_files = list(output_dir.rglob("*.partial.*.jsonl"))
@@ -56,29 +62,30 @@ def merge_partial_fixture_files(output_dir: Path) -> None:
 
     # Merge each group into its target file
     for target_path, partials in partials_by_target.items():
+        # Read partials sequentially into dict (one at a time)
         entries: Dict[str, str] = {}
-
-        # Read all partial files
         for partial in partials:
             with open(partial) as f:
                 for line in f:
                     line = line.strip()
-                    if not line:
-                        continue
-                    entry = json.loads(line)
-                    entries[entry["k"]] = entry["v"]
+                    if line:
+                        entry = json.loads(line)
+                        entries[entry["k"]] = entry["v"]
 
-        # Write final JSON file
-        sorted_keys = sorted(entries.keys())
-        last_idx = len(sorted_keys) - 1
-        with open(target_path, "w") as f:
-            f.write("{\n")
+        # Write sorted entries to output file
+        with open(target_path, "w") as out_f:
+            out_f.write("{\n")
+            sorted_keys = sorted(entries.keys())
+            last_idx = len(sorted_keys) - 1
             for i, key in enumerate(sorted_keys):
                 key_json = json.dumps(key)
                 value_indented = entries[key].replace("\n", "\n    ")
-                f.write(f"    {key_json}: {value_indented}")
-                f.write(",\n" if i < last_idx else "\n")
-            f.write("}")
+                out_f.write(f"    {key_json}: {value_indented}")
+                out_f.write(",\n" if i < last_idx else "\n")
+            out_f.write("}")
+
+        # Free memory before processing next target
+        entries.clear()
 
         # Clean up partial files
         for partial in partials:
@@ -245,14 +252,30 @@ class FixtureCollector:
             self._worker_id_cached = True
         return self.worker_id
 
-    def add_fixture(self, info: TestInfo, fixture: BaseFixture) -> Path:
+    def add_fixture(
+        self,
+        info: TestInfo,
+        fixture: BaseFixture,
+        output_subdir: Path | None = None,
+    ) -> Path:
         """Add fixture and immediately stream to partial JSONL file."""
         fixture_basename = self.get_fixture_basename(info)
+        if (
+            output_subdir is not None
+            and SUBFOLDER_LEVEL_SEPARATOR in output_subdir.name
+        ):
+            parts = fixture_basename.parts
+            if parts and parts[0] == "benchmark":
+                # Strip the "benchmark/" prefix from the fixture path so
+                # files land directly under the gas-limit subdirectory.
+                fixture_basename = Path(*parts[1:])
 
-        fixture_path = (
-            self.output_dir
-            / fixture.output_base_dir_name()
-            / fixture_basename.with_suffix(fixture.output_file_extension)
+        format_output_dir = self.output_dir / fixture.output_base_dir_name()
+        if output_subdir is not None and self.output_dir.name != "stdout":
+            format_output_dir = format_output_dir / output_subdir
+
+        fixture_path = format_output_dir / fixture_basename.with_suffix(
+            fixture.output_file_extension
         )
 
         # Stream fixture directly to partial JSONL (no memory accumulation)

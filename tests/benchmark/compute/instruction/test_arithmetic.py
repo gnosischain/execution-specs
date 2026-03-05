@@ -30,7 +30,7 @@ from execution_testing import (
     Transaction,
 )
 
-from tests.benchmark.compute.helpers import DEFAULT_BINOP_ARGS, make_dup, neg
+from ..helpers import DEFAULT_BINOP_ARGS, make_dup, neg
 
 
 @pytest.mark.parametrize(
@@ -185,7 +185,6 @@ def test_arithmetic(
     )
 
 
-@pytest.mark.repricing(mod_bits=127)
 @pytest.mark.parametrize("mod_bits", [255, 191, 127, 63])
 @pytest.mark.parametrize("opcode", [Op.MOD, Op.SMOD])
 def test_mod(

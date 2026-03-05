@@ -231,7 +231,7 @@ class GethEvm(EthereumCLI):
             """
         )
         dump_files_to_directory(
-            str(debug_output_path),
+            debug_output_path,
             {
                 "consume_direct_args.py": command,
                 "consume_direct_returncode.txt": result.returncode,
@@ -258,6 +258,7 @@ class GethTransitionTool(GethEvm, TransitionTool):
     subcommand: Optional[str] = "t8n"
     trace: bool
     t8n_use_stream = True
+    supports_opcode_count: ClassVar[bool] = True
 
     def __init__(
         self,

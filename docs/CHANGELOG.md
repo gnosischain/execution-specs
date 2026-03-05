@@ -11,10 +11,13 @@ Test fixtures for use by clients are available for each release on the [Github r
 ### 🛠️ Framework
 
 - 🐞 Remove `Op.CLZ` from `UndefinedOpcodes` list ([#1970](https://github.com/ethereum/execution-specs/pull/1970)).
+- 🐞 Make `TransactionTraces` `CamelModel` less lestrictive ([#2081](https://github.com/ethereum/execution-specs/pull/2081)).
 
 #### `fill`
 
 #### `consume`
+
+- ✨ Add Besu `evmtool` support for `consume direct` via `state-test` and `block-test` subcommands ([#2219](https://github.com/ethereum/execution-specs/pull/2219)).
 
 #### `execute`
 
@@ -40,6 +43,8 @@ Test fixtures for use by clients are available for each release on the [Github r
 - ✨ Add missing benchmark configurations / opcode to benchmark tests for repricing analysis([#2006](https://github.com/ethereum/execution-specs/pull/2006)).
 - ✨ Port STATICCALL to CALL tests with zero and non-zero value transfer from `tests/static`, extending coverage with `pytest.mark.with_all_precompiles` ([#1960](https://github.com/ethereum/execution-specs/pull/1960)).
 - ✨ Add BAL tests that dequeue EIP-7251 consolidation requests. ([#2076](https://github.com/ethereum/execution-specs/pull/2076)).
+- ✨ Add BAL tests for handling 7702 delegation reset and delegated create. ([#2097](https://github.com/ethereum/execution-specs/pull/2097)).
+- ✨ Add benchmark scenarios for ether transfers to precompiles, warm access list transfers, and max-size contract creation transactions ([#2171](https://github.com/ethereum/execution-specs/pull/2171)).
 
 ## [v5.4.0](https://github.com/ethereum/execution-spec-tests/releases/tag/v5.4.0) - 2025-12-07
 

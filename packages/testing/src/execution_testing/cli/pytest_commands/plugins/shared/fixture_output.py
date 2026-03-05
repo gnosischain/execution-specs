@@ -1,15 +1,13 @@
 """Fixture output configuration for generated test fixtures."""
 
 import shutil
+import subprocess
 import tarfile
+import warnings
 from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, Field
-
-from execution_testing.fixtures.blockchain import (
-    BlockchainEngineXFixture,
-)
 
 
 class FixtureOutput(BaseModel):
@@ -68,15 +66,13 @@ class FixtureOutput(BaseModel):
     @property
     def pre_alloc_groups_folder_path(self) -> Path:
         """Return the path for pre-allocation groups folder."""
+        # Local import: fixtures.collector imports from this module.
+        from execution_testing.fixtures.blockchain import (
+            BlockchainEngineXFixture,
+        )
+
         engine_x_dir = BlockchainEngineXFixture.output_base_dir_name()
         return self.directory / engine_x_dir / "pre_alloc"
-
-    @property
-    def should_auto_enable_all_formats(self) -> bool:
-        """
-        Check if all formats should be auto-enabled due to tarball output.
-        """
-        return self.is_tarball
 
     @staticmethod
     def strip_tarball_suffix(path: Path) -> Path:
@@ -219,11 +215,28 @@ class FixtureOutput(BaseModel):
                 parents=True, exist_ok=True
             )
 
+    @staticmethod
+    def _pigz_available() -> bool:
+        """Check if pigz (parallel gzip) is available on the system."""
+        return shutil.which("pigz") is not None
+
     def create_tarball(self) -> None:
-        """Create tarball of the output directory if configured to do so."""
+        """
+        Create tarball of the output directory if configured to do so.
+
+        Automatically uses pigz for parallel compression if available,
+        otherwise falls back to standard single-threaded gzip.
+        """
         if not self.is_tarball:
             return
 
+        if self._pigz_available():
+            self._create_tarball_with_pigz()
+        else:
+            self._create_tarball_standard()
+
+    def _create_tarball_standard(self) -> None:
+        """Create tarball using Python's tarfile module (single-threaded)."""
         with tarfile.open(self.output_path, "w:gz") as tar:
             for file in self.directory.rglob("*"):
                 if file.suffix in {".json", ".ini"}:
@@ -231,6 +244,43 @@ class FixtureOutput(BaseModel):
                         self.directory
                     )
                     tar.add(file, arcname=arcname)
+
+    def _create_tarball_with_pigz(self) -> None:
+        """
+        Create tarball using Python tarfile + pigz for parallel compression.
+
+        This approach uses Python's tarfile to create the uncompressed .tar
+        (which correctly handles arcnames across all platforms), then uses
+        pigz for parallel gzip compression with auto-detected core count.
+        """
+        # Create uncompressed tar first (output_path minus .gz suffix)
+        temp_tar = self.output_path.with_suffix("")  # Remove .gz suffix
+
+        try:
+            # Use Python tarfile for cross-platform tar creation with arcnames
+            with tarfile.open(temp_tar, "w") as tar:
+                for file in self.directory.rglob("*"):
+                    if file.suffix in {".json", ".ini"}:
+                        arcname = Path("fixtures") / file.relative_to(
+                            self.directory
+                        )
+                        tar.add(file, arcname=arcname)
+
+            # Compress with pigz (parallel gzip, auto-detects available cores)
+            subprocess.run(
+                ["pigz", "-f", str(temp_tar)], check=True, capture_output=True
+            )
+        except (subprocess.CalledProcessError, OSError) as e:
+            # Clean up temp file if it exists
+            if temp_tar.exists():
+                temp_tar.unlink()
+            # Fall back to standard tarball creation with warning
+            warnings.warn(
+                f"pigz compression failed ({type(e).__name__}: {e}), "
+                "falling back to standard gzip",
+                stacklevel=2,
+            )
+            self._create_tarball_standard()
 
     @classmethod
     def from_config(cls, config: pytest.Config) -> "FixtureOutput":
@@ -258,3 +308,49 @@ class FixtureOutput(BaseModel):
             use_pre_alloc_groups=config.getoption("use_pre_alloc_groups"),
             should_generate_all_formats=should_generate_all_formats,
         )
+
+
+FORK_SUBDIR_PREFIX = "for_"
+SUBFOLDER_LEVEL_SEPARATOR = "_at_"
+
+
+def format_gas_limit_prefix(
+    gas_value_millions: int, all_values_millions: list[int]
+) -> str:
+    """Return a stable, sortable gas-limit prefix for a fixture subfolder."""
+    max_value = max(all_values_millions) if all_values_millions else 0
+    width = max(4, len(str(max_value)))
+    return f"{gas_value_millions:0{width}d}M"
+
+
+def format_fork_subdir(
+    fork_name: str,
+    gas_limit_subdir: str | None = None,
+) -> str:
+    """
+    Return the fork-based output subdirectory name.
+
+    Without *gas_limit_subdir*: ``for_prague``
+    With *gas_limit_subdir*:    ``for_prague_at_0002M``
+    """
+    base = f"{FORK_SUBDIR_PREFIX}{fork_name.lower()}"
+    if gas_limit_subdir is not None:
+        return f"{base}{SUBFOLDER_LEVEL_SEPARATOR}{gas_limit_subdir}"
+    return base
+
+
+def resolve_fixture_subfolder(
+    markers: list[pytest.Mark],
+) -> Path | None:
+    """
+    Build the output subdirectory from ``fixture_subfolder`` markers.
+
+    Markers are sorted by *level* and their *prefix* values are joined with
+    ``_at_`` to form a single directory name.  Returns ``None`` when no
+    markers are present.
+    """
+    if not markers:
+        return None
+    ordered = sorted(markers, key=lambda m: m.kwargs.get("level", 0))
+    prefixes = [m.kwargs["prefix"] for m in ordered]
+    return Path(SUBFOLDER_LEVEL_SEPARATOR.join(prefixes))

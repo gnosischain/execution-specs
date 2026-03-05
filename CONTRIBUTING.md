@@ -21,15 +21,122 @@ This specification aims to be:
 2. **Complete** - Capture the entirety of _consensus critical_ parts of Ethereum.
 3. **Accessible** - Prioritize readability, clarity, and plain language over performance and brevity.
 
-### Spelling and Naming
+### Style
+
+#### Spelling and Naming
 
 - Attempt to use descriptive English words (or _very common_ abbreviations) in documentation and identifiers.
-- Avoid using EIP numbers in identifiers.
+- Avoid using EIP numbers in identifiers, and prefer descriptive text instead (eg. `FeeMarketTransaction` instead of `Eip1559Transaction`).
 - If necessary, there is a custom dictionary `whitelist.txt`.
+- Avoid uninformative prefixes in identifiers (like `get_` or `compute_`). They don't add useful meaning and take up valuable real estate.
+
+#### Comments
+
+- Don't repeat what is obvious from the code.
+- <details>
+    <summary><em>(expand)</em> Consider how future changes will interleave with yours, especially when creating semantic blocks.</summary>
+
+    <br>Consider:
+    <table valign="top">
+
+    <tr valign="top">
+    <th>Fork T</th>
+    <th>Fork T+1</th>
+    </tr>
+
+    <tr valign="top">
+
+    <td>
+
+    <!--
+        Note that the trailing whitespace is necessary to move the copy button
+        in the github UI over so it doesn't obscure the text.
+    -->
+
+    ```python
+    # EIP-1234: The dingus is the rate of fleep      
+    dingus = a + b
+    dingus += c ^ d
+    dingus /= fleep(e)
+    ```
+
+    </td>
+
+    <td>
+
+    ```python
+    # EIP-1234: The dingus is the rate of fleep      
+    dingus = a + b
+
+    # EIP-4567: Frobulate the dingus
+    dingus = frobulate(dingus)
+
+    dingus += c ^ d        # <-
+    dingus /= fleep(e)     # <-
+    ```
+
+    </td>
+
+    </tr>
+
+    </table>
+
+    The marked lines (`<-`) are now incorrectly attributed to EIP-4567 in Fork+1. Instead, omit the EIP identifier in the comments, and describe the changes introduced by the EIP in the function's docstrings. The rendered diffs will make it pretty obvious what's changed.
+  </details>
+
+#### Docstrings
+
+- Write in complete sentences, providing necessary background and context for the associated code.
+- Function and method docstrings must use the imperative mood in the summary line.
+    - **Good:** Build the house using the provided lumber.
+    - **Bad:** Builds the house using the provided lumber.
+- Always start with a single-line summary. When more detail is needed, use a multi-line docstring with a blank line after the summary line.
+    - **One-line summary:**
+
+      ```python
+      """Return the pathname of the KOS root directory."""
+      ```
+
+    - **Multi-line:**
+
+      ```python
+      """
+      Add a bloom entry to the bloom filter.
+
+      The number of hash functions used is 3. They are calculated by
+      taking the least significant 11 bits from the first 3 16-bit
+      words of the `keccak_256()` hash of `bloom_entry`.
+      """
+      ```
+
+- Format using markdown.
+- Links to relevant standards and EIPs may be specified using reference-style links.
+
+  ```python
+  """
+  Minimum gas cost per byte of calldata as per [EIP-7976].
+
+  [EIP-7976]: https://eips.ethereum.org/EIPS/eip-7976
+  """
+  ```
+
+- Avoid beginning docstrings with an article ("the"/"a") or a pronoun ("it", "they", etc.).
+- Don't include the function's signature.
+
+##### Constants
+
+- Do not include constant values in docstrings, neither as literals nor as expressions. It's too easy to change a constant's value and forget to update its docstring.
+- Construct the constant's value from other constants or meaningful expressions in order to provide meaningful context.
+    - **Great:** `TARGET_BLOB_GAS_PER_BLOCK = GAS_PER_BLOB * BLOB_SCHEDULE_TARGET`
+        - Composed from named constants; the reader immediately understands what the value represents.
+    - **Acceptable:** `TX_MAX_GAS = Uint(2 ** 24)`
+        - More readable than a raw number, but still a literal expression that doesn't convey _why_ this value was chosen.
+    - **Bad:** `TX_MAX_GAS = Uint(16_777_216)`
+        - A magic number with no context.
 
 ### Changes across various Forks
 
-Many contributions require changes across multiple forks, organized under `src/ethereum/*`. When making such changes, please ensure that differences between the forks are minimal and consist only of necessary differences. This will help with getting cleaner [diff outputs](https://ethereum.github.io/execution-specs/diffs/index.html).
+Many contributions require changes across multiple forks, organized under `src/ethereum/forks/*`. When making such changes, please ensure that differences between the forks are minimal and consist only of necessary differences. This will help with getting cleaner [diff outputs](https://ethereum.github.io/execution-specs/diffs/index.html).
 
 When creating pull requests affecting multiple forks, we recommended submitting your PR in two steps:
 

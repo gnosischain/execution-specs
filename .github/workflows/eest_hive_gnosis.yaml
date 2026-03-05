@@ -24,6 +24,9 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
 
+      - name: Clone Hive repository
+        run: git clone -b master https://github.com/gnosischain/hive.git
+
       - name: Install Go (for Hive)
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
@@ -32,7 +35,6 @@ jobs:
 
       - name: Build and install Hive
         run: |
-          git clone -b sync-eest https://github.com/gnosischain/hive.git
           cd hive
           go install ./...
           cd ..
@@ -46,13 +48,14 @@ jobs:
             --sim.loglevel=5 \
             --docker.output \
             --docker.pull > hive.log 2>&1 &
-          sleep 10  # Give Hive time to start
       
       - name: Install wait-on utility
         run: npm install -g wait-on
 
       - name: Wait for Hive to listen on port 3000
-        run: npx wait-on --timeout 60000 tcp:127.0.0.1:3000
+        run: |
+          set -xe
+          npx wait-on --timeout 600000 tcp:127.0.0.1:3000
 
       - name: Install uv
         run: |
@@ -77,7 +80,7 @@ jobs:
           HIVE_SIMULATOR: http://127.0.0.1:3000
         run: |
           FORK_LOWER=$(echo "${{ github.event.inputs.fork }}" | tr '[:upper:]' '[:lower:]')
-          uv run consume engine -v --input "fixtures/blockchain_tests_engine/$FORK_LOWER"
+          uv run consume engine -v --input "fixtures/blockchain_tests_engine/for_$FORK_LOWER"
 
       - name: Upload Hive logs
         if: always()
