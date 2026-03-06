@@ -264,8 +264,9 @@ def test_sload_erc20_balanceof(
         slot_offset += num_calls
 
     blocks = build_cache_strategy_blocks(cache_strategy, txs, cache_txs)
-
-    benchmark_test(pre=pre, blocks=blocks)
+    # FIXME: this should not use gas validation as this one should OOG
+    # If it does not OOG, the gas calculation is too high, it should be too low
+    benchmark_test(pre=pre, blocks=blocks, skip_gas_used_validation=True)
 
 
 @pytest.mark.parametrize("cache_strategy", list(CacheStrategy))
@@ -368,6 +369,11 @@ def test_sstore_erc20_approve(
         )
     )
 
+    # This dispatch is something close to the minimal amount
+    # of code to run for a contract only implementing approve
+    # It will therefore greatly underestimate the gas of any ERC20
+    # contract because all of them have much more overhead in practice
+    # (also function selector at the entry point of the contract)
     function_dispatch = (
         # Selector dispatch
         Op.PUSH4(APPROVE_SELECTOR)
@@ -425,15 +431,17 @@ def test_sstore_erc20_approve(
             + Op.CALLDATALOAD(36)
             + Op.MSTORE(0, Op.CALLDATALOAD(4))
             + Op.MSTORE(32, 1)
-            + Op.SHA3(
-                0,
-                64,
-                # gas accounting
-                data_size=64,
-                old_memory_size=0,
-                new_memory_size=64,
+            + Op.MSTORE(
+                32,
+                Op.SHA3(
+                    0,
+                    64,
+                    # gas accounting
+                    data_size=64,
+                    old_memory_size=0,
+                    new_memory_size=64,
+                ),
             )
-            + Op.MSTORE(32)
             + Op.MSTORE(0, Op.CALLDATALOAD(36))
             + Op.SHA3(
                 0,
@@ -496,8 +504,18 @@ def test_sstore_erc20_approve(
         slot_offset += num_calls
 
     blocks = build_cache_strategy_blocks(cache_strategy, txs, cache_txs)
-
-    benchmark_test(pre=pre, blocks=blocks)
+    # TODO: this test can currently not estimate the gas used
+    # It will also overestimate the num_calls it can make to an unknown
+    # ERC20 contract and will therefore OOG
+    # (this actually passes the gas check as it consumes all gas and
+    # thus also the expected gas)
+    # TODO: find out how to tackle this. We do not want to OOG
+    # because the state root is part of the calculation
+    # NOTE: this is not crucial for gas repricing tests
+    # as the mint variant is used there.
+    benchmark_test(
+        pre=pre, blocks=blocks, skip_gas_used_validation=True
+    )  # FIXME: temp skips
 
 
 def build_call_memory_setup(
@@ -570,6 +588,10 @@ def test_sstore_erc20_mint(
 ) -> None:
     """
     Benchmark SSTORE using ERC20 mint on bloatnet.
+    This targets very specific code and is meant to be
+    temporary for the gas repricings effort, to be replaced
+    by a robust benchmark which does not depend on specific
+    conditions like in this benchmark.
     This contract calls mint() on an ERC20 contract
     which supports the mint() function. It is intended
     to be used with ERC20 contracts bloated via bloatStorage.
@@ -610,14 +632,14 @@ def test_sstore_erc20_mint(
     mint_mem_setup = build_call_memory_setup(
         MINT_SELECTOR, Op.SLOAD(slot_offset), mint_amount
     )
-    mint_erc20_call = build_external_call(erc20_address, 32 + 32 + 4)
+    mint_erc20_call = build_external_call(erc20_address, 2)
 
     # MEM[0] = function selector
     # MEM[32] = target address
     balance_mem_setup = build_call_memory_setup(
         BALANCEOF_SELECTOR, Op.SLOAD(slot_offset)
     )
-    balance_erc20_call = build_external_call(erc20_address, 32 + 4)
+    balance_erc20_call = build_external_call(erc20_address, 1)
 
     attack_code = mint_erc20_call
     if cache_strategy == CacheStrategy.CACHE_TX:
@@ -704,6 +726,12 @@ def test_sstore_erc20_mint(
     benchmark_test(
         pre=pre,
         blocks=blocks,
+        # NOTE: this specifically targets bloatnet code so the
+        # gas calculation could technically be done by inlining
+        # the bytecode. This test is temporary and will be removed
+        # after (or during) gas repricing effort is done. See
+        # https://github.com/ethereum/execution-specs/issues/2411
+        skip_gas_used_validation=True,
     )
 
 
