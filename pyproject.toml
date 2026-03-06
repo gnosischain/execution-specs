@@ -13,6 +13,7 @@ urls = { "Homepage" = "https://github.com/ethereum/execution-specs" }
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: Implementation :: PyPy",
     "Programming Language :: Python :: Implementation :: CPython",
     "Intended Audience :: Developers",
@@ -23,8 +24,8 @@ dependencies = [
     "coincurve>=20,<21",
     "typing_extensions>=4.4",
     "py-ecc>=8.0.0b2,<9",
-    "ethereum-types>=0.2.4,<0.3",
-    "ethereum-rlp>=0.1.4,<0.2",
+    "ethereum-types>=0.3.0,<0.4",
+    "ethereum-rlp>=0.1.5,<0.2",
     "cryptography>=45.0.1,<46",
     "platformdirs>=4.2,<5",
     "libcst>=1.8,<2",
@@ -143,8 +144,37 @@ packages = [
     "ethereum.forks.osaka.vm.instructions",
     "ethereum.forks.osaka.vm.precompiled_contracts",
     "ethereum.forks.osaka.vm.precompiled_contracts.bls12_381",
+    "ethereum.forks.bpo1",
+    "ethereum.forks.bpo1.utils",
+    "ethereum.forks.bpo1.vm",
+    "ethereum.forks.bpo1.vm.instructions",
+    "ethereum.forks.bpo1.vm.precompiled_contracts",
+    "ethereum.forks.bpo1.vm.precompiled_contracts.bls12_381",
+    "ethereum.forks.bpo2",
+    "ethereum.forks.bpo2.utils",
+    "ethereum.forks.bpo2.vm",
+    "ethereum.forks.bpo2.vm.instructions",
+    "ethereum.forks.bpo2.vm.precompiled_contracts",
+    "ethereum.forks.bpo2.vm.precompiled_contracts.bls12_381",
+    "ethereum.forks.bpo3",
+    "ethereum.forks.bpo3.utils",
+    "ethereum.forks.bpo3.vm",
+    "ethereum.forks.bpo3.vm.instructions",
+    "ethereum.forks.bpo3.vm.precompiled_contracts",
+    "ethereum.forks.bpo3.vm.precompiled_contracts.bls12_381",
+    "ethereum.forks.bpo4",
+    "ethereum.forks.bpo4.utils",
+    "ethereum.forks.bpo4.vm",
+    "ethereum.forks.bpo4.vm.instructions",
+    "ethereum.forks.bpo4.vm.precompiled_contracts",
+    "ethereum.forks.bpo4.vm.precompiled_contracts.bls12_381",
+    "ethereum.forks.bpo5",
+    "ethereum.forks.bpo5.utils",
+    "ethereum.forks.bpo5.vm",
+    "ethereum.forks.bpo5.vm.instructions",
+    "ethereum.forks.bpo5.vm.precompiled_contracts",
+    "ethereum.forks.bpo5.vm.precompiled_contracts.bls12_381",
     "ethereum.forks.amsterdam",
-    "ethereum.forks.amsterdam.block_access_lists",
     "ethereum.forks.amsterdam.utils",
     "ethereum.forks.amsterdam.vm",
     "ethereum.forks.amsterdam.vm.instructions",
@@ -196,7 +226,7 @@ actionlint = [
     "shellcheck-py>=0.10",
 ]
 doc = [
-    "docc>=0.3.0,<0.4.0",
+    "docc>=0.4.0,<0.5.0",
     "fladrif>=0.2.0,<0.3.0",
     "mistletoe>=1.5.0,<2",
 ]
@@ -216,7 +246,7 @@ mkdocs = [
     "mkdocs-material-extensions>=1.1.1,<2",
     "mkdocstrings>=0.21.2,<1",
     "mkdocstrings-python>=1.0.0,<2",
-    "pillow>=10.0.1,<11",
+    "pillow>=12,<13",
     "pyspelling>=2.8.2,<3",
     "lxml>=6.0.0,<7",                       # needs to be >= 6.0 for pypy
 ]
@@ -227,6 +257,7 @@ dev = [
     { include-group = "doc" },
     { include-group = "mkdocs" },
     "ethereum-execution[optimized]",
+    "psutil>=7.2.2",
 ]
 
 [tool.setuptools.dynamic]
@@ -325,7 +356,7 @@ files = [
 ]
 
 [tool.docc.output]
-path = "docs"
+path = "api_docs"
 extension = ".html"
 
 [tool.vulture]
@@ -386,15 +417,6 @@ ignore = [
 "src/ethereum_spec_tools/evm_tools/t8n/evm_trace.py" = [
     "N815"          # The traces must use camel case in JSON property names
 ]
-"src/ethereum/forks/amsterdam/blocks.py" = [
-    "E501"          # Line too long - needed for long ref links
-]
- "src/ethereum/forks/amsterdam/block_access_lists/builder.py" = [
-    "E501"          # Line too long - needed for long ref links
- ]
-"src/ethereum/forks/amsterdam/block_access_lists/rlp_utils.py" = [
-    "E501"          # Line too long - needed for long ref links
- ]
 "tests/*" = ["ARG001"]
 "vulture_whitelist.py" = [
     "B018",  # Useless expression (intentional for Vulture whitelisting)
@@ -410,6 +432,7 @@ max-complexity = 7
 builtin = "clear,code,usage"
 # Version control & tooling, build artifacts, data files, test fixtures, temp files, lock files
 skip = [
+    ".devcontainer",
     ".git",
     ".tox",
     ".venv",
@@ -430,8 +453,8 @@ skip = [
     "*.csv",
     "*.tar.gz",
     "*.png",
-    "tests/fixtures",
-    "tests/json_infra/fixtures",
+    "*/tests/fixtures",
+    "*/json_infra/fixtures",
     "fixtures.*",
     "tmp",
     "*.coverage*",
@@ -455,6 +478,7 @@ mypy_path = ["src", "packages/testing/src", "packages/testing/stubs"]
 files = ["src", "tests", "packages"]
 exclude = [
     "^\\.cache/",
+    "^\\.devcontainer/",
     "^\\.git/",
     "^\\.pytest_cache/",
     "^\\.ruff_cache/",
@@ -470,6 +494,7 @@ plugins = ["pydantic.mypy"]
 
 [tool.uv]
 required-version = ">=0.7.0"
+extra-build-dependencies = { ethash = ["setuptools", "cmake>=4.2.1,<5"] }
 
 [tool.uv.workspace]
 members = ["packages/*"]

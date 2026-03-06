@@ -11,6 +11,7 @@ from execution_testing import (
     Op,
     Transaction,
 )
+from execution_testing.forks.helpers import Fork
 
 from .spec import ref_spec_1153
 
@@ -22,6 +23,7 @@ REFERENCE_SPEC_VERSION = ref_spec_1153.version
 def test_tstore_clear_after_deployment_tx(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
+    fork: Fork,
 ) -> None:
     """
     First creates a contract, which TSTOREs a value 1 in slot 1. After creating

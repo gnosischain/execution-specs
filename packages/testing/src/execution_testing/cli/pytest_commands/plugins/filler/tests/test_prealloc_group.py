@@ -7,12 +7,16 @@ from unittest.mock import Mock
 
 import pytest
 
-from execution_testing.fixtures import BaseFixture, PreAllocGroups
+from execution_testing.base_types import Address
+from execution_testing.fixtures import PreAllocGroups
 from execution_testing.forks import Fork, Prague
-from execution_testing.specs.base import BaseTest
-from execution_testing.test_types import Alloc, Environment
+from execution_testing.specs.base import BaseTest, FillResult
+from execution_testing.test_types import Environment
+from execution_testing.vm import Op
 
+from ...shared.pre_alloc import AllocFlags
 from ..filler import default_output_directory
+from ..pre_alloc import Alloc
 
 
 class MockTest(BaseTest):
@@ -26,7 +30,6 @@ class MockTest(BaseTest):
         pre: Alloc,
         fork: Fork,
         genesis_environment: Environment,
-        request: Mock | None = None,
     ) -> None:
         """Initialize mock test."""
         super().__init__(  # type: ignore
@@ -34,9 +37,8 @@ class MockTest(BaseTest):
             fork=fork,
             genesis_environment=genesis_environment,
         )
-        self._request = request
 
-    def generate(self, *args: Any, **kwargs: Any) -> BaseFixture:
+    def generate(self, *args: Any, **kwargs: Any) -> FillResult:
         """Mock generate method."""
         raise NotImplementedError("This is a mock test class")
 
@@ -45,16 +47,46 @@ class MockTest(BaseTest):
         return self.genesis_environment.set_fork_requirements(self.fork)
 
 
+def test_pre_alloc_group_same() -> None:
+    """Test that pre_alloc_group("separate") forces unique grouping."""
+    # Create mock environment and pre-allocation
+    env = Environment()
+    pre_1 = Alloc(fork=Prague, flags=AllocFlags.NONE)
+    pre_2 = Alloc(fork=Prague, flags=AllocFlags.NONE)
+
+    # Deploy different contracts and fund eoas with different amounts,
+    # should still result in the same group hash.
+    pre_1.deploy_contract(code=Op.STOP)
+    pre_2.deploy_contract(code=Op.INVALID)
+
+    pre_1.fund_eoa(amount=0)
+    pre_2.fund_eoa(amount=1)
+
+    # Create test without marker
+    hash1 = pre_1.compute_pre_alloc_group_hash(
+        fork=Prague, genesis_environment=env, group_salt=None
+    )
+    hash2 = pre_1.compute_pre_alloc_group_hash(
+        fork=Prague, genesis_environment=env, group_salt=None
+    )
+
+    # Hashes should be equal
+    assert hash1 == hash2
+
+
 def test_pre_alloc_group_separate() -> None:
     """Test that pre_alloc_group("separate") forces unique grouping."""
     # Create mock environment and pre-allocation
     env = Environment()
-    pre = Alloc()
+    pre = Alloc(fork=Prague, flags=AllocFlags.NONE)
     fork = Prague
 
     # Create test without marker
     test1 = MockTest(pre=pre, genesis_environment=env, fork=fork)
-    hash1 = test1.compute_pre_alloc_group_hash()
+    genesis_env1 = test1.get_genesis_environment()
+    hash1 = pre.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env1, group_salt=None
+    )
 
     # Create test with "separate" marker
     mock_request = Mock()
@@ -64,17 +96,24 @@ def test_pre_alloc_group_separate() -> None:
     mock_marker.args = ("separate",)
     mock_request.node.get_closest_marker = Mock(return_value=mock_marker)
 
-    test2 = MockTest(
-        pre=pre, genesis_environment=env, request=mock_request, fork=fork
+    test2 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env2 = test2.get_genesis_environment()
+    # For "separate" marker, use the node ID as the salt
+    hash2 = pre.compute_pre_alloc_group_hash(
+        fork=fork,
+        genesis_environment=genesis_env2,
+        group_salt=mock_request.node.nodeid,
     )
-    hash2 = test2.compute_pre_alloc_group_hash()
 
     # Hashes should be different due to "separate" marker
     assert hash1 != hash2
 
     # Create another test without marker - should match first test
     test3 = MockTest(pre=pre, genesis_environment=env, fork=fork)
-    hash3 = test3.compute_pre_alloc_group_hash()
+    genesis_env3 = test3.get_genesis_environment()
+    hash3 = pre.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env3, group_salt=None
+    )
 
     assert hash1 == hash3
 
@@ -82,7 +121,7 @@ def test_pre_alloc_group_separate() -> None:
 def test_pre_alloc_group_custom_salt() -> None:
     """Test that custom group names create consistent grouping."""
     env = Environment()
-    pre = Alloc()
+    pre = Alloc(fork=Prague, flags=AllocFlags.NONE)
     fork = Prague
 
     # Create test with custom group "eip1234"
@@ -93,10 +132,11 @@ def test_pre_alloc_group_custom_salt() -> None:
     mock_marker1.args = ("eip1234",)
     mock_request1.node.get_closest_marker = Mock(return_value=mock_marker1)
 
-    test1 = MockTest(
-        pre=pre, genesis_environment=env, request=mock_request1, fork=fork
+    test1 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env1 = test1.get_genesis_environment()
+    hash1 = pre.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env1, group_salt="eip1234"
     )
-    hash1 = test1.compute_pre_alloc_group_hash()
 
     # Create another test with same custom group "eip1234"
     mock_request2 = Mock()
@@ -108,10 +148,11 @@ def test_pre_alloc_group_custom_salt() -> None:
     mock_marker2.args = ("eip1234",)  # Same group
     mock_request2.node.get_closest_marker = Mock(return_value=mock_marker2)
 
-    test2 = MockTest(
-        pre=pre, genesis_environment=env, request=mock_request2, fork=fork
+    test2 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env2 = test2.get_genesis_environment()
+    hash2 = pre.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env2, group_salt="eip1234"
     )
-    hash2 = test2.compute_pre_alloc_group_hash()
 
     # Hashes should be the same - both in "eip1234" group
     assert hash1 == hash2
@@ -124,10 +165,11 @@ def test_pre_alloc_group_custom_salt() -> None:
     mock_marker3.args = ("eip5678",)  # Different group
     mock_request3.node.get_closest_marker = Mock(return_value=mock_marker3)
 
-    test3 = MockTest(
-        pre=pre, genesis_environment=env, request=mock_request3, fork=fork
+    test3 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env3 = test3.get_genesis_environment()
+    hash3 = pre.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env3, group_salt="eip5678"
     )
-    hash3 = test3.compute_pre_alloc_group_hash()
 
     # Hash should be different - different custom group
     assert hash1 != hash3
@@ -137,7 +179,7 @@ def test_pre_alloc_group_custom_salt() -> None:
 def test_pre_alloc_group_separate_different_nodeids() -> None:
     """Test that different tests with "separate" get different hashes."""
     env = Environment()
-    pre = Alloc()
+    pre = Alloc(fork=Prague, flags=AllocFlags.NONE)
     fork = Prague
 
     # Create test with "separate" and nodeid1
@@ -148,10 +190,13 @@ def test_pre_alloc_group_separate_different_nodeids() -> None:
     mock_marker1.args = ("separate",)
     mock_request1.node.get_closest_marker = Mock(return_value=mock_marker1)
 
-    test1 = MockTest(
-        pre=pre, genesis_environment=env, request=mock_request1, fork=fork
+    test1 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env1 = test1.get_genesis_environment()
+    hash1 = pre.compute_pre_alloc_group_hash(
+        fork=fork,
+        genesis_environment=genesis_env1,
+        group_salt=mock_request1.node.nodeid,
     )
-    hash1 = test1.compute_pre_alloc_group_hash()
 
     # Create test with "separate" and nodeid2
     mock_request2 = Mock()
@@ -161,10 +206,13 @@ def test_pre_alloc_group_separate_different_nodeids() -> None:
     mock_marker2.args = ("separate",)
     mock_request2.node.get_closest_marker = Mock(return_value=mock_marker2)
 
-    test2 = MockTest(
-        pre=pre, genesis_environment=env, request=mock_request2, fork=fork
+    test2 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env2 = test2.get_genesis_environment()
+    hash2 = pre.compute_pre_alloc_group_hash(
+        fork=fork,
+        genesis_environment=genesis_env2,
+        group_salt=mock_request2.node.nodeid,
     )
-    hash2 = test2.compute_pre_alloc_group_hash()
 
     # Hashes should be different due to different nodeids
     assert hash1 != hash2
@@ -173,7 +221,7 @@ def test_pre_alloc_group_separate_different_nodeids() -> None:
 def test_no_pre_alloc_group_marker() -> None:
     """Test normal grouping without pre_alloc_group marker."""
     env = Environment()
-    pre = Alloc()
+    pre = Alloc(fork=Prague, flags=AllocFlags.NONE)
     fork = Prague
 
     # Create test without marker but with request object
@@ -182,14 +230,18 @@ def test_no_pre_alloc_group_marker() -> None:
     mock_request.node.nodeid = "test_module.py::test_function"
     mock_request.node.get_closest_marker = Mock(return_value=None)  # No marker
 
-    test1 = MockTest(
-        pre=pre, genesis_environment=env, request=mock_request, fork=fork
+    test1 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env1 = test1.get_genesis_environment()
+    hash1 = pre.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env1, group_salt=None
     )
-    hash1 = test1.compute_pre_alloc_group_hash()
 
     # Create test without any request
     test2 = MockTest(pre=pre, genesis_environment=env, fork=fork)
-    hash2 = test2.compute_pre_alloc_group_hash()
+    genesis_env2 = test2.get_genesis_environment()
+    hash2 = pre.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env2, group_salt=None
+    )
 
     # Hashes should be the same - both have no marker
     assert hash1 == hash2
@@ -198,7 +250,7 @@ def test_no_pre_alloc_group_marker() -> None:
 def test_pre_alloc_group_with_reason() -> None:
     """Test that reason kwarg is accepted but doesn't affect grouping."""
     env = Environment()
-    pre = Alloc()
+    pre = Alloc(fork=Prague, flags=AllocFlags.NONE)
     fork = Prague
 
     # Create test with custom group and reason
@@ -212,10 +264,13 @@ def test_pre_alloc_group_with_reason() -> None:
     }
     mock_request1.node.get_closest_marker = Mock(return_value=mock_marker1)
 
-    test1 = MockTest(
-        pre=pre, genesis_environment=env, request=mock_request1, fork=fork
+    test1 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env1 = test1.get_genesis_environment()
+    hash1 = pre.compute_pre_alloc_group_hash(
+        fork=fork,
+        genesis_environment=genesis_env1,
+        group_salt="hardcoded_addresses",
     )
-    hash1 = test1.compute_pre_alloc_group_hash()
 
     # Create another test with same group but different reason
     mock_request2 = Mock()
@@ -226,12 +281,107 @@ def test_pre_alloc_group_with_reason() -> None:
     mock_marker2.kwargs = {"reason": "Different reason but same group"}
     mock_request2.node.get_closest_marker = Mock(return_value=mock_marker2)
 
-    test2 = MockTest(
-        pre=pre, genesis_environment=env, request=mock_request2, fork=fork
+    test2 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env2 = test2.get_genesis_environment()
+    hash2 = pre.compute_pre_alloc_group_hash(
+        fork=fork,
+        genesis_environment=genesis_env2,
+        group_salt="hardcoded_addresses",
     )
-    hash2 = test2.compute_pre_alloc_group_hash()
 
     # Hashes should be the same - reason doesn't affect grouping
+    assert hash1 == hash2
+
+
+def test_pre_alloc_group_with_modified_alloc() -> None:
+    """Test that modifications to Alloc affect grouping via group_salt()."""
+    env = Environment()
+    fork = Prague
+
+    # Create unmodified pre-allocation
+    pre1 = Alloc(fork=fork, flags=AllocFlags.NONE)
+    test1 = MockTest(pre=pre1, genesis_environment=env, fork=fork)
+    genesis_env1 = test1.get_genesis_environment()
+    hash1 = pre1.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env1, group_salt=None
+    )
+
+    # Create pre-allocation with a funded address
+    pre2 = Alloc(fork=fork, flags=AllocFlags.NONE)
+    pre2.fund_address(
+        Address("0x1234567890123456789012345678901234567890"), amount=100
+    )
+    test2 = MockTest(pre=pre2, genesis_environment=env, fork=fork)
+    genesis_env2 = test2.get_genesis_environment()
+    hash2 = pre2.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env2, group_salt=None
+    )
+
+    # Hashes should be different - pre2 has modifications
+    assert hash1 != hash2
+
+
+def test_pre_alloc_explicit_salt_overrides_group_salt() -> None:
+    """
+    Test that explicit group_salt parameter overrides group_salt() method.
+    """
+    env = Environment()
+    fork = Prague
+
+    # Create pre-allocation with modifications
+    pre = Alloc(fork=fork, flags=AllocFlags.NONE)
+    pre.fund_address(
+        Address("0x1234567890123456789012345678901234567890"), amount=100
+    )
+
+    test1 = MockTest(pre=pre, genesis_environment=env, fork=fork)
+    genesis_env1 = test1.get_genesis_environment()
+
+    # Hash with explicit salt should ignore the internal group_salt()
+    hash1 = pre.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env1, group_salt="custom_salt"
+    )
+
+    # Hash without explicit salt uses internal group_salt()
+    hash2 = pre.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env1, group_salt=None
+    )
+
+    # Hashes should be different
+    assert hash1 != hash2
+
+
+def test_pre_alloc_group_same_modifications() -> None:
+    """Test that identical modifications produce the same hash."""
+    env = Environment()
+    fork = Prague
+
+    # Create two pre-allocations with same modification
+    pre1 = Alloc(fork=fork, flags=AllocFlags.NONE)
+    pre1.fund_address(
+        Address("0x1234567890123456789012345678901234567890"), amount=100
+    )
+
+    pre2 = Alloc(fork=fork, flags=AllocFlags.NONE)
+    pre2.fund_address(
+        Address("0x1234567890123456789012345678901234567890"), amount=100
+    )
+
+    test1 = MockTest(pre=pre1, genesis_environment=env, fork=fork)
+    test2 = MockTest(pre=pre2, genesis_environment=env, fork=fork)
+
+    genesis_env1 = test1.get_genesis_environment()
+    genesis_env2 = test2.get_genesis_environment()
+
+    hash1 = pre1.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env1, group_salt=None
+    )
+
+    hash2 = pre2.compute_pre_alloc_group_hash(
+        fork=fork, genesis_environment=genesis_env2, group_salt=None
+    )
+
+    # Hashes should be the same - both have identical modifications
     assert hash1 == hash2
 
 

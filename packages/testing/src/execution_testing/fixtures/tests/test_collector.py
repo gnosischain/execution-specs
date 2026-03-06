@@ -22,6 +22,7 @@ def _make_fixture(nonce: int = 0) -> TransactionFixture:
         f"test description {nonce}",
         fixture_source_url="http://example.com",
         ref_spec=None,
+        opcode_count=None,
         _info_metadata={},
     )
     return fixture
@@ -79,7 +80,7 @@ class TestPartialFixtureFiles:
         fixture = _make_fixture(1)
         info = _make_info("tx_test", module_path)
         collector.add_fixture(info, fixture)
-        collector.dump_fixtures(worker_id="gw0")
+        collector.dump_fixtures()
         merge_partial_fixture_files(output_dir)
 
         # Find the written file
@@ -113,7 +114,7 @@ class TestPartialFixtureFiles:
             collector.add_fixture(info, fixture)
             fixtures_and_infos.append((info, fixture))
 
-        collector.dump_fixtures(worker_id="gw0")
+        collector.dump_fixtures()
         merge_partial_fixture_files(output_dir)
 
         json_files = list(output_dir.rglob("*.json"))
@@ -140,6 +141,7 @@ class TestPartialFixtureFiles:
             single_fixture_per_file=False,
             filler_path=filler_path,
             generate_index=False,
+            worker_id="gw0",
         )
         # Worker A writes fixtures 0-2
         pairs_a = []
@@ -148,7 +150,7 @@ class TestPartialFixtureFiles:
             info = _make_info(f"tx_test_{i}", module_path)
             collector1.add_fixture(info, fixture)
             pairs_a.append((info, fixture))
-        collector1.dump_fixtures(worker_id="gw0")
+        collector1.close_streaming_files()
 
         # Worker B writes fixtures 3-5 (separate partial file)
         collector2 = FixtureCollector(
@@ -157,6 +159,7 @@ class TestPartialFixtureFiles:
             single_fixture_per_file=False,
             filler_path=filler_path,
             generate_index=False,
+            worker_id="gw1",
         )
         pairs_b = []
         for i in range(3, 6):
@@ -164,7 +167,7 @@ class TestPartialFixtureFiles:
             info = _make_info(f"tx_test_{i}", module_path)
             collector2.add_fixture(info, fixture)
             pairs_b.append((info, fixture))
-        collector2.dump_fixtures(worker_id="gw1")
+        collector2.close_streaming_files()
 
         # Merge at session end
         merge_partial_fixture_files(output_dir)
@@ -197,7 +200,7 @@ class TestPartialFixtureFiles:
             info = _make_info(f"tx_test_{i}", module_path)
             collector.add_fixture(info, fixture)
 
-        collector.dump_fixtures(worker_id="gw0")
+        collector.dump_fixtures()
         merge_partial_fixture_files(output_dir)
 
         json_files = list(output_dir.rglob("*.json"))
@@ -223,7 +226,7 @@ class TestPartialFixtureFiles:
             info = _make_info(f"tx_test_{i}", module_path)
             collector.add_fixture(info, fixture)
 
-        collector.dump_fixtures(worker_id="gw0")
+        collector.dump_fixtures()
         merge_partial_fixture_files(output_dir)
 
         json_files = list(output_dir.rglob("*.json"))
@@ -247,7 +250,7 @@ class TestPartialFixtureFiles:
         fixture = _make_fixture(1)
         info = _make_info("tx_test", module_path)
         collector.add_fixture(info, fixture)
-        collector.dump_fixtures(worker_id="gw0")
+        collector.dump_fixtures()
 
         # Verify partial file exists before merge
         partial_files = list(output_dir.rglob("*.partial.*.jsonl"))
@@ -293,7 +296,7 @@ class TestLegacyCompatibility:
             generate_index=False,
         )
         collector.add_fixture(info, fixture)
-        collector.dump_fixtures(worker_id="gw0")
+        collector.dump_fixtures()
         merge_partial_fixture_files(new_dir)
         new_files = list(new_dir.rglob("*.json"))
         assert len(new_files) == 1
@@ -333,7 +336,7 @@ class TestLegacyCompatibility:
         )
         for i, info in enumerate(infos):
             collector.add_fixture(info, list(fixtures_dict.values())[i])
-        collector.dump_fixtures(worker_id="gw0")
+        collector.dump_fixtures()
         merge_partial_fixture_files(new_dir)
         new_files = list(new_dir.rglob("*.json"))
         assert len(new_files) == 1
@@ -374,11 +377,12 @@ class TestLegacyCompatibility:
                 single_fixture_per_file=False,
                 filler_path=filler_path,
                 generate_index=False,
+                worker_id=f"gw{worker_idx}",
             )
             start = worker_idx * 2
             for i in range(start, start + 2):
                 collector.add_fixture(infos[i], fixture_values[i])
-            collector.dump_fixtures(worker_id=f"gw{worker_idx}")
+            collector.close_streaming_files()
 
         merge_partial_fixture_files(new_dir)
         new_files = list(new_dir.rglob("*.json"))
@@ -426,7 +430,7 @@ class TestLegacyCompatibility:
         )
         for i, info in enumerate(infos):
             collector.add_fixture(info, list(fixtures_dict.values())[i])
-        collector.dump_fixtures(worker_id="gw0")
+        collector.dump_fixtures()
         merge_partial_fixture_files(new_dir)
         new_files = list(new_dir.rglob("*.json"))
         assert len(new_files) == 1

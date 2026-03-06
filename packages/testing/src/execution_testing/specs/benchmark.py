@@ -31,7 +31,6 @@ from execution_testing.execution import (
     TransactionPost,
 )
 from execution_testing.fixtures import (
-    BaseFixture,
     BlockchainEngineFixture,
     BlockchainEngineXFixture,
     BlockchainFixture,
@@ -42,7 +41,7 @@ from execution_testing.forks import Fork
 from execution_testing.test_types import Alloc, Environment, Transaction
 from execution_testing.vm import Bytecode, Op
 
-from .base import BaseTest
+from .base import BaseTest, FillResult
 from .blockchain import Block, BlockchainTest
 
 
@@ -54,7 +53,7 @@ class BenchmarkCodeGenerator(ABC):
     setup: Bytecode = field(default_factory=Bytecode)
     cleanup: Bytecode = field(default_factory=Bytecode)
     tx_kwargs: Dict[str, Any] = field(default_factory=dict)
-    fixed_opcode_count: int | None = None
+    fixed_opcode_count: float | None = None
     code_padding_opcode: Op | None = None
     _contract_address: Address | None = None
     _inner_iterations: int = 1000
@@ -78,10 +77,13 @@ class BenchmarkCodeGenerator(ABC):
             "fixed_opcode_count is not set"
         )
         # Adjust outer loop iterations based on inner iterations
-        # If inner is 500 instead of 1000, double the outer loop
-        outer_multiplier = 1000 // self._inner_iterations
-        iterations = self.fixed_opcode_count * outer_multiplier
-
+        if self.fixed_opcode_count < 1.0:
+            # < 1000 opcodes, outer = 1 as inner already set to exact count
+            iterations = 1
+        else:
+            # >= 1000: calculate outer iterations from target / inner
+            target_opcodes = int(self.fixed_opcode_count * 1000)
+            iterations = target_opcodes // self._inner_iterations
         prefix = Op.CALLDATACOPY(
             Op.PUSH0, Op.PUSH0, Op.CALLDATASIZE
         ) + Op.PUSH4(iterations)
@@ -188,19 +190,51 @@ class BenchmarkCodeGenerator(ABC):
         #
         # 1a. Calculate 'max_iterations' to fill the block.
         # 1b. The Inner Iteration count (N) is capped at 1000.
-        # 1c. If the calculated N is less than 1000, use 500 as the fallback.
+        # 1c. If the calculated N is less than 1000, use 250 as fallback.
 
         # --- 2. Determine Outer Iterations (M) ---
         # The Loop Contract's call count (M) is set to ensure the final
         # total execution is consistent.
         #
-        # 2a. If N is 1000: Set M = fixed_opcode_count.
-        #     (Total ops: fixed_opcode_count * 1000)
-        # 2b. If N is 500: Set M = fixed_opcode_count * 2.
-        #     (Total ops: (fixed_opcode_count * 2) * 500)
+        # 2a. If N=1000: M = fixed_opcode_count (Total: foc*1000)
+        # 2b. If N=250: M = fixed_opcode_count*4 (Total: same as above)
+        #
+        # --- 3. Sub-1K Case (fixed_opcode_count < 1.0) ---
+        # For Sub-1K counts (e.g., 0.25 = 250 opcodes): N = exact count, M = 1.
         if self.fixed_opcode_count is not None:
-            inner_iterations = 1000 if max_iterations >= 1000 else 500
-            self._inner_iterations = min(max_iterations, inner_iterations)
+            if self.fixed_opcode_count < 0.001:
+                raise ValueError(
+                    f"fixed_opcode_count must be >= 0.001 (1 opcode), "
+                    f"got {self.fixed_opcode_count}"
+                )
+            if self.fixed_opcode_count < 1.0:
+                # < 1000 opcodes, inner = exact count, outer = 1
+                self._inner_iterations = min(
+                    max_iterations, int(self.fixed_opcode_count * 1000)
+                )
+            else:
+                # >= 1000 opcodes: use 250 inner iterations (0.25K granularity)
+                target_opcodes = int(self.fixed_opcode_count * 1000)
+
+                if max_iterations >= 250 and target_opcodes % 250 == 0:
+                    inner_iterations = 250
+                elif max_iterations >= target_opcodes:
+                    # Use exact count as inner with outer = 1
+                    inner_iterations = target_opcodes
+                else:
+                    suggested_lo = ((target_opcodes // 250) * 250) / 1000
+                    suggested_hi = ((target_opcodes // 250 + 1) * 250) / 1000
+                    raise ValueError(
+                        f"fixed_opcode_count {self.fixed_opcode_count} "
+                        f"({target_opcodes} opcodes) exceeds max contract "
+                        f"size for this attack block.\n"
+                        f"Contract size limit allows up to {max_iterations} "
+                        f"opcodes ({max_iterations / 1000:.3f}K) in the "
+                        f"inner loop.\n"
+                        f"For counts above this limit, use multiples of 0.25K "
+                        f"(e.g., {suggested_lo:.2f} or {suggested_hi:.2f})."
+                    )
+                self._inner_iterations = inner_iterations
 
         # TODO: Unify the PUSH0 and PUSH1 usage.
         iterations = (
@@ -252,9 +286,12 @@ class BenchmarkTest(BaseTest):
     gas_benchmark_value: int = Field(
         default_factory=lambda: int(Environment().gas_limit)
     )
-    fixed_opcode_count: int | None = None
+    fixed_opcode_count: float | None = None
     target_opcode: Op | None = None
     code_generator: BenchmarkCodeGenerator | None = None
+    # By default, benchmark tests require neither of these
+    include_full_post_state_in_output: bool = False
+    include_tx_receipts_in_output: bool = False
 
     supported_fixture_formats: ClassVar[
         Sequence[FixtureFormat | LabeledFixtureFormat]
@@ -308,9 +345,14 @@ class BenchmarkTest(BaseTest):
 
         blocks: List[Block] = self.setup_blocks
 
-        if self.fixed_opcode_count is not None and self.code_generator is None:
+        if (
+            self.fixed_opcode_count is not None
+            and self.code_generator is None
+            and self.target_opcode is None
+        ):
             pytest.skip(
-                "Cannot run fixed opcode count tests without a code generator"
+                "Cannot run fixed opcode count tests without a "
+                "code generator or a target opcode set"
             )
 
         if self.code_generator is not None:
@@ -451,6 +493,8 @@ class BenchmarkTest(BaseTest):
             pre=self.pre,
             post=self.post,
             blocks=self.blocks,
+            include_full_post_state_in_output=self.include_full_post_state_in_output,
+            include_tx_receipts_in_output=self.include_tx_receipts_in_output,
         )
 
     def _verify_target_opcode_count(
@@ -458,7 +502,6 @@ class BenchmarkTest(BaseTest):
     ) -> None:
         """Verify target opcode was executed the expected number of times."""
         # Skip validation if opcode count is not available
-        # (e.g. currently only supported for evmone filling)
         if opcode_count is None:
             return
 
@@ -483,14 +526,13 @@ class BenchmarkTest(BaseTest):
         self,
         t8n: TransitionTool,
         fixture_format: FixtureFormat,
-    ) -> BaseFixture:
+    ) -> FillResult:
         """Generate the blockchain test fixture."""
         self.check_exception_test(
             exception=self.tx.error is not None if self.tx else False
         )
         if fixture_format in BlockchainTest.supported_fixture_formats:
-            blockchain_test = self.generate_blockchain_test()
-            fixture = blockchain_test.generate(
+            fill_result = self.generate_blockchain_test().generate(
                 t8n=t8n, fixture_format=fixture_format
             )
 
@@ -499,8 +541,10 @@ class BenchmarkTest(BaseTest):
                 self.target_opcode is not None
                 and self.fixed_opcode_count is not None
             ):
-                self._verify_target_opcode_count(blockchain_test._opcode_count)
-            return fixture
+                self._verify_target_opcode_count(
+                    fill_result.benchmark_opcode_count
+                )
+            return fill_result
         else:
             raise Exception(f"Unsupported fixture format: {fixture_format}")
 
@@ -515,6 +559,7 @@ class BenchmarkTest(BaseTest):
             return TransactionPost(
                 blocks=[block.txs for block in self.blocks],
                 post=self.post,
+                benchmark_mode=True,
             )
         raise Exception(f"Unsupported execute format: {execute_format}")
 

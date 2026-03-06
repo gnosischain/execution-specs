@@ -11,6 +11,9 @@ class EthrexExceptionMapper(ExceptionMapper):
     """Ethrex exception mapper."""
 
     mapping_substring = {
+        BlockException.INVALID_GASLIMIT: (
+            "Gas limit changed more than allowed from the parent"
+        ),
         TransactionException.TYPE_3_TX_MAX_BLOB_GAS_ALLOWANCE_EXCEEDED: (
             "Exceeded MAX_BLOB_GAS_PER_BLOCK"
         ),
@@ -37,6 +40,22 @@ class EthrexExceptionMapper(ExceptionMapper):
         ),
         BlockException.INVALID_BASEFEE_PER_GAS: (
             "Base fee per gas is incorrect"
+        ),
+        BlockException.INVALID_BLOCK_ACCESS_LIST: (
+            "Block access list hash does not match the one in "
+            "the header after executing"
+        ),
+        BlockException.INVALID_BAL_HASH: (
+            "Block access list hash does not match the one in "
+            "the header after executing"
+        ),
+        BlockException.INVALID_BAL_EXTRA_ACCOUNT: (
+            "Block access list hash does not match the one in "
+            "the header after executing"
+        ),
+        BlockException.INVALID_BAL_MISSING_ACCOUNT: (
+            "Block access list hash does not match the one in "
+            "the header after executing"
         ),
     }
     mapping_regex = {
@@ -116,6 +135,7 @@ class EthrexExceptionMapper(ExceptionMapper):
         TransactionException.GAS_ALLOWANCE_EXCEEDED: (
             r"Gas allowance exceeded.*"
         ),
+        BlockException.GAS_USED_OVERFLOW: (r"Block gas used overflow.*"),
         TransactionException.TYPE_3_TX_BLOB_COUNT_EXCEEDED: (
             r"Blob count exceeded.*"
         ),
@@ -144,5 +164,17 @@ class EthrexExceptionMapper(ExceptionMapper):
         ),
         BlockException.RLP_BLOCK_LIMIT_EXCEEDED: (
             r"Maximum block size exceeded.*"
+        ),
+        BlockException.INVALID_BLOCK_ACCESS_LIST: (
+            r"Block access list contains index \d+ "
+            r"exceeding max valid index \d+|"
+            r"Failed to RLP decode BAL"
+        ),
+        BlockException.INCORRECT_BLOCK_FORMAT: (
+            r"Block access list hash does not match "
+            r"the one in the header after executing|"
+            r"Block access list contains index \d+ "
+            r"exceeding max valid index \d+|"
+            r"Failed to RLP decode BAL"
         ),
     }

@@ -34,7 +34,8 @@ runs:
         ./hive --dev \
           --client "${{ inputs.clients }}" \
           --client-file "../${{ inputs.client-file }}" \
-          --docker.output &
+          --docker.output \
+          --docker.pull &
         HIVE_PID=$!
 
         HIVE_URL="http://127.0.0.1:3000"

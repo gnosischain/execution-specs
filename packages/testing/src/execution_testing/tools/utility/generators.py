@@ -179,7 +179,7 @@ def generate_system_contract_deploy_test(
             ],
             ids=lambda x: x.name.lower(),
         )
-        @pytest.mark.execute(pytest.mark.skip(reason="modifies pre-alloc"))
+        @pytest.mark.pre_alloc_mutable
         @pytest.mark.valid_at_transition_to(fork.name())
         def wrapper(
             blockchain_test: BlockchainTestFiller,
@@ -248,9 +248,7 @@ def generate_system_contract_deploy_test(
                 nonce=0,
                 balance=balance,
             )
-            pre[deployer_address] = Account(
-                balance=deployer_required_balance,
-            )
+            pre.fund_address(deployer_address, deployer_required_balance)
 
             expected_deploy_address_int = int.from_bytes(
                 expected_deploy_address, "big"
@@ -348,9 +346,9 @@ def generate_system_contract_error_test(
                 # code will only work once, so if the system contract is re-
                 # executed in a subsequent block, it will consume less gas.
                 gas_used_per_storage = (
-                    gas_costs.G_STORAGE_SET
-                    + gas_costs.G_COLD_SLOAD
-                    + (gas_costs.G_VERY_LOW * 2)
+                    gas_costs.GAS_STORAGE_SET
+                    + gas_costs.GAS_COLD_SLOAD
+                    + (gas_costs.GAS_VERY_LOW * 2)
                 )
                 modified_system_contract_code += sum(
                     Op.SSTORE(i, 1)
@@ -359,9 +357,9 @@ def generate_system_contract_error_test(
                 # If the gas limit is not divisible by the gas used per
                 # storage, we need to add some NO-OP (JUMPDEST) to the code
                 # that each consume 1 gas.
-                assert gas_costs.G_JUMPDEST == 1, (
+                assert gas_costs.GAS_JUMPDEST == 1, (
                     "JUMPDEST gas cost should be 1, but got "
-                    f"{gas_costs.G_JUMPDEST}. Generator "
+                    f"{gas_costs.GAS_JUMPDEST}. Generator "
                     "`generate_system_contract_error_test` needs updating."
                 )
                 modified_system_contract_code += sum(
@@ -496,13 +494,13 @@ def gas_test(
     # 2 times GAS, POP, CALL, 6 times PUSH1 - instructions charged for at every
     # gas run
     gas_costs = fork.gas_costs()
-    opcode_gas_cost = gas_costs.G_BASE
-    opcode_pop_cost = gas_costs.G_BASE
-    opcode_push_cost = gas_costs.G_VERY_LOW
+    opcode_gas_cost = gas_costs.GAS_BASE
+    opcode_pop_cost = gas_costs.GAS_BASE
+    opcode_push_cost = gas_costs.GAS_VERY_LOW
     gas_single_gas_run = (
         2 * opcode_gas_cost
         + opcode_pop_cost
-        + gas_costs.G_WARM_ACCOUNT_ACCESS
+        + gas_costs.GAS_WARM_ACCOUNT_ACCESS
         + 6 * opcode_push_cost
     )
     address_legacy_harness = pre.deploy_contract(

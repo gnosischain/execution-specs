@@ -20,11 +20,9 @@ from execution_testing.base_types import (
     Number,
     Storage,
     StorageRootType,
-    ZeroPaddedHexNumber,
 )
 from execution_testing.base_types.conversions import (
     BytesConvertible,
-    FixedSizeBytesConvertible,
     NumberConvertible,
 )
 from execution_testing.forks import Fork
@@ -40,10 +38,11 @@ from execution_testing.test_types import (
     TransactionTestMetadata,
     compute_deterministic_create2_address,
 )
-from execution_testing.test_types import Alloc as BaseAlloc
 from execution_testing.tools import Initcode
 from execution_testing.vm import Bytecode, Op
 
+from ..shared.pre_alloc import Alloc as SharedAlloc
+from ..shared.pre_alloc import AllocFlags
 from .contracts import (
     check_deterministic_factory_deployment,
     deploy_deterministic_factory_contract,
@@ -192,6 +191,7 @@ def execute_required_contracts(
         logger.info(
             "Checking if deterministic factory contract is already deployed"
         )
+        tx_index = 0
         if (
             check_deterministic_factory_deployment(
                 eth_rpc=eth_rpc, fork=session_fork
@@ -199,10 +199,11 @@ def execute_required_contracts(
             is None
         ):
             try:
-                deploy_deterministic_factory_contract(
+                tx_index = deploy_deterministic_factory_contract(
                     eth_rpc=eth_rpc,
                     seed_key=session_worker_key,
                     gas_price=sender_funding_transactions_gas_price,
+                    tx_index=tx_index,
                 )
             except Exception as e:
                 raise RuntimeError(
@@ -224,10 +225,9 @@ class PendingTransaction(Transaction):
     value: HexNumber | None = None  # type: ignore
 
 
-class Alloc(BaseAlloc):
+class Alloc(SharedAlloc):
     """A custom class that inherits from the original Alloc class."""
 
-    _fork: Fork = PrivateAttr()
     _sender: EOA = PrivateAttr()
     _eth_rpc: EthRPC = PrivateAttr()
     _pending_txs: List[PendingTransaction] = PrivateAttr(default_factory=list)
@@ -242,7 +242,6 @@ class Alloc(BaseAlloc):
     def __init__(
         self,
         *args: Any,
-        fork: Fork,
         sender: EOA,
         eth_rpc: EthRPC,
         eoa_iterator: Iterator[EOA],
@@ -253,23 +252,12 @@ class Alloc(BaseAlloc):
     ) -> None:
         """Initialize the pre-alloc with the given parameters."""
         super().__init__(*args, **kwargs)
-        self._fork = fork
         self._sender = sender
         self._eth_rpc = eth_rpc
         self._eoa_iterator = eoa_iterator
         self._chain_id = chain_id
         self._node_id = node_id
         self._address_stubs = address_stubs or AddressStubs(root={})
-
-    def __setitem__(
-        self,
-        address: Address | FixedSizeBytesConvertible,
-        account: Account | None,
-    ) -> None:
-        """Set account associated with an address."""
-        raise ValueError(
-            "Tests are not allowed to set pre-alloc items in execute mode"
-        )
 
     def code_pre_processor(self, code: Bytecode) -> Bytecode:
         """Pre-processes the code before setting it."""
@@ -301,18 +289,18 @@ class Alloc(BaseAlloc):
         self._pending_txs.append(pending_tx)
         return pending_tx
 
-    def deterministic_deploy_contract(
+    def _deterministic_deploy_contract(
         self,
         *,
         deploy_code: BytesConvertible,
-        salt: Hash | int = 0,
-        initcode: BytesConvertible | None = None,
-        storage: Storage | StorageRootType | None = None,
-        label: str | None = None,
+        salt: Hash | int,
+        initcode: BytesConvertible | None,
+        storage: Storage | StorageRootType | None,
+        label: str | None,
     ) -> Address:
         """
-        Deploy a contract to the allocation at a deterministic location
-        using a deterministic deployment proxy.
+        Execute implementation of contract deployment to a deterministic
+        location.
         """
         del storage
         gas_costs = self._fork.gas_costs()
@@ -365,11 +353,9 @@ class Alloc(BaseAlloc):
                 raise ValueError(
                     f"initcode too large {len(initcode)} > {max_initcode_size}"
                 )
-            deploy_gas_limit = (
-                gas_costs.G_TRANSACTION + gas_costs.G_TRANSACTION_CREATE
-            )
+            deploy_gas_limit = gas_costs.GAS_TX_BASE + gas_costs.GAS_TX_CREATE
             deploy_gas_limit += (
-                len(deploy_code) * gas_costs.G_CODE_DEPOSIT_BYTE
+                len(deploy_code) * gas_costs.GAS_CODE_DEPOSIT_PER_BYTE
             )
             deploy_gas_limit += memory_expansion_gas_calculator(
                 new_bytes=len(initcode)
@@ -406,33 +392,24 @@ class Alloc(BaseAlloc):
 
             self._deployed_contracts.append((contract_address, deploy_code))
 
-        balance = self._eth_rpc.get_balance(contract_address)
-        nonce = self._eth_rpc.get_transaction_count(contract_address)
-        super().__setitem__(
-            contract_address,
-            Account(
-                nonce=nonce,
-                balance=balance,
-                code=deploy_code,
-                storage={},
-            ),
-        )
+        account = self._eth_rpc.get_account(contract_address)
+        self.__internal_setitem__(contract_address, account)
 
         contract_address.label = label
         return contract_address
 
-    def deploy_contract(
+    def _deploy_contract(
         self,
         code: BytesConvertible,
         *,
-        storage: Storage | StorageRootType | None = None,
-        balance: NumberConvertible = 0,
-        nonce: NumberConvertible = 1,
-        address: Address | None = None,
-        label: str | None = None,
-        stub: str | None = None,
+        storage: Storage | StorageRootType | None,
+        balance: NumberConvertible,
+        nonce: NumberConvertible,
+        address: Address | None,
+        label: str | None,
+        stub: str | None,
     ) -> Address:
-        """Deploy a contract to the allocation."""
+        """Execute implementation of contract deployment."""
         if storage is None:
             storage = {}
         assert address is None, "address parameter is not supported"
@@ -458,34 +435,25 @@ class Alloc(BaseAlloc):
                 f"Using address stub '{stub}' at {contract_address} "
                 f"(label={label})"
             )
-            code = self._eth_rpc.get_code(contract_address)
+            account = self._eth_rpc.get_account(contract_address)
+            code = account.code
             if code == b"":
                 raise ValueError(
                     f"Stub {stub} at {contract_address} has no code"
                 )
-            balance = self._eth_rpc.get_balance(contract_address)
-            nonce = self._eth_rpc.get_transaction_count(contract_address)
+            balance = account.balance
+            nonce = account.nonce
             bal_eth = balance / 10**18
             logger.debug(
                 f"Stub contract {contract_address}: balance={bal_eth:.18f} "
                 f"ETH, nonce={nonce}, code_size={len(code)} bytes"
             )
-            super().__setitem__(
-                contract_address,
-                Account(
-                    nonce=nonce,
-                    balance=balance,
-                    code=code,
-                    storage={},
-                ),
-            )
+            self.__internal_setitem__(contract_address, account)
             return contract_address
 
         initcode_prefix = Bytecode()
 
-        deploy_gas_limit = (
-            gas_costs.G_TRANSACTION + gas_costs.G_TRANSACTION_CREATE
-        )
+        deploy_gas_limit = gas_costs.GAS_TX_BASE + gas_costs.GAS_TX_CREATE
 
         if len(storage.root) > 0:
             initcode_prefix += sum(
@@ -502,7 +470,7 @@ class Alloc(BaseAlloc):
         if len(code) > max_code_size:
             raise ValueError(f"code too large: {len(code)} > {max_code_size}")
 
-        deploy_gas_limit += len(code) * gas_costs.G_CODE_DEPOSIT_BYTE
+        deploy_gas_limit += len(code) * gas_costs.GAS_CODE_DEPOSIT_PER_BYTE
 
         prepared_initcode = Initcode(
             deploy_code=code, initcode_prefix=initcode_prefix
@@ -558,7 +526,7 @@ class Alloc(BaseAlloc):
             "impossible to deploy contract with nonce lower than one"
         )
 
-        super().__setitem__(
+        self.__internal_setitem__(
             contract_address,
             Account(
                 nonce=nonce,
@@ -571,19 +539,20 @@ class Alloc(BaseAlloc):
         contract_address.label = label
         return contract_address
 
-    def fund_eoa(
+    def _fund_eoa(
         self,
-        amount: NumberConvertible | None = None,
-        label: str | None = None,
-        storage: Storage | StorageRootType | None = None,
-        delegation: Address | Literal["Self"] | None = None,
-        nonce: NumberConvertible | None = None,
+        amount: NumberConvertible | None,
+        label: str | None,
+        storage: Storage | StorageRootType | None,
+        code: BytesConvertible | None,
+        delegation: Address | Literal["Self"] | None,
+        nonce: NumberConvertible | None,
     ) -> EOA:
         """
-        Add a previously unused EOA to the pre-alloc with the balance specified
-        by `amount`.
+        Execute implementation of EOA funding.
         """
         assert nonce is None, "nonce parameter is not supported for execute"
+        assert code is None, "code parameter is not supported for execute"
         eoa = next(self._eoa_iterator)
         eoa.label = label
         amount_str = (
@@ -700,7 +669,7 @@ class Alloc(BaseAlloc):
         if amount is not None:
             account_kwargs["balance"] = amount
         account = Account(**account_kwargs)
-        super().__setitem__(eoa, account)
+        self.__internal_setitem__(eoa, account)
         self._funded_eoa.append(eoa)
         balance_str = (
             f"{Number(amount) / 10**18:.18f} ETH"
@@ -713,41 +682,31 @@ class Alloc(BaseAlloc):
         )
         return eoa
 
-    def fund_address(
+    def _fund_address(
         self,
         address: Address,
-        amount: NumberConvertible,
+        amount: int,
         *,
-        minimum_balance: bool = False,
+        minimum_balance: bool,
     ) -> None:
         """
-        Fund an address with a given amount.
-
-        If the address is already present in the pre-alloc the amount will be
-        added to its existing balance.
+        Execute implementation of address funding.
         """
         current_balance = self._eth_rpc.get_balance(address)
-        fund_amount = int(Number(amount))
-
         if minimum_balance:
-            if current_balance >= fund_amount:
+            if current_balance >= amount:
                 cur_eth = current_balance / 10**18
-                min_eth = fund_amount / 10**18
+                min_eth = amount / 10**18
                 logger.info(
                     f"Skipping funding for address {address} "
                     f"(label={address.label}): current balance "
                     f"{cur_eth:.18f} ETH >= minimum {min_eth:.18f} ETH"
                 )
-                if address in self:
-                    account = self[address]
-                    if account is not None:
-                        account.balance = ZeroPaddedHexNumber(current_balance)
-                else:
-                    super().__setitem__(
-                        address, Account(balance=current_balance)
-                    )
+                self.__internal_setitem__(
+                    address, Account(balance=current_balance)
+                )
                 return
-            fund_eth = fund_amount / 10**18
+            fund_eth = amount / 10**18
             logger.debug(
                 f"Funding address to minimum balance {address} "
                 f"(label={address.label}): {fund_eth:.18f} ETH"
@@ -756,11 +715,11 @@ class Alloc(BaseAlloc):
                 action="fund_address",
                 target=address.label,
                 to=address,
-                value=fund_amount - current_balance,
+                value=amount - current_balance,
             )
-            new_balance = fund_amount
+            new_balance = amount
         else:
-            fund_eth = fund_amount / 10**18
+            fund_eth = amount / 10**18
             logger.debug(
                 f"Funding address {address} (label={address.label}): "
                 f"{fund_eth:.18f} ETH"
@@ -771,51 +730,23 @@ class Alloc(BaseAlloc):
                 to=address,
                 value=amount,
             )
-            new_balance = current_balance + fund_amount
+            new_balance = current_balance + amount
 
-        if address in self:
-            account = self[address]
-            if account is not None:
-                account.balance = ZeroPaddedHexNumber(new_balance)
-                cur_eth = current_balance / 10**18
-                new_eth = new_balance / 10**18
-                logger.debug(
-                    f"Updated balance for existing address {address}: "
-                    f"{cur_eth:.18f} ETH -> {new_eth:.18f} ETH"
-                )
-            else:
-                super().__setitem__(address, Account(balance=new_balance))
-        else:
-            super().__setitem__(address, Account(balance=new_balance))
+        self.__internal_setitem__(address, Account(balance=new_balance))
 
         logger.info(
             f"Address {address} funding tx created (label={address.label}): "
             f"{Number(amount) / 10**18:.18f} ETH"
         )
 
-    def empty_account(self) -> Address:
+    def _empty_account(self) -> Address:
         """
-        Add a previously unused account guaranteed to be empty to the
-        pre-alloc.
-
-        This ensures the account has:
-        - Zero balance
-        - Zero nonce
-        - No code
-        - No storage
-
-        This is different from precompiles or system contracts. The function
-        does not send any transactions, ensuring that the account remains
-        "empty."
-
-        Returns:
-            Address: The address of the created empty account.
-
+        Execute implementation of empty account creation.
         """
         eoa = next(self._eoa_iterator)
         logger.debug(f"Creating empty account at {eoa}")
 
-        super().__setitem__(
+        self.__internal_setitem__(
             eoa,
             Account(
                 nonce=0,
@@ -876,44 +807,40 @@ class Alloc(BaseAlloc):
             f"(deployed_contracts={len(self._deployed_contracts)}, "
             f"funded_eoas={len(self._funded_eoa)})"
         )
-        transaction_batches: List[List[PendingTransaction]] = []
-        last_tx_batch: List[PendingTransaction] = []
-        max_txs_per_batch = 100
         for tx in self._pending_txs:
             assert tx.value is not None, (
                 "Transaction value must be set before sending them to the RPC."
             )
-            if len(last_tx_batch) >= max_txs_per_batch:
-                transaction_batches.append(last_tx_batch)
-                last_tx_batch = []
-            last_tx_batch.append(tx)
-        if last_tx_batch:
-            transaction_batches.append(last_tx_batch)
 
-        responses: List[TransactionByHashResponse] = []
-        for tx_batch in transaction_batches:
-            txs = [tx.with_signature_and_sender() for tx in tx_batch]
-            tx_hashes = self._eth_rpc.send_transactions(txs)
-            hash_strs = [str(h) for h in tx_hashes[:5]]
-            n_hashes = len(tx_hashes)
-            extra = f" and {n_hashes - 5} more" if n_hashes > 5 else ""
-            logger.info(f"Sent {n_hashes} transactions: {hash_strs}{extra}")
-            logger.info(
-                f"Waiting for {len(tx_batch)} transactions to be included "
-                "in blocks"
-            )
-            responses += self._eth_rpc.wait_for_transactions(tx_batch)
-            logger.info(
-                f"All {len(responses)} transactions confirmed in blocks"
-            )
+        txs = [tx.with_signature_and_sender() for tx in self._pending_txs]
+        responses = self._eth_rpc.send_wait_transactions(txs)
+
         for response in responses:
             logger.debug(f"Transaction response: {response.model_dump_json()}")
         return responses
 
 
+@pytest.fixture(scope="function")
+def alloc_flags(
+    alloc_flags_from_test_markers: AllocFlags,
+) -> AllocFlags:
+    """
+    Verify this test does not require flags that are unsupported by execute.
+
+    Otherwise skip.
+    """
+    if AllocFlags.MUTABLE in alloc_flags_from_test_markers:
+        pytest.skip(
+            "Execute mode cannot run tests where the pre-alloction is mutated."
+        )
+
+    return alloc_flags_from_test_markers
+
+
 @pytest.fixture(autouse=True, scope="function")
 def pre(
     fork: Fork,
+    alloc_flags: AllocFlags,
     worker_key: EOA,
     eoa_iterator: Iterator[EOA],
     eth_rpc: EthRPC,
@@ -939,6 +866,7 @@ def pre(
     )
     pre = Alloc(
         fork=actual_fork,
+        flags=alloc_flags,
         sender=worker_key,
         eth_rpc=eth_rpc,
         eoa_iterator=eoa_iterator,
@@ -958,22 +886,30 @@ def pre(
         return
 
     # Refund all EOAs (regardless of whether the test passed or failed)
+    funded_eoas = pre._funded_eoa
     logger.info(
-        f"Starting cleanup phase: refunding {len(pre._funded_eoa)} funded EOAs"
+        f"Starting cleanup phase: refunding {len(funded_eoas)} funded EOAs"
     )
-    refund_txs = []
+
+    if not funded_eoas:
+        logger.info("No funded EOAs to refund")
+        return
+
+    # Build refund transactions
+    refund_txs: List[Transaction] = []
     skipped_refunds = 0
-    error_refunds = 0
-    for idx, eoa in enumerate(pre._funded_eoa):
-        remaining_balance = eth_rpc.get_balance(eoa)
-        eoa.nonce = Number(eth_rpc.get_transaction_count(eoa))
-        refund_gas_limit = 21_000
-        tx_cost = refund_gas_limit * max_fee_per_gas
+    refund_gas_limit = 21_000
+    tx_cost = refund_gas_limit * max_fee_per_gas
+    for idx, eoa in enumerate(funded_eoas):
+        account = eth_rpc.get_account(eoa, skip_code=True)
+        remaining_balance = account.balance
+        eoa.nonce = Number(account.nonce)
         if remaining_balance < tx_cost:
             rem_eth = remaining_balance / 10**18
             cost_eth = tx_cost / 10**18
             logger.debug(
-                f"Skipping refund for EOA {eoa} (label={eoa.label}): "
+                f"Skipping refund for EOA {eoa} "
+                f"(label={eoa.label}): "
                 f"insufficient balance {rem_eth:.18f} ETH < "
                 f"transaction cost {cost_eth:.18f} ETH"
             )
@@ -984,14 +920,15 @@ def pre(
         rem_eth = remaining_balance / 10**18
         cost_eth = tx_cost / 10**18
         logger.debug(
-            f"Preparing refund transaction for EOA {eoa} (label={eoa.label}): "
+            f"Preparing refund transaction for EOA {eoa} "
+            f"(label={eoa.label}): "
             f"{ref_eth:.18f} ETH (remaining: {rem_eth:.18f} ETH, "
             f"cost: {cost_eth:.18f} ETH)"
         )
         refund_tx = Transaction(
             sender=eoa,
             to=worker_key,
-            gas_limit=21_000,
+            gas_limit=refund_gas_limit,
             max_fee_per_gas=max_fee_per_gas,
             max_priority_fee_per_gas=max_priority_fee_per_gas,
             value=refund_value,
@@ -1003,35 +940,18 @@ def pre(
             target=eoa.label,
             tx_index=idx,
         )
-        try:
-            logger.info(
-                f"Sending refund transaction for EOA {eoa}: {refund_tx.hash}"
-            )
-            refund_tx_hash = eth_rpc.send_transaction(refund_tx)
-            logger.info(f"Refund transaction sent: {refund_tx_hash}")
-            refund_txs.append(refund_tx)
-        except Exception as e:
-            eoa_key = eoa.key
-            logger.error(
-                f"Error sending refund transaction for EOA {eoa}: {e}."
-            )
-            if eoa_key is not None:
-                logger.info(
-                    f"Retrieve funds manually from EOA {eoa} "
-                    f"using private key {eoa_key.hex()}."
-                )
-            error_refunds += 1
-            continue
+        refund_txs.append(refund_tx)
+
     if refund_txs:
         logger.info(
-            f"Waiting for {len(refund_txs)} refund transactions "
-            f"({skipped_refunds} skipped due to insufficient balance, "
-            f"{error_refunds} errored)"
+            f"Sending {len(refund_txs)} refund transactions "
+            f"({skipped_refunds} skipped due to insufficient balance)"
         )
-        eth_rpc.wait_for_transactions(refund_txs)
+        eth_rpc.send_wait_transactions(refund_txs)
         logger.info(f"All {len(refund_txs)} refund transactions confirmed")
     else:
         logger.info(
-            f"No refund transactions to send ({skipped_refunds} EOAs skipped "
-            f"due to insufficient balance, {error_refunds} errored)"
+            f"No refund transactions to send "
+            f"({skipped_refunds} EOAs skipped "
+            f"due to insufficient balance)"
         )

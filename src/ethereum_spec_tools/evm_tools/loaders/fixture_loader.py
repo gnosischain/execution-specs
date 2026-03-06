@@ -49,17 +49,12 @@ class BaseLoad(ABC):
 class Load(BaseLoad):
     """Class for loading json fixtures."""
 
-    _network: str
-    _fork_module: str
     fork: ForkLoad
 
-    def __init__(self, network: str, fork_module: str | Hardfork):
-        self._network = network
+    def __init__(self, fork_module: str | Hardfork):
         if isinstance(fork_module, Hardfork):
             self.fork = ForkLoad(fork_module)
-            self._fork_module = fork_module.short_name
         else:
-            self._fork_module = fork_module
             for fork in Hardfork.discover():
                 if fork.short_name == fork_module:
                     self.fork = ForkLoad(fork)
@@ -73,13 +68,32 @@ class Load(BaseLoad):
         EMPTY_ACCOUNT = self.fork.EMPTY_ACCOUNT  # noqa N806
         SYSTEM_ADDRESS = self.fork.SYSTEM_ADDRESS  # noqa N806
 
+        # TODO: backport to previous forks.
+        # block_state is only in amsterdam, so its a
+        # good proxy for check for code_hash
+
+        uses_code_hash = self.fork.has_block_state
+
         for address_hex, account_state in raw.items():
             address = self.fork.hex_to_address(address_hex)
-            account = self.fork.Account(
-                nonce=hex_to_uint(account_state.get("nonce", "0x0")),
-                balance=U256(hex_to_uint(account_state.get("balance", "0x0"))),
-                code=hex_to_bytes(account_state.get("code", "")),
-            )
+            nonce = hex_to_uint(account_state.get("nonce", "0x0"))
+            balance = U256(hex_to_uint(account_state.get("balance", "0x0")))
+            code = hex_to_bytes(account_state.get("code", ""))
+
+            if uses_code_hash:
+                code_hash = self.fork.set_code(state, code)
+                account = self.fork.Account(
+                    nonce=nonce,
+                    balance=balance,
+                    code_hash=code_hash,
+                )
+            else:
+                account = self.fork.Account(
+                    nonce=nonce,
+                    balance=balance,
+                    code=code,
+                )
+
             if (
                 self.fork.proof_of_stake
                 and account == EMPTY_ACCOUNT

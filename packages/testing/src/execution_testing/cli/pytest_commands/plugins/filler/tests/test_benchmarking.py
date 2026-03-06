@@ -1,10 +1,25 @@
 """Test the benchmarking pytest plugin for gas benchmark values."""
 
+import json
+import os
 import textwrap
 from pathlib import Path
 from typing import List
+from unittest.mock import MagicMock
 
 import pytest
+
+from execution_testing.cli.pytest_commands.plugins.shared.benchmarking import (
+    OpcodeCountsConfig,
+)
+from execution_testing.cli.pytest_commands.plugins.shared.fixture_output import (  # noqa: E501
+    FORK_SUBDIR_PREFIX,
+    SUBFOLDER_LEVEL_SEPARATOR,
+    format_fork_subdir,
+)
+
+# EVM binary for fill tests; defaults to geth evm
+BENCHMARK_EVM_T8N = os.environ.get("EVM_BIN", "evm")
 
 test_module_dummy = textwrap.dedent(
     """\
@@ -12,6 +27,7 @@ test_module_dummy = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     def test_dummy_benchmark_test(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
@@ -26,6 +42,7 @@ test_module_without_fixture = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     def test_dummy_no_benchmark_test(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
@@ -40,6 +57,7 @@ test_module_with_repricing = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     @pytest.mark.repricing
     def test_benchmark_with_repricing(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
@@ -48,9 +66,8 @@ test_module_with_repricing = textwrap.dedent(
         )
 
     @pytest.mark.valid_at("Prague")
-    def test_benchmark_without_repricing(
-            benchmark_test: BenchmarkTestFiller
-        ) -> None:
+    @pytest.mark.benchmark
+    def test_benchmark_without_repricing(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
             code_generator=JumpLoopGenerator(attack_block=Op.JUMPDEST),
@@ -64,12 +81,14 @@ test_module_without_benchmark_test_fixture = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     def test_with_gas_benchmark_value(state_test, gas_benchmark_value: int) -> None:
         # This test intentionally uses state_test instead of benchmark_test
         # to verify that --fixed-opcode-count filters it out
         state_test(pre={}, post={}, tx=None)
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     def test_with_benchmark_test(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
@@ -81,28 +100,32 @@ test_module_without_benchmark_test_fixture = textwrap.dedent(
 test_module_with_repricing_kwargs = textwrap.dedent(
     """\
     import pytest
-    from execution_testing import BenchmarkTestFiller, ExtCallGenerator, Op
+    from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     @pytest.mark.repricing(opcode=Op.ADD)
     @pytest.mark.parametrize("opcode", [Op.ADD, Op.SUB, Op.MUL])
     def test_parametrized_with_repricing_kwargs(
         benchmark_test: BenchmarkTestFiller, opcode
     ) -> None:
+        # Use JUMPDEST for benchmarking; opcode param is for filtering
         benchmark_test(
-            target_opcode=opcode,
-            code_generator=ExtCallGenerator(attack_block=opcode),
+            target_opcode=Op.JUMPDEST,
+            code_generator=JumpLoopGenerator(attack_block=Op.JUMPDEST),
         )
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     @pytest.mark.repricing
     @pytest.mark.parametrize("opcode", [Op.ADD, Op.SUB])
     def test_parametrized_with_repricing_no_kwargs(
         benchmark_test: BenchmarkTestFiller, opcode
     ) -> None:
+        # Use JUMPDEST for benchmarking; opcode param is for filtering
         benchmark_test(
-            target_opcode=opcode,
-            code_generator=ExtCallGenerator(attack_block=opcode),
+            target_opcode=Op.JUMPDEST,
+            code_generator=JumpLoopGenerator(attack_block=Op.JUMPDEST),
         )
     """
 )
@@ -183,6 +206,163 @@ def test_benchmarking_mode_configured_with_option(
     assert any("benchmark-gas-value_10M" in line for line in result.outlines)
     assert any("benchmark-gas-value_20M" in line for line in result.outlines)
     assert any("benchmark-gas-value_30M" in line for line in result.outlines)
+
+
+def test_benchmark_gas_values_split_into_subdirs(
+    pytester: pytest.Pytester, tmp_path: Path
+) -> None:
+    """Ensure per-gas-limit outputs are written to separate directories."""
+    benchmark_marked_module = textwrap.dedent(
+        """\
+        import pytest
+        from execution_testing import (
+            BenchmarkTestFiller,
+            JumpLoopGenerator,
+            Op,
+        )
+
+        @pytest.mark.valid_at("Prague")
+        @pytest.mark.benchmark
+        def test_dummy_benchmark_test(
+            benchmark_test: BenchmarkTestFiller,
+        ) -> None:
+            benchmark_test(
+                target_opcode=Op.JUMPDEST,
+                code_generator=JumpLoopGenerator(attack_block=Op.JUMPDEST),
+            )
+        """
+    )
+    setup_test_directory_structure(
+        pytester, benchmark_marked_module, "test_dummy_benchmark.py"
+    )
+
+    output_dir = tmp_path / "fixtures"
+    result = pytester.runpytest(
+        "-c",
+        "pytest-fill.ini",
+        "--fork",
+        "Prague",
+        "--gas-benchmark-values",
+        "1,2",
+        "-m",
+        "benchmark and blockchain_test and not derived_test",
+        "--no-html",
+        "--skip-index",
+        f"--output={output_dir}",
+        "tests/benchmark/dummy_test_module/",
+        "-q",
+    )
+
+    assert result.ret == 0, f"Fill command failed:\n{result.outlines}"
+
+    gas_1_subdir = format_fork_subdir("Prague", "0001M")
+    gas_2_subdir = format_fork_subdir("Prague", "0002M")
+    gas_1_dir = output_dir / "blockchain_tests" / gas_1_subdir
+    gas_2_dir = output_dir / "blockchain_tests" / gas_2_subdir
+    assert gas_1_dir.exists()
+    assert gas_2_dir.exists()
+
+    gas_1_files = list(gas_1_dir.rglob("*.json"))
+    gas_2_files = list(gas_2_dir.rglob("*.json"))
+    assert gas_1_files, f"Expected fixtures under {gas_1_subdir}"
+    assert gas_2_files, f"Expected fixtures under {gas_2_subdir}"
+
+    def _assert_keys(
+        files: list[Path], expected: str, unexpected: str
+    ) -> None:
+        for file_path in files:
+            data = json.loads(file_path.read_text())
+            assert data, f"Empty fixture file: {file_path}"
+            for key in data.keys():
+                assert expected in key, (
+                    f"Expected {expected} in key {key} ({file_path})"
+                )
+                assert unexpected not in key, (
+                    f"Unexpected {unexpected} in key {key} ({file_path})"
+                )
+
+    _assert_keys(gas_1_files, "benchmark-gas-value_1M", "2M")
+    _assert_keys(gas_2_files, "benchmark-gas-value_2M", "1M")
+
+    root_json = []
+    for json_path in output_dir.rglob("*.json"):
+        rel = json_path.relative_to(output_dir)
+        if not rel.parts:
+            continue
+        if rel.parts[0] == ".meta":
+            continue
+        if rel.parts[0] in (
+            "blockchain_tests",
+            "blockchain_tests_engine",
+            "blockchain_tests_engine_x",
+        ):
+            continue
+        root_json.append(json_path)
+    assert not root_json, f"Unexpected root JSON files: {root_json}"
+
+    top_level_for_dirs = [
+        p
+        for p in output_dir.iterdir()
+        if p.is_dir() and p.name.startswith(FORK_SUBDIR_PREFIX)
+    ]
+    assert not top_level_for_dirs, (
+        f"Unexpected top-level {FORK_SUBDIR_PREFIX} dirs: {top_level_for_dirs}"
+    )
+
+
+def test_fixed_opcode_count_split_into_subdirs(
+    pytester: pytest.Pytester, tmp_path: Path
+) -> None:
+    """Ensure per-opcode-count outputs go to separate subdirectories."""
+    setup_test_directory_structure(
+        pytester, test_module_dummy, "test_dummy_benchmark.py"
+    )
+
+    output_dir = tmp_path / "fixtures"
+    result = pytester.runpytest(
+        "-c",
+        "pytest-fill.ini",
+        "--fork",
+        "Prague",
+        "--fixed-opcode-count=1,2",
+        "-m",
+        "benchmark and blockchain_test and not derived_test",
+        "--no-html",
+        "--skip-index",
+        f"--output={output_dir}",
+        f"--evm-bin={BENCHMARK_EVM_T8N}",
+        "tests/benchmark/dummy_test_module/",
+        "-q",
+    )
+
+    assert result.ret == 0, f"Fill command failed:\n{result.outlines}"
+
+    prefix = f"{FORK_SUBDIR_PREFIX}prague"
+    op1_subdir = f"{prefix}{SUBFOLDER_LEVEL_SEPARATOR}opcount_1.0K"
+    op2_subdir = f"{prefix}{SUBFOLDER_LEVEL_SEPARATOR}opcount_2.0K"
+    op1_dir = output_dir / "blockchain_tests" / op1_subdir
+    op2_dir = output_dir / "blockchain_tests" / op2_subdir
+    assert op1_dir.exists(), f"Expected {op1_subdir}/ under blockchain_tests"
+    assert op2_dir.exists(), f"Expected {op2_subdir}/ under blockchain_tests"
+
+    op1_files = list(op1_dir.rglob("*.json"))
+    op2_files = list(op2_dir.rglob("*.json"))
+    assert op1_files, f"Expected fixtures under {op1_subdir}"
+    assert op2_files, f"Expected fixtures under {op2_subdir}"
+
+    for file_path in op1_files:
+        data = json.loads(file_path.read_text())
+        for key in data:
+            assert "opcount_1.0K" in key, (
+                f"Expected opcount_1.0K in key {key} ({file_path})"
+            )
+
+    for file_path in op2_files:
+        data = json.loads(file_path.read_text())
+        for key in data:
+            assert "opcount_2.0K" in key, (
+                f"Expected opcount_2.0K in key {key} ({file_path})"
+            )
 
 
 def test_benchmarking_mode_not_configured_without_option(
@@ -476,3 +656,564 @@ def test_without_repricing_flag_collects_all_tests(
     assert any(
         "test_benchmark_without_repricing" in line for line in result.outlines
     )
+
+
+def test_fixed_opcode_count_exact_match_priority() -> None:
+    """
+    Exact match takes priority over regex patterns.
+
+    When using a config file, patterns are matched against test names. An exact
+    string match should take priority over a regex pattern that also matches.
+    """
+    config = OpcodeCountsConfig(
+        scenario_configs={
+            "test_dup": [10],
+            "test_dup.*": [1],
+        },
+        default_counts=[99],
+    )
+
+    params = config.get_test_parameters("test_dup")
+    assert params[0].values[0] == 10
+
+
+def test_fixed_opcode_count_longest_pattern_wins() -> None:
+    """
+    Longest matching pattern takes priority.
+
+    When using a config file, if multiple regex patterns match a test name, the
+    longest pattern should win. This allows more specific patterns to override
+    broader ones.
+    """
+    config = OpcodeCountsConfig(
+        scenario_configs={
+            "test_dup.*": [1],
+            "test_dup.*DUP1.*": [5],
+        },
+        default_counts=[99],
+    )
+
+    # Longer pattern should win for DUP1
+    params = config.get_test_parameters(
+        "test_dup[fork_Prague-opcount_1K-opcode_DUP1]"
+    )
+    assert params[0].values[0] == 5
+
+    # Shorter pattern should match for DUP2
+    params = config.get_test_parameters(
+        "test_dup[fork_Prague-opcount_1K-opcode_DUP2]"
+    )
+    assert params[0].values[0] == 1
+
+
+def test_fixed_opcode_count_default_fallback() -> None:
+    """
+    Default counts are used when no pattern matches.
+
+    When using a config file, if no pattern matches the test name, the
+    default_counts should be used as a fallback.
+    """
+    config = OpcodeCountsConfig(
+        scenario_configs={
+            "test_dup.*": [1],
+        },
+        default_counts=[99],
+    )
+
+    params = config.get_test_parameters("test_other")
+    assert params[0].values[0] == 99
+
+
+def test_fixed_opcode_count_multiple_patterns() -> None:
+    """
+    Multiple overlapping patterns are handled correctly.
+
+    Verifies that multiple overlapping patterns of different lengths are
+    handled correctly. The most specific (longest) matching pattern wins.
+    """
+    config = OpcodeCountsConfig(
+        scenario_configs={
+            "test_.*": [1],
+            "test_bitwise.*": [2],
+            "test_bitwise.*AND.*": [3],
+        },
+        default_counts=[99],
+    )
+
+    # Most specific pattern should win
+    params = config.get_test_parameters("test_bitwise[fork_Prague-opcode_AND]")
+    assert params[0].values[0] == 3
+
+    # Middle specificity
+    params = config.get_test_parameters("test_bitwise[fork_Prague-opcode_OR]")
+    assert params[0].values[0] == 2
+
+    # Least specific
+    params = config.get_test_parameters("test_other[fork_Prague]")
+    assert params[0].values[0] == 1
+
+
+@pytest.mark.parametrize(
+    "cli_input,expected_counts",
+    [
+        ("1", [1]),  # Single integer
+        ("1,2,3", [1, 2, 3]),  # Multiple integers
+        ("0.5", [0.5]),  # Single float
+        ("0.1,0.5,1", [0.1, 0.5, 1]),  # Multiple floats
+        ("1,0.5,2", [1, 0.5, 2]),  # Mixed int/float
+        # 10 mixed values
+        (
+            "0.1,0.25,0.5,0.75,1,1.25,1.5,1.75,2,3",
+            [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3],
+        ),
+    ],
+)
+def test_fixed_opcode_count_valid_input(
+    cli_input: str, expected_counts: list
+) -> None:
+    """
+    Valid comma-separated numbers are accepted.
+
+    The flag accepts comma-separated numbers (integers or floats) as default
+    opcode counts. This test verifies valid inputs are parsed correctly.
+    """
+    mock_config = MagicMock()
+    mock_config.rootpath = Path("/tmp")
+
+    result = OpcodeCountsConfig.from_parameter_value(mock_config, cli_input)
+    assert result is not None
+    assert result.default_counts == expected_counts
+
+
+def test_fixed_opcode_count_invalid_input() -> None:
+    """
+    Invalid values like test paths are rejected.
+
+    The flag should reject invalid inputs like test paths that get accidentally
+    consumed by argparse. This prevents confusing errors when users forget to
+    specify opcode counts before the test path.
+    """
+    mock_config = MagicMock()
+    mock_config.rootpath = Path("/tmp")
+
+    with pytest.raises(pytest.UsageError) as exc_info:
+        OpcodeCountsConfig.from_parameter_value(
+            mock_config, "tests/benchmark/compute/test_foo.py"
+        )
+
+    assert "Invalid value for --fixed-opcode-count" in str(exc_info.value)
+
+
+def test_fixed_opcode_count_missing_config() -> None:
+    """
+    Missing config file raises UsageError with helpful message.
+
+    When used without arguments, it expects to load config from
+    .fixed_opcode_counts.json. If the file is missing, a helpful UsageError
+    should be raised explaining where to create the config file.
+    """
+    mock_config = MagicMock()
+    mock_config.rootpath = Path("/nonexistent/path")
+
+    with pytest.raises(pytest.UsageError) as exc_info:
+        OpcodeCountsConfig.from_parameter_value(mock_config, "")
+
+    assert ".fixed_opcode_counts.json" in str(exc_info.value)
+    assert "was not found" in str(exc_info.value)
+
+
+def test_fixed_opcode_count_float_values() -> None:
+    """
+    Float values are supported for sub-1K opcode iterations.
+
+    For expensive precompiles that can't run 1000+ iterations within gas
+    limits, float values like 0.001 (1 opcode) or 0.5 (500 opcodes) work.
+    """
+    config = OpcodeCountsConfig(
+        scenario_configs={
+            "test_precompile.*": [0.001, 0.01, 0.1],
+        },
+        default_counts=[1.0],
+    )
+
+    counts = config.get_opcode_counts("test_precompile_bn128")
+    assert counts == [0.001, 0.01, 0.1]
+
+    params = config.get_test_parameters("test_precompile_bn128")
+    assert len(params) == 3
+    assert params[0].id == "opcount_0.001K"
+    assert params[1].id == "opcount_0.01K"
+    assert params[2].id == "opcount_0.1K"
+
+
+def test_fixed_opcode_count_invalid_regex_raises_error() -> None:
+    """
+    Invalid regex patterns raise an error.
+
+    If a pattern in the config file contains invalid regex syntax, it should
+    raise a ValueError with a helpful message indicating the invalid pattern.
+    """
+    config = OpcodeCountsConfig(
+        scenario_configs={
+            "[invalid(regex": [10.0],  # Invalid regex
+            "test_valid.*": [5.0],
+        },
+        default_counts=[1.0],
+    )
+
+    # Should raise error when trying to match against invalid regex
+    with pytest.raises(ValueError) as exc_info:
+        config.get_opcode_counts("test_other")
+
+    assert "Invalid regex pattern" in str(exc_info.value)
+    assert "[invalid(regex" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "config_counts,expected_tests,expected_ids",
+    [
+        pytest.param([1], 2, ["opcount_1"], id="single_int"),
+        pytest.param(
+            [1, 2, 3],
+            6,
+            ["opcount_1", "opcount_2", "opcount_3"],
+            id="multiple_ints",
+        ),
+        pytest.param([0.5], 2, ["opcount_0.5"], id="single_float"),
+        pytest.param(
+            [0.5, 1, 2],
+            6,
+            ["opcount_0.5", "opcount_1", "opcount_2"],
+            id="multiple_floats",
+        ),
+        pytest.param(
+            [1, 0.5, 2],
+            6,
+            ["opcount_1", "opcount_0.5", "opcount_2"],
+            id="mixed_int_float",
+        ),
+        pytest.param(
+            [1, 2, 3, 5],
+            8,
+            ["opcount_1", "opcount_2", "opcount_3", "opcount_5"],
+            id="four_ints",
+        ),
+    ],
+)
+def test_fixed_opcode_count_config_file_parametrized(
+    pytester: pytest.Pytester,
+    config_counts: list,
+    expected_tests: int,
+    expected_ids: list,
+) -> None:
+    """
+    Config file opcode counts create correct test variants.
+
+    The config file can specify single counts, multiple counts, or floats.
+    Each should parametrize tests correctly.
+    """
+    setup_test_directory_structure(
+        pytester, test_module_dummy, "test_config_counts.py"
+    )
+
+    config_file = pytester.path / ".fixed_opcode_counts.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "scenario_configs": {
+                    "test_dummy_benchmark_test.*": config_counts
+                }
+            }
+        )
+    )
+
+    # Use subprocess mode to isolate each parametrized inner session.
+    # pytester defaults to in-process mode, which shares the Python
+    # interpreter across all inner sessions in the same test run.
+    # Pydantic's ModelMetaclass caches __init__ wrappers for dynamically
+    # created classes (like BaseTestWrapper); when a second in-process
+    # session creates a new BaseTestWrapper, the cached wrapper re-invokes
+    # __init__ re-entrantly, causing generate() to run twice per test and
+    # doubling the opcode count. This is strictly a pytester/in-process
+    # artifact — normal `fill` runs are unaffected because each fill
+    # invocation is a fresh Python process.
+    #
+    # Place --fixed-opcode-count after test path to avoid argparse consuming
+    # the path as the option value (nargs='?' behavior)
+    result = pytester.runpytest_subprocess(
+        "-c",
+        "pytest-fill.ini",
+        "--fork",
+        "Prague",
+        "tests/benchmark/dummy_test_module/",
+        f"--evm-bin={BENCHMARK_EVM_T8N}",
+        "--fixed-opcode-count",
+        "-v",
+    )
+
+    assert result.ret == 0
+    # Check expected number of tests (2 test types * len(counts))
+    assert any(f"{expected_tests} passed" in line for line in result.outlines)
+    # Check opcode count IDs are present
+    for expected_id in expected_ids:
+        assert any(expected_id in line for line in result.outlines)
+
+
+# Test module with parametrized test for per-parameter pattern matching
+test_module_parametrized = textwrap.dedent(
+    """\
+    import pytest
+    from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
+
+    @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
+    @pytest.mark.parametrize("size", [0, 32, 256, 1024])
+    def test_parametrized_benchmark(
+        benchmark_test: BenchmarkTestFiller, size: int
+    ) -> None:
+        benchmark_test(
+            target_opcode=Op.JUMPDEST,
+            code_generator=JumpLoopGenerator(attack_block=Op.JUMPDEST),
+        )
+    """
+)
+
+
+@pytest.mark.parametrize(
+    "config,expected_test_ids",
+    [
+        # Single count per parameter - different counts for different sizes
+        pytest.param(
+            {
+                "test_parametrized_benchmark.*size_0.*": [5],
+                "test_parametrized_benchmark.*size_256.*": [3],
+                "test_parametrized_benchmark.*size_1024.*": [2],
+            },
+            [
+                # size_0->5, size_32->default(1), size_256->3, size_1024->2
+                "size_0-opcount_5",
+                "size_32-opcount_1",
+                "size_256-opcount_3",
+                "size_1024-opcount_2",
+            ],
+            id="single_count_per_param",
+        ),
+        # Multiple counts per parameter (floats and ints)
+        pytest.param(
+            {
+                "test_parametrized_benchmark.*size_0.*": [0.5, 1, 2],
+                "test_parametrized_benchmark.*size_1024.*": [0.5, 0.75],
+            },
+            [
+                # size_0->[0.5,1,2], size_32->default[1], size_1024->[0.5,0.75]
+                "size_0-opcount_0.5",
+                "size_0-opcount_1",
+                "size_0-opcount_2",
+                "size_32-opcount_1",
+                "size_256-opcount_1",
+                "size_1024-opcount_0.5",
+                "size_1024-opcount_0.75",
+            ],
+            id="multiple_counts_per_param",
+        ),
+        # Per-param patterns with test_.* fallback for unmatched params
+        pytest.param(
+            {
+                "test_parametrized_benchmark.*size_0.*": [5],
+                "test_parametrized_benchmark.*size_1024.*": [10],
+                "test_.*": [2, 3],  # Fallback for size_32, size_256
+            },
+            [
+                # size_0 -> [5] (specific), size_32 -> [2,3] (fallback),
+                # size_256 -> [2,3] (fallback), size_1024 -> [10] (specific)
+                "size_0-opcount_5",
+                "size_32-opcount_2",
+                "size_32-opcount_3",
+                "size_256-opcount_2",
+                "size_256-opcount_3",
+                "size_1024-opcount_10",
+            ],
+            id="per_param_with_fallback",
+        ),
+        # All params same counts via broad pattern
+        pytest.param(
+            {
+                "test_parametrized_benchmark.*": [1, 2, 3],
+            },
+            [
+                # All sizes get [1, 2, 3]
+                "size_0-opcount_1",
+                "size_0-opcount_2",
+                "size_0-opcount_3",
+                "size_32-opcount_1",
+                "size_1024-opcount_3",
+            ],
+            id="all_same_counts",
+        ),
+    ],
+)
+def test_fixed_opcode_count_per_parameter_patterns(
+    pytester: pytest.Pytester,
+    config: dict,
+    expected_test_ids: List[str],
+) -> None:
+    """
+    Per-parameter opcode count patterns work correctly.
+
+    Patterns like "test_foo.*size_256.*" should match tests with that specific
+    parameter value and apply the corresponding opcode counts.
+    """
+    setup_test_directory_structure(
+        pytester, test_module_parametrized, "test_param_benchmark.py"
+    )
+
+    config_file = pytester.path / ".fixed_opcode_counts.json"
+    config_file.write_text(json.dumps({"scenario_configs": config}))
+
+    # Subprocess mode: avoids Pydantic metaclass cache pollution across
+    # in-process pytester sessions (see comment in
+    # test_fixed_opcode_count_config_file_parametrized).
+    result = pytester.runpytest_subprocess(
+        "-c",
+        "pytest-fill.ini",
+        "--fork",
+        "Prague",
+        "tests/benchmark/dummy_test_module/",
+        f"--evm-bin={BENCHMARK_EVM_T8N}",
+        "--fixed-opcode-count",
+        "-v",
+    )
+
+    assert result.ret == 0
+
+    # Verify expected test IDs are present
+    output = "\n".join(result.outlines)
+    for expected_id in expected_test_ids:
+        assert expected_id in output, (
+            f"Expected '{expected_id}' in output but not found.\n"
+            f"Output:\n{output}"
+        )
+
+
+def test_cli_mode_ignores_per_parameter_patterns(
+    pytester: pytest.Pytester,
+) -> None:
+    """
+    CLI mode applies same counts to all parameters.
+
+    When using --fixed-opcode-count=1,5 (explicit CLI values), all test
+    variants should get the same opcode counts regardless of their parameters.
+    This verifies CLI mode doesn't accidentally use per-parameter matching.
+    """
+    setup_test_directory_structure(
+        pytester, test_module_parametrized, "test_cli_mode.py"
+    )
+
+    # Subprocess mode: avoids Pydantic metaclass cache pollution across
+    # in-process pytester sessions (see comment in
+    # test_fixed_opcode_count_config_file_parametrized).
+    result = pytester.runpytest_subprocess(
+        "-c",
+        "pytest-fill.ini",
+        "--fork",
+        "Prague",
+        "--fixed-opcode-count=1,5",
+        "tests/benchmark/dummy_test_module/",
+        f"--evm-bin={BENCHMARK_EVM_T8N}",
+        "-v",
+    )
+
+    assert result.ret == 0
+    output = "\n".join(result.outlines)
+
+    # All size variants should have both opcount_1 and opcount_5
+    for size in ["size_0", "size_32", "size_256", "size_1024"]:
+        assert (
+            f"{size}-opcount_1.0K" in output or f"{size}-opcount_1K" in output
+        ), f"Expected {size} with opcount_1 in output"
+        assert (
+            f"{size}-opcount_5.0K" in output or f"{size}-opcount_5K" in output
+        ), f"Expected {size} with opcount_5 in output"
+
+
+def test_consensus_fixtures_split_by_fork(
+    pytester: pytest.Pytester, tmp_path: Path
+) -> None:
+    """Ensure non-benchmark fixtures are split into fork subdirectories."""
+    consensus_module = textwrap.dedent(
+        """\
+        import pytest
+        from execution_testing import Transaction
+
+        @pytest.mark.valid_from("Prague")
+        def test_fork_split_example(state_test, pre) -> None:
+            tx = Transaction(to=0, gas_limit=21_000, sender=pre.fund_eoa())
+            state_test(pre=pre, post={}, tx=tx)
+        """
+    )
+    tests_dir = pytester.mkdir("tests")
+    test_dir = tests_dir / "prague" / "dummy_split"
+    test_dir.mkdir(parents=True)
+    test_file = test_dir / "test_fork_split.py"
+    test_file.write_text(consensus_module)
+
+    pytester.copy_example(
+        name="src/execution_testing/cli/pytest_commands/pytest_ini_files/pytest-fill.ini"
+    )
+
+    output_dir = tmp_path / "fixtures"
+    result = pytester.runpytest(
+        "-c",
+        "pytest-fill.ini",
+        "--from=Prague",
+        "--until=Osaka",
+        "-m",
+        "not blockchain_test_engine",
+        "--no-html",
+        "--skip-index",
+        f"--output={output_dir}",
+        str(test_file),
+        "-q",
+    )
+
+    assert result.ret == 0, f"Fill command failed:\n{result.outlines}"
+
+    prague_subdir = format_fork_subdir("Prague")
+    osaka_subdir = format_fork_subdir("Osaka")
+
+    # Verify fork subdirs exist under state_tests
+    state_tests_dir = output_dir / "state_tests"
+    prague_dir = state_tests_dir / prague_subdir
+    osaka_dir = state_tests_dir / osaka_subdir
+    assert prague_dir.exists(), (
+        f"Expected {prague_subdir}/ under {state_tests_dir}"
+    )
+    assert osaka_dir.exists(), (
+        f"Expected {osaka_subdir}/ under {state_tests_dir}"
+    )
+
+    prague_files = list(prague_dir.rglob("*.json"))
+    osaka_files = list(osaka_dir.rglob("*.json"))
+    assert prague_files, f"Expected fixtures under {prague_subdir}/"
+    assert osaka_files, f"Expected fixtures under {osaka_subdir}/"
+
+    # Verify each file contains only the expected fork's fixtures
+    for file_path in prague_files:
+        data = json.loads(file_path.read_text())
+        for key in data:
+            assert "fork_Prague" in key, (
+                f"Expected fork_Prague in key {key} ({file_path})"
+            )
+            assert "fork_Osaka" not in key, (
+                f"Unexpected fork_Osaka in key {key} ({file_path})"
+            )
+
+    for file_path in osaka_files:
+        data = json.loads(file_path.read_text())
+        for key in data:
+            assert "fork_Osaka" in key, (
+                f"Expected fork_Osaka in key {key} ({file_path})"
+            )
+            assert "fork_Prague" not in key, (
+                f"Unexpected fork_Prague in key {key} ({file_path})"
+            )

@@ -12,9 +12,8 @@ runs:
     - name: Ensure build deps (idempotent)
       shell: bash
       run: |
-        set -euo pipefail
-        sudo apt-get update
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential pkg-config
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install --yes --force-yes build-essential pkg-config
+        pip install 'tox>=4.11,<5' requests
 
     - name: Install tox + helpers
       shell: bash

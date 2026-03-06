@@ -15,6 +15,7 @@ from execution_testing.specs import BaseTest
 from execution_testing.specs.base import OpMode
 from execution_testing.test_types import EOA, Alloc, ChainConfig
 
+from ..shared.pre_alloc import AllocFlags
 from ..spec_version_checker.spec_version_checker import EIPSpecTestItem
 
 ALL_FIXTURE_PARAMETERS = {
@@ -159,11 +160,6 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
-        "pre_alloc_modify: Marks a test to apply plugin-specific "
-        "pre_alloc_group modifiers",
-    )
-    config.addinivalue_line(
-        "markers",
         "slow: Marks a test as slow (deselect with '-m \"not slow\"')",
     )
     config.addinivalue_line(
@@ -182,6 +178,25 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         "fully_tagged: Marks a static test as fully tagged with all metadata.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "pre_alloc_mutable: Marks a test to allow impossible mutations in the "
+        "pre-state.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "fixture_format_id: ID used to describe the fixture format.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "transition_tool_cache_key: Key used to match the transition tool "
+        "cache for the test during fill.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "fixture_subfolder(level, prefix): "
+        "Signal that fixtures should be placed in a subfolder",
     )
 
 
@@ -268,6 +283,51 @@ def sender(pre: Alloc) -> EOA:
 def chain_config() -> ChainConfig:
     """Return chain configuration."""
     return ChainConfig()
+
+
+@pytest.fixture(scope="function")
+def alloc_flags_from_test_markers(
+    request: pytest.FixtureRequest,
+) -> AllocFlags:
+    """Return allocation mode for a given test based on its markers."""
+    flags = AllocFlags.NONE
+    if request.node.get_closest_marker("pre_alloc_mutable"):
+        flags |= AllocFlags.MUTABLE
+    return flags
+
+
+@pytest.fixture(scope="function")
+def alloc_flags(
+    alloc_flags_from_test_markers: AllocFlags,
+) -> AllocFlags:
+    """
+    Return allocation mode for the test.
+
+    By default, this is based on markers tests only, but plugins can
+    override this behavior.
+    """
+    return alloc_flags_from_test_markers
+
+
+@pytest.fixture(scope="function")
+def is_tx_gas_heavy_test(request: pytest.FixtureRequest) -> bool:
+    """
+    Check, given the test node properties, whether the test is gas-heavy
+    for transaction execution.
+    """
+    node = request.node
+    has_slow_marker = node.get_closest_marker("slow") is not None
+    has_benchmark_marker = node.get_closest_marker("benchmark") is not None
+    return has_slow_marker or has_benchmark_marker
+
+
+@pytest.fixture(scope="function")
+def is_exception_test(request: pytest.FixtureRequest) -> bool:
+    """
+    Check, given the test node properties, whether the test is an exception
+    test (invalid block, invalid transaction).
+    """
+    return request.node.get_closest_marker("exception_test") is not None
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
