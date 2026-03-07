@@ -8,7 +8,7 @@ from execution_testing import (
     Transaction,
 )
 
-from .spec import PointG1, Spec, ref_spec_197
+from .spec import PointG1, PointG2, Spec, ref_spec_197
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_197.git_path
 REFERENCE_SPEC_VERSION = ref_spec_197.version
@@ -119,12 +119,80 @@ def test_fail(
             Spec.INVALID,
             id="g1_not_on_curve",
         ),
+        # G1 coordinates >= P
+        pytest.param(
+            PointG1(Spec.P, 0) + Spec.INF_G2,
+            Spec.INVALID,
+            id="g1_x_eq_P",
+        ),
+        pytest.param(
+            PointG1(0, Spec.P) + Spec.INF_G2,
+            Spec.INVALID,
+            id="g1_y_eq_P",
+        ),
+        pytest.param(
+            PointG1(Spec.G1.x + Spec.P, Spec.G1.y) + Spec.INF_G2,
+            Spec.INVALID,
+            id="g1_x_plus_P",
+        ),
+        pytest.param(
+            PointG1(Spec.G1.x, Spec.G1.y + Spec.P) + Spec.INF_G2,
+            Spec.INVALID,
+            id="g1_y_plus_P",
+        ),
+        # G2 coordinates >= P
+        pytest.param(
+            Spec.INF_G1 + PointG2((Spec.P, 0), (0, 0)),
+            Spec.INVALID,
+            id="g2_x0_eq_P",
+        ),
+        pytest.param(
+            Spec.INF_G1 + PointG2((0, Spec.P), (0, 0)),
+            Spec.INVALID,
+            id="g2_x1_eq_P",
+        ),
+        pytest.param(
+            Spec.INF_G1 + PointG2((0, 0), (Spec.P, 0)),
+            Spec.INVALID,
+            id="g2_y0_eq_P",
+        ),
+        pytest.param(
+            Spec.INF_G1 + PointG2((0, 0), (0, Spec.P)),
+            Spec.INVALID,
+            id="g2_y1_eq_P",
+        ),
+        pytest.param(
+            Spec.INF_G1
+            + PointG2((Spec.G2.x[0] + Spec.P, Spec.G2.x[1]), Spec.G2.y),
+            Spec.INVALID,
+            id="g2_x0_plus_P",
+        ),
+        pytest.param(
+            Spec.INF_G1
+            + PointG2((Spec.G2.x[0], Spec.G2.x[1] + Spec.P), Spec.G2.y),
+            Spec.INVALID,
+            id="g2_x1_plus_P",
+        ),
+        pytest.param(
+            Spec.INF_G1
+            + PointG2(Spec.G2.x, (Spec.G2.y[0] + Spec.P, Spec.G2.y[1])),
+            Spec.INVALID,
+            id="g2_y0_plus_P",
+        ),
+        pytest.param(
+            Spec.INF_G1
+            + PointG2(Spec.G2.x, (Spec.G2.y[0], Spec.G2.y[1] + Spec.P)),
+            Spec.INVALID,
+            id="g2_y1_plus_P",
+        ),
     ],
 )
 @pytest.mark.ported_from(
     [
         "https://github.com/ethereum/legacytests/tree/master/Cancun/GeneralStateTests/stZeroKnowledge/ecpairing_bad_length_191Filler.json",
         "https://github.com/ethereum/legacytests/tree/master/Cancun/GeneralStateTests/stZeroKnowledge/ecpairing_bad_length_193Filler.json",
+        "https://github.com/ethereum/legacytests/tree/master/Cancun/GeneralStateTests/stZeroKnowledge/ecpairing_perturb_g2_by_field_modulusFiller.json",
+        "https://github.com/ethereum/legacytests/tree/master/Cancun/GeneralStateTests/stZeroKnowledge/ecpairing_perturb_g2_by_field_modulus_againFiller.json",
     ],
     pr=["https://github.com/ethereum/execution-specs/pull/2422"],
 )
