@@ -45,9 +45,9 @@ on:
         type: string
         default: |
           {
-            "geth": "ghcr.io/gnosischain/geth:v1.16.8-gc",
-            "reth": "ghcr.io/gnosischain/reth_gnosis:master",
-            "nethermind": "nethermind/nethermind:1.36.0",
+            "geth": "ghcr.io/gnosischain/geth:latest",
+            "reth": "ghcr.io/gnosischain/reth_gnosis:latest",
+            "nethermind": "nethermind/nethermind:1.36.1",
             "erigon": "erigontech/erigon:latest"
           }
         description: 'JSON object containing client docker images in format {"client": "registry:tag", ...}'
