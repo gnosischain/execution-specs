@@ -180,7 +180,7 @@ def test_insufficient_gas_for_sstore_state_cost(
     # Enough for intrinsic + warm SSTORE regular gas, but not the
     # state gas cost for zero-to-nonzero transition
     intrinsic_cost = fork.transaction_intrinsic_cost_calculator()
-    gas_limit = intrinsic_cost() + gas_costs.GAS_STORAGE_UPDATE
+    gas_limit = intrinsic_cost() + gas_costs.GAS_COLD_STORAGE_WRITE
 
     tx = Transaction(
         to=contract,

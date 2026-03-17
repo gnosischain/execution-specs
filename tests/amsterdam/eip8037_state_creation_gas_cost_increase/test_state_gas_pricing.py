@@ -178,7 +178,7 @@ def test_charge_oog_both_pools_insufficient(
 
     # Tight gas: intrinsic + SSTORE regular gas only
     intrinsic_cost = fork.transaction_intrinsic_cost_calculator()
-    gas_limit = intrinsic_cost() + gas_costs.GAS_STORAGE_UPDATE
+    gas_limit = intrinsic_cost() + gas_costs.GAS_COLD_STORAGE_WRITE
 
     tx = Transaction(
         to=contract,
