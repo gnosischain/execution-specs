@@ -55,8 +55,8 @@ on:
 env:
   GOPROXY: "${{ vars.GOPROXY }}"
   GCS_BUCKET: gnosis-hive-ui-staging
-  GCS_PATH: test-results
-  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging/test-results
+  GCS_PATH: ""
+  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging
   INSTALL_RCLONE_VERSION: v1.68.2
   EELS_BUILD_ARG_FIXTURES: https://github.com/gnosischain/execution-spec-tests/releases/download/v0.1.0/fixtures_osaka.tar.gz
   EELS_BUILD_ARG_BRANCH: forks/amsterdam
