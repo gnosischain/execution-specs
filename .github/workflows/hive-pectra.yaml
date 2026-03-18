@@ -1,4 +1,4 @@
-name: Hive - Fusaka
+name: Hive - Pectra
 
 on:
   schedule:
@@ -47,7 +47,7 @@ on:
           {
             "geth": "ghcr.io/gnosischain/geth:latest",
             "reth": "ghcr.io/gnosischain/reth_gnosis:latest",
-            "nethermind": "nethermind/nethermind:1.36.1",
+            "nethermind": "nethermind/nethermind:latest",
             "erigon": "erigontech/erigon:latest"
           }
         description: 'JSON object containing client docker images in format {"client": "registry:tag", ...}'
@@ -55,10 +55,10 @@ on:
 env:
   GOPROXY: "${{ vars.GOPROXY }}"
   GCS_BUCKET: gnosis-hive-ui-staging
-  GCS_PATH: fusaka
-  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging/fusaka
+  GCS_PATH: pectra
+  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging/pectra
   INSTALL_RCLONE_VERSION: v1.68.2
-  EELS_BUILD_ARG_FIXTURES: https://github.com/gnosischain/execution-spec-tests/releases/download/v0.1.0/fixtures_osaka.tar.gz
+  EELS_BUILD_ARG_FIXTURES: https://github.com/gnosischain/execution-spec-tests/releases/download/v0.1.0/fixtures_prague.tar.gz
   EELS_BUILD_ARG_BRANCH: forks/amsterdam
   # Flags used for all simulators
   GLOBAL_EXTRA_FLAGS: >-
@@ -70,14 +70,14 @@ env:
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
     --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
     --sim.loglevel=3
-    --sim.limit=.*Osaka.*
+    --sim.limit=.*Prague.*
   # Flags used for the gnosis/eels/consume-rlp simulator
   EELS_RLP_FLAGS: >-
     --sim.parallelism=6
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
     --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
     --sim.loglevel=3
-    --sim.limit=.*Osaka.*
+    --sim.limit=.*Prague.*
 
 jobs:
   prepare:
