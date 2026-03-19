@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
 
       - name: Clone Hive repository
-        run:
+        run: |
           git clone https://github.com/gnosischain/hive.git
           cd hive
           git checkout c47a63c0a2bab94179b4202c84d830be009cfb2e
