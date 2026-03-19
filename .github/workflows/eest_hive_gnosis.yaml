@@ -25,11 +25,7 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
 
       - name: Clone Hive repository
-        run: |
-          git clone https://github.com/gnosischain/hive.git
-          cd hive
-          git fetch --all --prune
-          git checkout -b sync-eest b034f1a93169f6ba47de255b67a6f0ea0f13a9b4
+        run: git clone -b fix/nethermind-client https://github.com/gnosischain/hive.git
 
       - name: Install Go (for Hive)
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
