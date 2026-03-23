@@ -4,7 +4,7 @@ Define the types used by the t8n tool.
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ethereum_rlp import Simple, rlp
 from ethereum_types.bytes import Bytes
@@ -91,7 +91,7 @@ class Txs:
     def __init__(self, t8n: "T8N", stdin: Optional[Dict] = None):
         self.t8n = t8n
         self.successfully_parsed: List[int] = []
-        self.transactions: List[Tuple[Uint, Any]] = []
+        self.transactions: List[Any] = []
         self.rejected_txs = {}
         self.rlp_input = False
         self.all_txs = []
