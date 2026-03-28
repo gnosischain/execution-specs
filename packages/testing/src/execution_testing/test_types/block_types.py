@@ -160,42 +160,65 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
 
     def set_fork_requirements(self, fork: Fork) -> "Environment":
         """Fill required fields in an environment depending on the fork."""
+        number = self.number
+        timestamp = self.timestamp
+
         updated_values: Dict[str, Any] = {}
 
-        if fork.header_prev_randao_required() and self.prev_randao is None:
+        if (
+            fork.header_prev_randao_required(
+                block_number=number, timestamp=timestamp
+            )
+            and self.prev_randao is None
+        ):
             updated_values["prev_randao"] = 0
 
-        if fork.header_withdrawals_required() and self.withdrawals is None:
+        if (
+            fork.header_withdrawals_required(
+                block_number=number, timestamp=timestamp
+            )
+            and self.withdrawals is None
+        ):
             updated_values["withdrawals"] = []
 
         if (
-            fork.header_base_fee_required()
+            fork.header_base_fee_required(
+                block_number=number, timestamp=timestamp
+            )
             and self.base_fee_per_gas is None
             and self.parent_base_fee_per_gas is None
         ):
             updated_values["base_fee_per_gas"] = DEFAULT_BASE_FEE
 
-        if fork.header_zero_difficulty_required():
+        if fork.header_zero_difficulty_required(
+            block_number=number, timestamp=timestamp
+        ):
             updated_values["difficulty"] = 0
         elif self.difficulty is None and self.parent_difficulty is None:
             updated_values["difficulty"] = 0x20000
 
         if (
-            fork.header_excess_blob_gas_required()
+            fork.header_excess_blob_gas_required(
+                block_number=number, timestamp=timestamp
+            )
             and self.excess_blob_gas is None
             and self.parent_excess_blob_gas is None
         ):
             updated_values["excess_blob_gas"] = 0
 
         if (
-            fork.header_blob_gas_used_required()
+            fork.header_blob_gas_used_required(
+                block_number=number, timestamp=timestamp
+            )
             and self.blob_gas_used is None
             and self.parent_blob_gas_used is None
         ):
             updated_values["blob_gas_used"] = 0
 
         if (
-            fork.header_beacon_root_required()
+            fork.header_beacon_root_required(
+                block_number=number, timestamp=timestamp
+            )
             and self.parent_beacon_block_root is None
         ):
             updated_values["parent_beacon_block_root"] = 0

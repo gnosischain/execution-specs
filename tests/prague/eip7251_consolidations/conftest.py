@@ -4,14 +4,7 @@ from itertools import zip_longest
 from typing import List
 
 import pytest
-from execution_testing import (
-    Alloc,
-    Block,
-    Fork,
-    Header,
-    Requests,
-    TransitionFork,
-)
+from execution_testing import Alloc, Block, Fork, Header, Requests
 
 from .helpers import ConsolidationRequest, ConsolidationRequestInteractionBase
 from .spec import Spec
@@ -92,7 +85,7 @@ def timestamp() -> int:
 
 @pytest.fixture
 def blocks(
-    fork: Fork | TransitionFork,
+    fork: Fork,
     update_pre: None,  # Fixture is used for its side effects
     blocks_consolidation_requests: List[
         List[ConsolidationRequestInteractionBase]
@@ -109,9 +102,10 @@ def blocks(
         fillvalue=[],
     ):
         header_verify: Header | None = None
-        if fork.fork_at(
-            block_number=len(blocks) + 1, timestamp=timestamp
-        ).header_requests_required():
+        if fork.header_requests_required(
+            block_number=len(blocks) + 1,
+            timestamp=timestamp,
+        ):
             header_verify = Header(
                 requests_hash=Requests(*block_included_requests)
             )

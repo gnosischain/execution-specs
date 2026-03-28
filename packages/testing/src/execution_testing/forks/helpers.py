@@ -47,16 +47,13 @@ for fork_name in forks.__dict__:
     if issubclass(fork, BaseFork) and fork is not BaseFork:
         all_forks.append(fork)
 
-transition_forks: List[Type[TransitionBaseClass]] = []
+transition_forks: List[Type[BaseFork]] = []
 
 for fork_name in transition.__dict__:
     fork = transition.__dict__[fork_name]
     if not isinstance(fork, type):
         continue
-    if (
-        issubclass(fork, TransitionBaseClass)
-        and fork is not TransitionBaseClass
-    ):
+    if issubclass(fork, TransitionBaseClass) and issubclass(fork, BaseFork):
         transition_forks.append(fork)
 
 ALL_FORKS = frozenset(fork for fork in all_forks if not fork.ignore())
@@ -114,13 +111,13 @@ def get_closest_fork(fork: Type[BaseFork]) -> Optional[Type[BaseFork]]:
     return fork
 
 
-def get_transition_forks() -> Set[Type[TransitionBaseClass]]:
+def get_transition_forks() -> Set[Type[BaseFork]]:
     """Return all the transition forks."""
     return set(ALL_TRANSITION_FORKS)
 
 
 def get_transition_fork_predecessor(
-    transition_fork: Type[BaseFork | TransitionBaseClass],
+    transition_fork: Type[BaseFork],
 ) -> Type[BaseFork]:
     """Return the fork from which the transition fork transitions."""
     if not issubclass(transition_fork, TransitionBaseClass):
@@ -203,12 +200,12 @@ def get_selected_fork_set(
     forks_from: Set[Type[BaseFork]],
     forks_until: Set[Type[BaseFork]],
     transition_forks: bool = True,
-) -> Set[Type[BaseFork | TransitionBaseClass]]:
+) -> Set[Type[BaseFork]]:
     """
     Process sets derived from `--fork`, `--until` and `--from` to return an
     unified fork set.
     """
-    selected_fork_set: Set[Type[BaseFork]] = set()
+    selected_fork_set = set()
     if single_fork:
         selected_fork_set |= single_fork
     else:
@@ -218,22 +215,19 @@ def get_selected_fork_set(
             forks_until = get_last_descendants(
                 set(get_deployed_forks()), forks_from
             )
-        selected_fork_set |= get_from_until_fork_set(
+        selected_fork_set = get_from_until_fork_set(
             ALL_FORKS, forks_from, forks_until
         )
-    selected_fork_set_with_transitions: Set[
-        Type[BaseFork | TransitionBaseClass]
-    ] = set() | selected_fork_set
     if transition_forks:
-        for normal_fork in list(selected_fork_set):
-            transition_fork_set = transition_fork_to(normal_fork)
-            selected_fork_set_with_transitions |= transition_fork_set
-    return selected_fork_set_with_transitions
+        for fork in list(selected_fork_set):
+            transition_fork_set = transition_fork_to(fork)
+            selected_fork_set |= transition_fork_set
+    return selected_fork_set
 
 
 def transition_fork_from_to(
     fork_from: Type[BaseFork], fork_to: Type[BaseFork]
-) -> Type[TransitionBaseClass] | None:
+) -> Type[BaseFork] | None:
     """
     Return transition fork that transitions to and from the specified forks.
     """
@@ -249,20 +243,16 @@ def transition_fork_from_to(
     return None
 
 
-def transition_fork_to(
-    fork_to: Type[BaseFork | TransitionBaseClass],
-) -> Set[Type[TransitionBaseClass]]:
+def transition_fork_to(fork_to: Type[BaseFork]) -> Set[Type[BaseFork]]:
     """Return transition fork that transitions to the specified fork."""
-    selected_forks: Set[Type[TransitionBaseClass]] = set()
-    if issubclass(fork_to, TransitionBaseClass):
-        return selected_forks
+    transition_forks: Set[Type[BaseFork]] = set()
     for transition_fork in get_transition_forks():
         if not issubclass(transition_fork, TransitionBaseClass):
             continue
         if transition_fork.transitions_to() == fork_to:
-            selected_forks.add(transition_fork)
+            transition_forks.add(transition_fork)
 
-    return selected_forks
+    return transition_forks
 
 
 def forks_from_until(
@@ -399,19 +389,16 @@ class ForkRangeDescriptor(BaseModel):
 
 
 def fork_validator_generator(
-    cls: Type[BaseFork] | Type[TransitionBaseClass],
-    forks: List[Type[BaseFork | TransitionBaseClass]],
-) -> Callable[[Any], Type[BaseFork | TransitionBaseClass]]:
+    cls_name: str, forks: List[Type[BaseFork]]
+) -> Callable[[Any], Type[BaseFork]]:
     """Generate a fork validator function."""
     forks_dict = {fork.name().lower(): fork for fork in forks}
 
-    def fork_validator(obj: Any) -> Type[BaseFork | TransitionBaseClass]:
+    def fork_validator(obj: Any) -> Type[BaseFork]:
         """Get a fork by name or raise an error."""
         if obj is None:
             raise InvalidForkError("Fork cannot be None")
-        if isinstance(obj, type) and issubclass(
-            obj, BaseFork | TransitionBaseClass
-        ):
+        if isinstance(obj, type) and issubclass(obj, BaseFork):
             return obj
         if isinstance(obj, str):
             if obj.lower() in forks_dict:
@@ -419,7 +406,7 @@ def fork_validator_generator(
             else:
                 raise InvalidForkError(f"Invalid fork '{obj}' specified")
         raise InvalidForkError(
-            f"Invalid {cls.__name__}: {obj} (type: {type(obj)})"
+            f"Invalid {cls_name}: {obj} (type: {type(obj)})"
         )
 
     return fork_validator
@@ -439,7 +426,7 @@ Fork = Annotated[
     Type[BaseFork],
     PlainSerializer(str),
     PlainValidator(
-        fork_validator_generator(BaseFork, all_forks + transition_forks)
+        fork_validator_generator("Fork", all_forks + transition_forks)
     ),
 ]
 ForkAdapter: TypeAdapter = TypeAdapter(Fork)
@@ -450,10 +437,10 @@ ForkSet = Annotated[
 ]
 ForkSetAdapter: TypeAdapter = TypeAdapter(ForkSet)
 TransitionFork = Annotated[
-    Type[TransitionBaseClass],
+    Type[BaseFork],
     PlainSerializer(str),
     PlainValidator(
-        fork_validator_generator(TransitionBaseClass, transition_forks)
+        fork_validator_generator("TransitionFork", transition_forks)
     ),
 ]
 TransitionForkAdapter: TypeAdapter = TypeAdapter(TransitionFork)

@@ -397,9 +397,6 @@ class NethermindExceptionMapper(ExceptionMapper):
             "InvalidStateRoot: State root in header does not match"
         ),
         BlockException.GAS_USED_OVERFLOW: ("Block gas limit exceeded"),
-        BlockException.BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED: (
-            "BlockAccessListGasLimitExceeded:"
-        ),
     }
     mapping_regex = {
         TransactionException.INSUFFICIENT_ACCOUNT_FUNDS: (
@@ -434,29 +431,21 @@ class NethermindExceptionMapper(ExceptionMapper):
         BlockException.SYSTEM_CONTRACT_CALL_FAILED: (
             r"(Withdrawals|Consolidations)Failed: Contract execution failed\."
         ),
-        # BAL Exceptions — specific exceptions have unique patterns, but
-        # INVALID_BLOCK_ACCESS_LIST and INCORRECT_BLOCK_FORMAT intentionally
-        # overlap because the test framework requires `want in got` matching.
-        BlockException.INVALID_BAL_HASH: (r"InvalidBlockLevelAccessListHash:"),
-        BlockException.INVALID_BAL_MISSING_ACCOUNT: (
-            r"InvalidBlockLevelAccessList:.*missing account"
-        ),
+        # BAL Exceptions: TODO - review once all clients completed.
         BlockException.INVALID_BAL_EXTRA_ACCOUNT: (
-            r"InvalidBlockLevelAccessList:.*surplus changes"
-            r"|could not be parsed as a block: "
-            r"Error decoding block access list:"
+            r"could not be parsed as a block: "
+            r"Could not decode block access list."
+        ),
+        BlockException.INVALID_BAL_HASH: (r"InvalidBlockLevelAccessListRoot:"),
+        BlockException.INVALID_BAL_MISSING_ACCOUNT: (
+            r"InvalidBlockLevelAccessListRoot:"
         ),
         BlockException.INVALID_BLOCK_ACCESS_LIST: (
-            r"InvalidBlockLevelAccessListHash:"
-            r"|InvalidBlockLevelAccessList:"
-            r"|could not be parsed as a block: "
-            r"Error decoding block access list:"
+            r"InvalidBlockLevelAccessListRoot:|could not be parsed as a "
+            r"block: Could not decode block access list."
         ),
         BlockException.INCORRECT_BLOCK_FORMAT: (
             r"could not be parsed as a block: "
-            r"Error decoding block access list:"
-        ),
-        TransactionException.GAS_ALLOWANCE_EXCEEDED: (
-            r"TxGasLimitCapExceeded:"
+            r"Could not decode block access list."
         ),
     }

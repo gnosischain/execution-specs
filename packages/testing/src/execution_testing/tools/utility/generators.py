@@ -10,8 +10,7 @@ import pytest
 
 from execution_testing.base_types import Account, Address, Hash
 from execution_testing.exceptions import BlockException
-from execution_testing.forks import Berlin, Fork, TransitionFork
-from execution_testing.forks.base_fork import BaseFork
+from execution_testing.forks import Berlin, Fork
 from execution_testing.specs import BlockchainTestFiller, StateTestFiller
 from execution_testing.specs.blockchain import Block
 from execution_testing.test_types import Alloc, Transaction
@@ -64,7 +63,7 @@ class SystemContractDeployTestFunction(Protocol):
     def __call__(
         self,
         *,
-        fork: TransitionFork,
+        fork: Fork,
         pre: Alloc,
         post: Alloc,
         test_type: DeploymentTestType,
@@ -140,11 +139,6 @@ def generate_system_contract_deploy_test(
                                                       the system contract.
 
     """
-    if not issubclass(fork, BaseFork):
-        raise TypeError(
-            "fork parameter of generate_system_contract_deploy_test must be "
-            "a subclass of Fork"
-        )
     with open(tx_json_path, mode="r") as f:
         tx_json = json.loads(f.read())
     if "gasLimit" not in tx_json and "gas" in tx_json:
@@ -192,12 +186,8 @@ def generate_system_contract_deploy_test(
             has_balance: ContractAddressHasBalance,
             pre: Alloc,
             test_type: DeploymentTestType,
-            fork: TransitionFork,
+            fork: Fork,
         ) -> None:
-            assert fork.at_block == 0, (
-                "Block number based transition forks are not supported by "
-                "generate_system_contract_deploy_test"
-            )
             assert deployer_address is not None
             assert deploy_tx.created_contract == expected_deploy_address
             blocks: List[Block] = []
@@ -206,29 +196,29 @@ def generate_system_contract_deploy_test(
                 blocks = [
                     Block(  # Deployment block
                         txs=[deploy_tx],
-                        timestamp=fork.at_timestamp - 1,
+                        timestamp=14_999,
                     ),
                     Block(  # Empty block on fork
                         txs=[],
-                        timestamp=fork.at_timestamp,
+                        timestamp=15_000,
                     ),
                 ]
             elif test_type == DeploymentTestType.DEPLOY_ON_FORK_BLOCK:
                 blocks = [
                     Block(  # Deployment on fork block
                         txs=[deploy_tx],
-                        timestamp=fork.at_timestamp,
+                        timestamp=15_000,
                     ),
                     Block(  # Empty block after fork
                         txs=[],
-                        timestamp=fork.at_timestamp + 1,
+                        timestamp=15_001,
                     ),
                 ]
             elif test_type == DeploymentTestType.DEPLOY_AFTER_FORK:
                 blocks = [
                     Block(  # Empty block on fork
                         txs=[],
-                        timestamp=fork.at_timestamp,
+                        timestamp=15_000,
                         exception=BlockException.SYSTEM_CONTRACT_EMPTY
                         if fail_on_empty_code
                         else None,
@@ -238,13 +228,13 @@ def generate_system_contract_deploy_test(
                     blocks.append(
                         Block(  # Deployment after fork block
                             txs=[deploy_tx],
-                            timestamp=fork.at_timestamp + 1,
+                            timestamp=15_001,
                         )
                     )
                     blocks.append(
                         Block(  # Empty block after deployment
                             txs=[],
-                            timestamp=fork.at_timestamp + 2,
+                            timestamp=15_002,
                         ),
                     )
             balance = (
@@ -265,9 +255,7 @@ def generate_system_contract_deploy_test(
             )
 
             post = Alloc()
-            fork_pre_allocation = (
-                fork.transitions_to().pre_allocation_blockchain()
-            )
+            fork_pre_allocation = fork.pre_allocation_blockchain()
             assert expected_deploy_address_int in fork_pre_allocation
             expected_code = fork_pre_allocation[expected_deploy_address_int][
                 "code"
@@ -359,7 +347,7 @@ def generate_system_contract_error_test(
                 # executed in a subsequent block, it will consume less gas.
                 gas_used_per_storage = (
                     gas_costs.GAS_STORAGE_SET
-                    + gas_costs.GAS_COLD_STORAGE_ACCESS
+                    + gas_costs.GAS_COLD_SLOAD
                     + (gas_costs.GAS_VERY_LOW * 2)
                 )
                 modified_system_contract_code += sum(
@@ -512,7 +500,7 @@ def gas_test(
     gas_single_gas_run = (
         2 * opcode_gas_cost
         + opcode_pop_cost
-        + gas_costs.GAS_WARM_ACCESS
+        + gas_costs.GAS_WARM_ACCOUNT_ACCESS
         + 6 * opcode_push_cost
     )
     address_legacy_harness = pre.deploy_contract(

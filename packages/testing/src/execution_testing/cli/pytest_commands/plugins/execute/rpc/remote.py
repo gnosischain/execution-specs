@@ -6,7 +6,7 @@ from typing import Mapping
 
 import pytest
 
-from execution_testing.forks import Fork, TransitionFork
+from execution_testing.forks import Fork
 from execution_testing.rpc import EngineRPC, EthRPC
 from execution_testing.test_types.block_types import EnvironmentDefaults
 from execution_testing.test_types.chain_config_types import (
@@ -92,16 +92,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
             "Path to a file containing the JWT secret to be used to "
             "authenticate with the engine endpoint. The file must contain "
             "only the JWT secret as a hex string."
-        ),
-    )
-    engine_rpc_group.addoption(
-        "--session-sync-folder",
-        required=False,
-        action="store",
-        default=None,
-        dest="session_sync_folder",
-        help=(
-            "Folder used to sync multiple instances of the execute command."
         ),
     )
 
@@ -222,7 +212,7 @@ def eth_rpc(
     request: pytest.FixtureRequest,
     rpc_endpoint: str,
     engine_rpc: EngineRPC | None,
-    session_fork: Fork | TransitionFork,
+    session_fork: Fork,
     session_temp_folder: Path,
     max_transactions_per_batch: int | None,
     use_testing_build_block: bool,
@@ -244,14 +234,11 @@ def eth_rpc(
     testing_rpc = None
     if use_testing_build_block:
         testing_rpc = TestingRPC(rpc_endpoint)
-    session_sync_folder = request.config.getoption("session_sync_folder")
     return ChainBuilderEthRPC(
         rpc_endpoint=rpc_endpoint,
         fork=session_fork,
         engine_rpc=engine_rpc,
-        session_temp_folder=Path(session_sync_folder)
-        if session_sync_folder is not None
-        else session_temp_folder,
+        session_temp_folder=session_temp_folder,
         get_payload_wait_time=get_payload_wait_time,
         transaction_wait_timeout=tx_wait_timeout,
         max_transactions_per_batch=max_transactions_per_batch,

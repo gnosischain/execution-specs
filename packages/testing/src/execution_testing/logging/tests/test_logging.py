@@ -169,14 +169,13 @@ class TestStandaloneConfiguration:
                 # Should return a file handler
                 assert isinstance(handler, logging.FileHandler)
 
-                # Delay file creation until the first record is emitted.
-                assert not log_file.exists()
+                # Should create the log file
+                assert log_file.exists()
 
                 # Log a message and check it appears in the file
                 logger = get_logger("test_config")
                 logger.info("Test log message")
 
-                assert log_file.exists()
                 with open(log_file, "r") as f:
                     log_content = f.read()
                     assert "Test log message" in log_content
@@ -259,14 +258,11 @@ class TestPytestIntegration:
                 # Find the log file handler's file
                 log_file = Path(file_handlers[0].baseFilename)
 
+                # Check that the log file was created
+                assert log_file.exists()
+
                 # Verify the file is in the logs directory
                 assert log_file.parent.resolve() == log_dir.resolve()
-
-                # Delay file creation until the first record is emitted.
-                assert not log_file.exists()
-
-                get_logger("test_pytest_configure").info("Test log message")
-                assert log_file.exists()
 
                 # Clean up the test log file
                 log_file.unlink()

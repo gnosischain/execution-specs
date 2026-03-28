@@ -4,8 +4,6 @@ from pydantic import Field
 
 from execution_testing.base_types import CamelModel
 
-DEFAULT_CHAIN_ID = 1
-
 
 class ChainConfigDefaults:
     """
@@ -15,7 +13,7 @@ class ChainConfigDefaults:
     default values.
     """
 
-    chain_id: int = DEFAULT_CHAIN_ID
+    chain_id: int = 1
 
 
 class ChainConfig(CamelModel):

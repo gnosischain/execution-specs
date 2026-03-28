@@ -48,7 +48,7 @@ from execution_testing.exceptions import (
     EngineAPIError,
     ExceptionInstanceOrList,
 )
-from execution_testing.forks import Fork, Paris, TransitionFork
+from execution_testing.forks import Fork, Paris
 from execution_testing.test_types import (
     BlockAccessList,
     Environment,
@@ -126,9 +126,11 @@ class HeaderForkRequirement(str):
         """Create a new instance of the class."""
         return super().__new__(cls, value)
 
-    def required(self, fork: Fork) -> bool:
+    def required(self, fork: Fork, block_number: int, timestamp: int) -> bool:
         """Check if the field is required for the given fork."""
-        return getattr(fork, f"header_{self}_required")()
+        return getattr(fork, f"header_{self}_required")(
+            block_number=block_number, timestamp=timestamp
+        )
 
     @classmethod
     def get_from_annotation(cls, field_hints: Any) -> Self | None:
@@ -226,6 +228,10 @@ class FixtureHeader(CamelModel):
             # No validation done when we are importing the fixture from file
             return
 
+        # Get the timestamp and block number
+        block_number = self.number
+        timestamp = self.timestamp
+
         # For each field, check if any of the annotations are of type
         # HeaderForkRequirement and if so, check if the field is required for
         # the given fork.
@@ -242,7 +248,9 @@ class FixtureHeader(CamelModel):
             )
             if header_fork_requirement is not None:
                 if (
-                    header_fork_requirement.required(self.fork)
+                    header_fork_requirement.required(
+                        self.fork, block_number, timestamp
+                    )
                     and getattr(self, field) is None
                 ):
                     raise ValueError(
@@ -280,6 +288,8 @@ class FixtureHeader(CamelModel):
         fork: Fork,
         field_name: str,
         field_hint: Any,
+        block_number: int = 0,
+        timestamp: int = 0,
     ) -> Any:
         """
         Get default value for a header field based on its type hint.
@@ -294,6 +304,9 @@ class FixtureHeader(CamelModel):
             fork: Fork to check requirements against
             field_name: Name of the field
             field_hint: Type annotation of the field
+            block_number: Block number for fork requirement checking
+                (default: 0)
+            timestamp: Timestamp for fork requirement checking (default: 0)
 
         Returns:
             Default value appropriate for the field type, or None if
@@ -312,7 +325,9 @@ class FixtureHeader(CamelModel):
         )
         if header_fork_requirement is not None:
             # Only provide a default if the fork requires this field
-            if not header_fork_requirement.required(fork):
+            if not header_fork_requirement.required(
+                fork, block_number, timestamp
+            ):
                 return None
 
         # Check if the field has a default value defined in the model
@@ -360,11 +375,11 @@ class FixtureHeader(CamelModel):
         extras = {
             "state_root": state_root,
             "requests_hash": Requests()
-            if fork.header_requests_required()
+            if fork.header_requests_required(block_number=0, timestamp=0)
             else None,
             "block_access_list_hash": (
                 BlockAccessList().rlp_hash
-                if fork.header_bal_hash_required()
+                if fork.header_bal_hash_required(block_number=0, timestamp=0)
                 else None
             ),
             "fork": fork,
@@ -485,14 +500,20 @@ class FixtureEngineNewPayload(CamelModel):
         **kwargs: Any,
     ) -> Self:
         """Create `FixtureEngineNewPayload` from a `FixtureHeader`."""
-        new_payload_version = fork.engine_new_payload_version()
-        forkchoice_updated_version = fork.engine_forkchoice_updated_version()
+        new_payload_version = fork.engine_new_payload_version(
+            block_number=header.number, timestamp=header.timestamp
+        )
+        forkchoice_updated_version = fork.engine_forkchoice_updated_version(
+            block_number=header.number, timestamp=header.timestamp
+        )
 
         assert new_payload_version is not None, (
             "Invalid header for engine_newPayload"
         )
 
-        if fork.engine_execution_payload_block_access_list():
+        if fork.engine_execution_payload_block_access_list(
+            block_number=header.number, timestamp=header.timestamp
+        ):
             if block_access_list is None:
                 raise ValueError(
                     "`block_access_list` is required in engine "
@@ -507,13 +528,17 @@ class FixtureEngineNewPayload(CamelModel):
         )
 
         params: List[Any] = [execution_payload]
-        if fork.engine_new_payload_blob_hashes():
+        if fork.engine_new_payload_blob_hashes(
+            block_number=header.number, timestamp=header.timestamp
+        ):
             blob_hashes = Transaction.list_blob_versioned_hashes(transactions)
             if blob_hashes is None:
                 raise ValueError(f"Blob hashes are required for ${fork}.")
             params.append(blob_hashes)
 
-        if fork.engine_new_payload_beacon_root():
+        if fork.engine_new_payload_beacon_root(
+            block_number=header.number, timestamp=header.timestamp
+        ):
             parent_beacon_block_root = header.parent_beacon_block_root
             if parent_beacon_block_root is None:
                 raise ValueError(
@@ -521,7 +546,9 @@ class FixtureEngineNewPayload(CamelModel):
                 )
             params.append(parent_beacon_block_root)
 
-        if fork.engine_new_payload_requests():
+        if fork.engine_new_payload_requests(
+            block_number=header.number, timestamp=header.timestamp
+        ):
             if requests is None:
                 raise ValueError(f"Requests are required for ${fork}.")
             params.append(requests)
@@ -643,7 +670,7 @@ class FixtureBlock(FixtureBlockBase):
 class FixtureConfig(CamelModel):
     """Chain configuration for a fixture."""
 
-    fork: Fork | TransitionFork = Field(..., alias="network")
+    fork: Fork = Field(..., alias="network")
     chain_id: ZeroPaddedHexNumber = Field(
         ZeroPaddedHexNumber(1), alias="chainid"
     )
@@ -662,7 +689,7 @@ class InvalidFixtureBlock(CamelModel):
 class BlockchainFixtureCommon(BaseFixture):
     """Base blockchain test fixture model."""
 
-    fork: Fork | TransitionFork = Field(..., alias="network")
+    fork: Fork = Field(..., alias="network")
     genesis: FixtureHeader = Field(..., alias="genesisBlockHeader")
     pre: Alloc
     post_state: Alloc | None = Field(None)
@@ -688,7 +715,7 @@ class BlockchainFixtureCommon(BaseFixture):
                     data["config"]["chainid"] = "0x01"
         return data
 
-    def get_fork(self) -> Fork | TransitionFork | None:
+    def get_fork(self) -> Fork | None:
         """Return fork of the fixture as a string."""
         return self.fork
 
@@ -716,24 +743,24 @@ class BlockchainEngineFixtureCommon(BaseFixture):
     duplicating large pre-allocations.
     """
 
-    fork: Fork | TransitionFork = Field(..., alias="network")
+    fork: Fork = Field(..., alias="network")
     post_state_hash: Hash | None = Field(None)
     # FIXME: lastBlockHash
     last_block_hash: Hash = Field(..., alias="lastblockhash")
     config: FixtureConfig
 
-    def get_fork(self) -> Fork | TransitionFork | None:
+    def get_fork(self) -> Fork | None:
         """Return fixture's `Fork`."""
         return self.fork
 
     @classmethod
-    def supports_fork(cls, fork: Fork | TransitionFork) -> bool:
+    def supports_fork(cls, fork: Fork) -> bool:
         """
         Return whether the fixture can be generated for the given fork.
 
         The Engine API is available only on Paris and afterwards.
         """
-        return fork.fork_at(block_number=0, timestamp=0) >= Paris
+        return fork >= Paris
 
 
 class BlockchainEngineFixture(BlockchainEngineFixtureCommon):
@@ -844,7 +871,7 @@ class BlockchainEngineSyncFixture(BlockchainEngineFixture):
     @classmethod
     def discard_fixture_format_by_marks(
         cls,
-        fork: Fork | TransitionFork,
+        fork: Fork,
         markers: List[pytest.Mark],
     ) -> bool:
         """Discard the fixture format based on the provided markers."""

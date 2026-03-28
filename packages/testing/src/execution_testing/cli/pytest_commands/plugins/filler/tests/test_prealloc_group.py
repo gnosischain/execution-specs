@@ -44,12 +44,7 @@ class MockTest(BaseTest):
 
     def get_genesis_environment(self) -> Environment:
         """Return the genesis environment."""
-        return self.genesis_environment.set_fork_requirements(
-            self.fork.fork_at(
-                block_number=self.genesis_environment.number,
-                timestamp=self.genesis_environment.timestamp,
-            )
-        )
+        return self.genesis_environment.set_fork_requirements(self.fork)
 
 
 def test_pre_alloc_group_same() -> None:

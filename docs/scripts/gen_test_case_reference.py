@@ -58,7 +58,6 @@ args = [
     f"--until={GENERATE_UNTIL_FORK}",
     "--checklist-doc-gen",
     "--skip-index",
-    "--ignore=tests/ported_static",
     "-m",
     "not blockchain_test_engine and not benchmark",
     "-s",

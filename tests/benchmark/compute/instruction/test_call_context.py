@@ -203,13 +203,15 @@ def test_calldatacopy_from_origin(
     ],
 )
 @pytest.mark.parametrize(
-    "calldata_size,non_zero_data",
+    "non_zero_data",
     [
-        (size, nzd)
-        for size in [0, 32, 256, 1024]
-        for nzd in [True, False]
-        if not (size == 0 and nzd)
+        True,
+        False,
     ],
+)
+@pytest.mark.parametrize(
+    "calldata_size",
+    [0, 32, 256, 1024],
 )
 def test_calldatacopy_from_call(
     benchmark_test: BenchmarkTestFiller,
@@ -220,8 +222,12 @@ def test_calldatacopy_from_call(
     tx_gas_limit: int,
 ) -> None:
     """Benchmark CALLDATACOPY instruction."""
+    if calldata_size == 0 and non_zero_data:
+        pytest.skip("Non-zero data with size 0 is not applicable.")
+
     # If `non_zero_data` is True, we fill the calldata with deterministic
-    # random data.
+    # random data. Note that if `size == 0` and `non_zero_data` is a skipped
+    # case.
     data = (
         Bytes([i % 256 for i in range(calldata_size)])
         if non_zero_data
@@ -232,8 +238,8 @@ def test_calldatacopy_from_call(
     min_gas = intrinsic_gas_calculator(calldata=data)
     if min_gas > tx_gas_limit:
         pytest.skip(
-            f"Intrinsic gas for calldata ({min_gas}) exceeds "
-            f"tx gas limit ({tx_gas_limit})"
+            "Minimum gas required for calldata ({min_gas}) is greater "
+            "than the gas limit"
         )
 
     # We create the contract that will be doing the CALLDATACOPY multiple

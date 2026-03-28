@@ -45,7 +45,6 @@ class TransactionTest(BaseTest):
         self,
     ) -> FillResult:
         """Create a fixture from the transaction test definition."""
-        fork = self.fork.transitions_from()
         if self.tx.error is not None:
             result = FixtureResult(
                 exception=self.tx.error,
@@ -55,7 +54,7 @@ class TransactionTest(BaseTest):
             )
         else:
             intrinsic_gas_cost_calculator = (
-                fork.transitions_from().transaction_intrinsic_cost_calculator()
+                self.fork.transaction_intrinsic_cost_calculator()
             )
             intrinsic_gas = intrinsic_gas_cost_calculator(
                 calldata=self.tx.data,
@@ -72,7 +71,7 @@ class TransactionTest(BaseTest):
 
         fixture = TransactionFixture(
             result={
-                fork: result,
+                self.fork: result,
             },
             transaction=self.tx.with_signature_and_sender().rlp(),
         )

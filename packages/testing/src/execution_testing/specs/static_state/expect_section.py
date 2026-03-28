@@ -293,9 +293,10 @@ class ResultInFiller(EthereumTestRootModel, TagDependentData):
             else:
                 resolved_address = Address(address)
 
-            post[resolved_address] = (
-                account.resolve(tags) if account is not None else account
-            )
+            if account is None:
+                continue
+
+            post[resolved_address] = account.resolve(tags)
         return post
 
     def __contains__(self, address: Address) -> bool:

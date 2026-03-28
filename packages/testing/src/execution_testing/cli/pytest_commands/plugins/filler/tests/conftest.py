@@ -5,20 +5,15 @@ from typing import Generator
 import pytest
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def restore_environment_defaults() -> Generator[None, None, None]:
     """
-    Reset EnvironmentDefaults.gas_limit around each test.
+    Restore EnvironmentDefaults.gas_limit after tests.
 
-    Reset the gas limit to DEFAULT_BLOCK_GAS_LIMIT before and after each test
-    run to prevent side effects from nested in-process pytest sessions leaking
-    into later tests on the same worker.
+    Restore the gas limit after the test run to prevent side effects.
     """
-    from execution_testing.test_types.block_types import (
-        DEFAULT_BLOCK_GAS_LIMIT,
-        EnvironmentDefaults,
-    )
+    from execution_testing.test_types.block_types import EnvironmentDefaults
 
-    EnvironmentDefaults.gas_limit = DEFAULT_BLOCK_GAS_LIMIT
+    original_gas_limit = EnvironmentDefaults.gas_limit
     yield
-    EnvironmentDefaults.gas_limit = DEFAULT_BLOCK_GAS_LIMIT
+    EnvironmentDefaults.gas_limit = original_gas_limit

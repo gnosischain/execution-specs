@@ -123,7 +123,7 @@ def test_bal_sstore_and_oog(
 
     intrinsic_gas_cost = fork.transaction_intrinsic_cost_calculator()()
 
-    # Full cost: PUSHes + SSTORE (GAS_COLD_STORAGE_ACCESS + GAS_STORAGE_SET)
+    # Full cost: PUSHes + SSTORE (GAS_COLD_SLOAD + GAS_STORAGE_SET)
     full_cost = storage_contract_code.gas_cost(fork)
 
     # Push cost for stipend boundary calculations
@@ -421,7 +421,7 @@ def test_bal_call_no_delegation_and_oog_before_target_access(
     alice = pre.fund_eoa()
 
     target = (
-        pre.nonexistent_account()
+        pre.empty_account()
         if target_is_empty
         else pre.deploy_contract(code=Op.STOP)
     )
@@ -538,7 +538,6 @@ def test_bal_call_no_delegation_and_oog_before_target_access(
 @pytest.mark.parametrize(
     "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
 )
-@pytest.mark.eels_base_coverage
 def test_bal_call_no_delegation_oog_after_target_access(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
@@ -567,7 +566,7 @@ def test_bal_call_no_delegation_oog_after_target_access(
     alice = pre.fund_eoa()
 
     # empty target required for create_cost gap
-    target = pre.nonexistent_account()
+    target = pre.empty_account()
     # value > 0 required for create_cost
     value = 1
 

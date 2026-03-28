@@ -336,7 +336,6 @@ def get_contract_permutations(
         ),
     ],
 )
-@pytest.mark.eels_base_coverage
 def test_valid_multi_type_requests(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,

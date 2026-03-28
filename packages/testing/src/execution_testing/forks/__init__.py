@@ -1,5 +1,6 @@
 """Ethereum test fork definitions."""
 
+from .base_fork import ForkAttribute
 from .forks.forks import (
     BPO1,
     BPO2,
@@ -85,6 +86,7 @@ __all__ = [
     "TransitionFork",
     "TransitionForkAdapter",
     "TransitionForkOrNoneAdapter",
+    "ForkAttribute",
     "Amsterdam",
     "ArrowGlacier",
     "Berlin",

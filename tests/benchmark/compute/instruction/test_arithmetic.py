@@ -214,10 +214,7 @@ def test_mod(
     # sign bits.
     # The result stays negative.
     if fixed_opcode_count is not None:
-        pytest.skip(
-            "test_mod uses a data-dependent chain length, "
-            "incompatible with --fixed-opcode-count"
-        )
+        pytest.skip("fixed-opcode-count not supported in test_mode")
     should_negate = opcode == Op.SMOD
 
     num_numerators = 15

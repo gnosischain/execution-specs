@@ -30,7 +30,7 @@ from .exceptions import (
     TransactionException,
 )
 from .fixtures import BaseFixture, FixtureCollector
-from .forks import Fork, GasCosts, TransitionFork
+from .forks import Fork, GasCosts
 from .specs import (
     BaseTest,
     BenchmarkTest,
@@ -201,7 +201,6 @@ __all__ = (
     "TransactionTestFiller",
     "TransactionType",
     "TransactionWithCost",
-    "TransitionFork",
     "While",
     "CoerceBytes",
     "Withdrawal",
