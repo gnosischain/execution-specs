@@ -79,6 +79,33 @@ def test_pre_alloc_group_same() -> None:
     assert hash1 == hash2
 
 
+def test_pre_alloc_group_same() -> None:
+    """Test that pre_alloc_group("separate") forces unique grouping."""
+    # Create mock environment and pre-allocation
+    env = Environment()
+    pre_1 = Alloc(fork=Prague, flags=AllocFlags.NONE)
+    pre_2 = Alloc(fork=Prague, flags=AllocFlags.NONE)
+
+    # Deploy different contracts and fund eoas with different amounts,
+    # should still result in the same group hash.
+    pre_1.deploy_contract(code=Op.STOP)
+    pre_2.deploy_contract(code=Op.INVALID)
+
+    pre_1.fund_eoa(amount=0)
+    pre_2.fund_eoa(amount=1)
+
+    # Create test without marker
+    hash1 = pre_1.compute_pre_alloc_group_hash(
+        fork=Prague, genesis_environment=env, group_salt=None
+    )
+    hash2 = pre_1.compute_pre_alloc_group_hash(
+        fork=Prague, genesis_environment=env, group_salt=None
+    )
+
+    # Hashes should be equal
+    assert hash1 == hash2
+
+
 def test_pre_alloc_group_separate() -> None:
     """Test that pre_alloc_group("separate") forces unique grouping."""
     # Create mock environment and pre-allocation

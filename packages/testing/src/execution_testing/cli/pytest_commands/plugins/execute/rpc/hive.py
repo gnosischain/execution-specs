@@ -26,6 +26,8 @@ from execution_testing.rpc import EngineRPC, EthRPC
 from execution_testing.test_types import (
     DETERMINISTIC_FACTORY_ADDRESS,
     DETERMINISTIC_FACTORY_BYTECODE,
+    DETERMINISTIC_FACTORY_ADDRESS,
+    DETERMINISTIC_FACTORY_BYTECODE,
     EOA,
     Alloc,
     ChainConfig,

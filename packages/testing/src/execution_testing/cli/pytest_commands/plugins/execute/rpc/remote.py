@@ -15,6 +15,7 @@ from execution_testing.test_types.chain_config_types import (
 
 from ..pre_alloc import AddressStubs
 from .chain_builder_eth_rpc import ChainBuilderEthRPC, TestingRPC
+from .chain_builder_eth_rpc import ChainBuilderEthRPC, TestingRPC
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

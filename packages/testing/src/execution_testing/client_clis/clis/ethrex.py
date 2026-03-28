@@ -64,6 +64,22 @@ class EthrexExceptionMapper(ExceptionMapper):
         BlockException.INVALID_BASEFEE_PER_GAS: (
             "Base fee per gas is incorrect"
         ),
+        BlockException.INVALID_BLOCK_ACCESS_LIST: (
+            "Block access list hash does not match the one in "
+            "the header after executing"
+        ),
+        BlockException.INVALID_BAL_HASH: (
+            "Block access list hash does not match the one in "
+            "the header after executing"
+        ),
+        BlockException.INVALID_BAL_EXTRA_ACCOUNT: (
+            "Block access list hash does not match the one in "
+            "the header after executing"
+        ),
+        BlockException.INVALID_BAL_MISSING_ACCOUNT: (
+            "Block access list hash does not match the one in "
+            "the header after executing"
+        ),
     }
     mapping_regex = {
         TransactionException.PRIORITY_GREATER_THAN_MAX_FEE_PER_GAS: (

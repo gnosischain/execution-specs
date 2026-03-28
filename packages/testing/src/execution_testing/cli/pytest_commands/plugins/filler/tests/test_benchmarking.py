@@ -27,6 +27,7 @@ test_module_dummy = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     def test_dummy_benchmark_test(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
@@ -41,6 +42,7 @@ test_module_without_fixture = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     def test_dummy_no_benchmark_test(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
@@ -55,6 +57,7 @@ test_module_with_repricing = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     @pytest.mark.repricing
     def test_benchmark_with_repricing(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
@@ -77,12 +80,14 @@ test_module_without_benchmark_test_fixture = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     def test_with_gas_benchmark_value(state_test, gas_benchmark_value: int) -> None:
         # This test intentionally uses state_test instead of benchmark_test
         # to verify that --fixed-opcode-count filters it out
         state_test(pre={}, post={}, tx=None)
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     def test_with_benchmark_test(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
@@ -97,6 +102,7 @@ test_module_with_repricing_kwargs = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     @pytest.mark.repricing(opcode=Op.ADD)
     @pytest.mark.parametrize("opcode", [Op.ADD, Op.SUB, Op.MUL])
     def test_parametrized_with_repricing_kwargs(
@@ -109,6 +115,7 @@ test_module_with_repricing_kwargs = textwrap.dedent(
         )
 
     @pytest.mark.valid_at("Prague")
+    @pytest.mark.benchmark
     @pytest.mark.repricing
     @pytest.mark.parametrize("opcode", [Op.ADD, Op.SUB])
     def test_parametrized_with_repricing_no_kwargs(

@@ -6,7 +6,6 @@ from os.path import realpath
 from pathlib import Path
 from typing import Any, Generator
 
-import pytest
 from execution_testing import (
     Address,
     Alloc,
