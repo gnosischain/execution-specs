@@ -36,7 +36,7 @@ from ethereum.exceptions import (
     InvalidSenderError,
     NonceMismatchError,
 )
-from ethereum.state import EMPTY_CODE_HASH, Account, Address
+from ethereum.state import EMPTY_CODE_HASH, Address
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
