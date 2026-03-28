@@ -15,6 +15,7 @@ from execution_testing import (
     StateTestFiller,
     Transaction,
     TransactionException,
+    TransitionFork,
     add_kzg_version,
 )
 
@@ -22,8 +23,6 @@ from .spec import Spec, ref_spec_7594
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_7594.git_path
 REFERENCE_SPEC_VERSION = ref_spec_7594.version
-
-FORK_TIMESTAMP = 15_000
 
 
 @pytest.fixture
@@ -45,9 +44,12 @@ def destination(pre: Alloc) -> Address:
 
 
 @pytest.fixture
-def blob_gas_price(fork: Fork) -> int:
+def blob_gas_price(fork: Fork | TransitionFork) -> int:
     """Blob gas price for transactions."""
-    return fork.min_base_fee_per_blob_gas()
+    return max(
+        fork.transitions_from().min_base_fee_per_blob_gas(),
+        fork.transitions_to().min_base_fee_per_blob_gas(),
+    )
 
 
 @pytest.fixture

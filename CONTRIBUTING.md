@@ -181,6 +181,14 @@ uv run ruff format       # Formats code.
 uv run mypy              # Verifies type annotations.
 ```
 
+> [!TIP]
+> If you use multiple git worktrees, set `MYPY_CACHE_DIR` to share a single
+> mypy cache across all of them and avoid cold-start delays:
+>
+> ```bash
+> export MYPY_CACHE_DIR=~/path/to/execution-specs/.mypy_cache
+> ```
+
 It is recommended to use a [virtual environment](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/#creating-a-virtual-environment) to keep your system Python installation clean.
 
 A trace of the EVM execution for any test case can be obtained by providing the `--evm-trace` argument to pytest.
@@ -189,7 +197,7 @@ Below is an example.
 
 ```bash
 uv run pytest \
-    'tests/json_infra/test_state_tests.py::test_state_tests_frontier[stAttackTest - ContractCreationSpam - 0]' \
+    'tests/json_loader/test_state_tests.py::test_state_tests_frontier[stAttackTest - ContractCreationSpam - 0]' \
     --evm_trace
 ```
 
