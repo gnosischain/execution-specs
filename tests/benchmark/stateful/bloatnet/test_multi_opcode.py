@@ -9,18 +9,13 @@ abstract: BloatNet bench cases extracted from https://hackmd.io/9icZeLN7R0Sk5mIj
 import pytest
 from execution_testing import (
     AccessList,
-    AccessList,
     Alloc,
-    BenchmarkTestFiller,
     BenchmarkTestFiller,
     Block,
     Bytecode,
     Conditional,
     Create2PreimageLayout,
-    Conditional,
-    Create2PreimageLayout,
     Fork,
-    Hash,
     Op,
     Transaction,
     While,
@@ -429,7 +424,6 @@ def test_bloatnet_call_value_new_account(
 )
 def test_mixed_sload_sstore(
     benchmark_test: BenchmarkTestFiller,
-    benchmark_test: BenchmarkTestFiller,
     pre: Alloc,
     fork: Fork,
     gas_benchmark_value: int,
@@ -458,7 +452,6 @@ def test_mixed_sload_sstore(
     # Stub Account
     erc20_address = pre.deploy_contract(
         code=Bytecode(),
-        stub=f"test_mixed_sload_sstore_{token_name}",
         stub=f"test_mixed_sload_sstore_{token_name}",
     )
 
@@ -570,7 +563,6 @@ def test_mixed_sload_sstore(
                 gas_limit=gas_limit,
                 to=attack_contract_address,
                 sender=pre.fund_eoa(),
-                access_list=access_list,
                 access_list=access_list,
             )
         )

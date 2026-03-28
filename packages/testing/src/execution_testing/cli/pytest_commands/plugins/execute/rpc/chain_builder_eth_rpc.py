@@ -5,7 +5,6 @@ submitted.
 
 import time
 from contextlib import AbstractContextManager
-from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, List, Sequence
 from urllib.parse import urlparse
@@ -24,11 +23,8 @@ from execution_testing.rpc import EthRPC as BaseEthRPC
 from execution_testing.rpc.rpc_types import (
     ForkchoiceState,
     GetPayloadResponse,
-    GetPayloadResponse,
     PayloadAttributes,
     PayloadStatusEnum,
-    TransactionProtocol,
-)
     TransactionProtocol,
 )
 
@@ -45,8 +41,6 @@ class ChainBuilderEthRPC(BaseEthRPC, namespace="eth"):
     get_payload_wait_time: float
     block_building_lock: FileLock
     testing_rpc: TestingRPC | None
-    block_building_lock: FileLock
-    testing_rpc: TestingRPC | None
 
     def __init__(
         self,
@@ -59,7 +53,6 @@ class ChainBuilderEthRPC(BaseEthRPC, namespace="eth"):
         initial_forkchoice_update_retries: int = 5,
         transaction_wait_timeout: int = 60,
         max_transactions_per_batch: int | None = None,
-        testing_rpc: TestingRPC | None = None,
         testing_rpc: TestingRPC | None = None,
     ):
         """Initialize the Ethereum RPC client for the hive simulator."""
@@ -76,14 +69,12 @@ class ChainBuilderEthRPC(BaseEthRPC, namespace="eth"):
         )
         self.get_payload_wait_time = get_payload_wait_time
         self.testing_rpc = testing_rpc
-        self.testing_rpc = testing_rpc
 
         # Send initial forkchoice updated only if we are the first worker
         base_name = f"eth_rpc_forkchoice_updated_{parsed.hostname}"
         base_file = session_temp_folder / base_name
         base_error_file = session_temp_folder / f"{base_name}.err"
 
-        with self.block_building_lock:
         with self.block_building_lock:
             if base_error_file.exists():
                 raise Exception(
@@ -263,23 +254,10 @@ class ChainBuilderEthRPC(BaseEthRPC, namespace="eth"):
         self._finalize_payload(
             new_payload,
             payload_attributes.parent_beacon_block_root,
-        self._finalize_payload(
-            new_payload,
-            payload_attributes.parent_beacon_block_root,
         )
 
     def pending_transactions_handler(self) -> None:
-
-    def pending_transactions_handler(self) -> None:
         """
-        Called inside the transaction inclusion wait-loop.
-
-        This class triggers the block building process if it's still
-        waiting for transactions to be included.
-        """
-        self.generate_block()
-
-    def send_transactions(
         Called inside the transaction inclusion wait-loop.
 
         This class triggers the block building process if it's still
