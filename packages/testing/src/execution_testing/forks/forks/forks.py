@@ -1888,11 +1888,8 @@ class Paris(
         return 1
 
     @classmethod
-    def system_contracts(
-        cls, *, block_number: int = 0, timestamp: int = 0
-    ) -> List[Address]:
+    def system_contracts(cls) -> List[Address]:
         """Paris introduces system contracts for block rewards and deposit handling."""  # noqa: E501
-        del block_number, timestamp
         return [
             Address(
                 0x2000000000000000000000000000000000000001,
@@ -1905,15 +1902,11 @@ class Paris(
         ]
 
     @classmethod
-    def pre_allocation_blockchain(
-        cls, *, block_number: int = 0, timestamp: int = 0
-    ) -> Mapping:
+    def pre_allocation_blockchain(cls) -> Mapping:
         """
         Paris requires pre-allocation of the block rewards contract and the
         deposit contract for processing on blockchain type tests.
         """
-        del block_number, timestamp
-
         new_allocation = {}
         with open(
             CURRENT_FOLDER / "contracts" / "block_reward_contract.bin",
