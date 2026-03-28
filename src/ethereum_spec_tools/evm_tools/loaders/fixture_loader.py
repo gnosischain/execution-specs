@@ -68,7 +68,6 @@ class Load(BaseLoad):
         EMPTY_ACCOUNT = self.fork.EMPTY_ACCOUNT  # noqa N806
         SYSTEM_ADDRESS = self.fork.SYSTEM_ADDRESS  # noqa N806
 
-
         for address_hex, account_state in raw.items():
             address = self.fork.hex_to_address(address_hex)
             nonce = hex_to_uint(account_state.get("nonce", "0x0"))
