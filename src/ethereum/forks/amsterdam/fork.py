@@ -73,8 +73,6 @@ from .state_tracker import (
     get_account,
     get_code,
     incorporate_tx_into_block,
-    get_code,
-    incorporate_tx_into_block,
     increment_nonce,
     set_account_balance,
 )

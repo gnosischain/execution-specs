@@ -2234,9 +2234,7 @@ class Cancun(Shanghai):
                 0x000F3DF6D732807EF1319FB7B8BB8522D0BEAC02,
                 label="BEACON_ROOTS_ADDRESS",
             )
-        ] + super(Cancun, cls).system_contracts(
-            block_number=block_number, timestamp=timestamp
-        )
+        ] + super(Cancun, cls).system_contracts()
 
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:
