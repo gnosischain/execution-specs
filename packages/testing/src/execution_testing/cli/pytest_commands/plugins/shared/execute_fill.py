@@ -2,6 +2,7 @@
 Shared pytest fixtures and hooks for EEST generation modes (fill and execute).
 """
 
+from pathlib import Path
 from typing import List
 
 import pytest
@@ -112,14 +113,6 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
-        "benchmark: Tests relevant to benchmarking EVMs.",
-    )
-    config.addinivalue_line(
-        "markers",
-        "stateful: Tests for stateful benchmarking scenarios.",
-    )
-    config.addinivalue_line(
-        "markers",
         "exception_test: Negative tests that include an invalid block or "
         "transaction.",
     )
@@ -172,8 +165,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
-        "mainnet: Specialty tests crafted for running on mainnet and sanity "
-        "checking.",
+        "mainnet: Tests crafted for running on mainnet and sanity checking.",
     )
     config.addinivalue_line(
         "markers",
@@ -197,6 +189,11 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "fixture_subfolder(level, prefix): "
         "Signal that fixtures should be placed in a subfolder",
+    )
+    config.addinivalue_line(
+        "markers",
+        "eels_base_coverage: Minimized subset selected to preserve high "
+        "EELS line-coverage parity.",
     )
 
 
@@ -315,10 +312,10 @@ def is_tx_gas_heavy_test(request: pytest.FixtureRequest) -> bool:
     Check, given the test node properties, whether the test is gas-heavy
     for transaction execution.
     """
-    node = request.node
-    has_slow_marker = node.get_closest_marker("slow") is not None
-    has_benchmark_marker = node.get_closest_marker("benchmark") is not None
-    return has_slow_marker or has_benchmark_marker
+    has_slow_marker = request.node.get_closest_marker("slow") is not None
+    benchmark_dir = Path(request.config.rootpath) / "tests" / "benchmark"
+    is_benchmark = benchmark_dir in Path(request.node.fspath).parents
+    return has_slow_marker or is_benchmark
 
 
 @pytest.fixture(scope="function")
