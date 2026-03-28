@@ -117,7 +117,7 @@ def _build_client_genesis(seed_keys: List[EOA]) -> dict:
         ommers_hash=EmptyOmmersRoot,
         fee_recipient=0,
         state_root=genesis_alloc.state_root(),
-        transactions_trie=EmptyTrieRoot,
+        transactions_root=EmptyTrieRoot,
         receipts_root=EmptyTrieRoot,
         logs_bloom=0,
         difficulty=0x20000 if env.difficulty is None else env.difficulty,

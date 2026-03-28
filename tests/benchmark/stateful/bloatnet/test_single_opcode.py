@@ -49,13 +49,6 @@ from tests.benchmark.stateful.helpers import (
     build_cache_strategy_blocks,
 )
 
-from tests.benchmark.stateful.helpers import (
-    APPROVE_SELECTOR,
-    BALANCEOF_SELECTOR,
-    SLOAD_TOKENS,
-    SSTORE_TOKENS,
-)
-
 REFERENCE_SPEC_GIT_PATH = "DUMMY/bloatnet.md"
 REFERENCE_SPEC_VERSION = "1.0"
 
@@ -920,68 +913,6 @@ def test_sstore_erc20_mint(
             body=balance_erc20_call + Op.MSTORE(32, Op.ADD(Op.MLOAD(32), 1)),
             condition=Op.GT(Op.GAS, gas_threshold),
         )
-    )
-
-    function_dispatch = (
-        # Selector dispatch
-        Op.PUSH4(APPROVE_SELECTOR)
-        + Op.EQ
-        + Op.JUMPI
-        # Function body
-        + Op.JUMPDEST
-        + Op.CALLDATALOAD(4)
-        + Op.CALLDATALOAD(36)
-        + Op.MSTORE(0, Op.CALLER)
-        + Op.MSTORE(32, 1)
-        + Op.SHA3(
-            0,
-            64,
-            # gas accounting
-            data_size=64,
-            old_memory_size=0,
-            new_memory_size=64,
-        )
-        + Op.MSTORE(32)
-        + Op.MSTORE(0, Op.CALLDATALOAD(4))
-        + Op.SHA3(
-            0,
-            64,
-            # gas accounting
-            data_size=64,
-        )
-        + Op.DUP1
-        + Op.SLOAD.with_metadata(access_warm=False)
-        + Op.POP
-        + Op.SSTORE
-        # Return true
-        + Op.PUSH1(1)
-        + Op.MSTORE(0)
-        + Op.PUSH1(32)
-        + Op.PUSH1(0)
-        + Op.RETURN(0, 32)
-    )
-
-    function_dispatch_cost = function_dispatch.gas_cost(fork)
-
-    # Transaction Loops
-    txs = []
-    gas_remaining = gas_benchmark_value
-    slot_offset = 0
-
-    while gas_remaining > intrinsic_gas_with_access_list:
-        gas_available = min(gas_remaining, tx_gas_limit)
-
-        if gas_available < intrinsic_gas_with_access_list + setup_cost:
-            break
-
-        num_calls = (
-            gas_available - intrinsic_gas_with_access_list - setup_cost
-        ) // (function_dispatch_cost + loop_cost)
-
-        if num_calls == 0:
-            break
-
-        calldata = Hash(num_calls) + Hash(slot_offset)
 
         warmup_block = warmup_setup + warmup_attack_loop + cleanup
 
