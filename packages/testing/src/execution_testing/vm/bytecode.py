@@ -291,9 +291,6 @@ class Bytecode:
         if self._keccak_256_ is None:
             self._keccak_256_ = Bytes(self._bytes_).keccak256()
         return self._keccak_256_
-        if self._keccak_256_ is None:
-            self._keccak_256_ = Bytes(self._bytes_).keccak256()
-        return self._keccak_256_
 
     def gas_cost(self, fork: Type[ForkOpcodeInterface]) -> int:
         """Use a fork object to calculate the gas used by this bytecode."""
