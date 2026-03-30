@@ -554,6 +554,10 @@ class BenchmarkTest(BaseTest):
                 self._verify_target_opcode_count(
                     fill_result.benchmark_opcode_count
                 )
+
+            if self.target_opcode is not None:
+                fill_result.metadata["target_opcode"] = str(self.target_opcode)
+
             return fill_result
         else:
             raise Exception(f"Unsupported fixture format: {fixture_format}")
