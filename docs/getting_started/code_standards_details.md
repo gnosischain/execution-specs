@@ -91,23 +91,17 @@ uvx pre-commit install
 
 For more information, see [Pre-commit Hooks Documentation](../dev/precommit.md).
 
-## Formatting and Line Length
+## Testing Framework Plugins with Pytester
 
-The Python code in @ethereum/execution-spec-tests is formatted with `ruff` with a line length of 100 characters.
+Use pytest's `pytester` fixture when writing tests for our pytest plugins and CLI commands.
 
-### Ignoring Bulk Change Commits
+`runpytest()` is the default. It runs the inner session in-process, is fast, and gives access to helpers like `assert_outcomes()` and `fnmatch_lines()`.
 
-The maximum line length was changed from 80 to 100 in Q2 2023. To ignore this bulk change commit in git blame output, use the `.git-blame-ignore-revs` file:
+`runpytest_subprocess()` runs the inner session in a separate process. Use it only when in-process mode causes state leakage (e.g., Pydantic `ModelMetaclass` cache pollution or global mutation in `pytest_configure`). Subprocess isolation masks these bugs rather than fixing them, so prefer fixing the root cause and use subprocess mode as defense-in-depth.
 
-```console
-git blame --ignore-revs-file .git-blame-ignore-revs docs/gen_test_case_reference.py
-```
+Don't use raw `subprocess.run()` in pytester-based tests. If you need process isolation, use `runpytest_subprocess()`.
 
-To use the revs file persistently with `git blame`:
-
-```console
-git config blame.ignoreRevsFile .git-blame-ignore-revs
-```
+Both methods return a `RunResult` with `.ret`, `.outlines`, `.errlines`, `assert_outcomes()`, and `fnmatch_lines()`. When the inner test is expected to fail, use `capsys.readouterr()` after `runpytest_subprocess()` to suppress the inner failure output that pytester replays to stdout.
 
 ## Building and Verifying Docs Locally
 

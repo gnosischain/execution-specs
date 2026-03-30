@@ -17,7 +17,7 @@ from typing import (
 )
 
 import pytest
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import Self
 
 from execution_testing.base_types import to_hex
@@ -33,6 +33,7 @@ from execution_testing.fixtures import (
     FixtureFormat,
     LabeledFixtureFormat,
 )
+from execution_testing.fixtures.post_verifications import PostVerifications
 from execution_testing.forks import Fork, TransitionFork
 from execution_testing.forks.base_fork import BaseFork
 from execution_testing.test_types import Environment, Withdrawal
@@ -94,6 +95,8 @@ class FillResult(BaseModel):
     gas_optimization: int | None
     benchmark_gas_used: int | None = None
     benchmark_opcode_count: OpcodeCount | None = None
+    post_verifications: PostVerifications | None = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class BaseTest(BaseModel):
