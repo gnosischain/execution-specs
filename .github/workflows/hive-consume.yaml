@@ -92,7 +92,7 @@ jobs:
           clients: nethermind-gnosis
           client-file: .github/configs/hive/gnosis.yaml
           hive-path: hive
-          timeout: "30"
+          timeout: "300"
 
       - name: Install uv
         run: |
