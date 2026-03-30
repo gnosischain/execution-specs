@@ -60,6 +60,93 @@ START_SLOT = (
     % (2**160)
 )
 
+
+@pytest.mark.parametrize("token_name", SLOAD_TOKENS)
+def test_sload_erc20_generic(
+    benchmark_test: BenchmarkTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    gas_benchmark_value: int,
+    tx_gas_limit: int,
+    token_name: str,
+) -> None:
+    """Benchmark SLOAD using ERC20 balanceOf on bloatnet."""
+    # Stub Account
+    erc20_address = pre.deploy_contract(
+        code=Bytecode(),
+        stub=f"test_sload_empty_erc20_balanceof_{token_name}",
+    )
+    threshold = 100000
+
+    # MEM[0] = function selector
+    # MEM[32] = starting address offset
+    setup = Op.MSTORE(
+        0,
+        BALANCEOF_SELECTOR,
+        # gas accounting
+        old_memory_size=0,
+        new_memory_size=32,
+    ) + Op.MSTORE(
+        32,
+        Op.SLOAD(0),  # Address Offset
+        # gas accounting
+        old_memory_size=32,
+        new_memory_size=64,
+    )
+
+    call_balance_of = Op.POP(
+        Op.CALL(
+            address=erc20_address,
+            args_offset=32 - 4,
+            args_size=32 + 4,
+        )
+    )
+
+    loop = While(
+        body=call_balance_of + Op.MSTORE(32, Op.ADD(Op.MLOAD(32), 1)),
+        condition=Op.GT(Op.GAS, threshold),
+    )
+
+    teardown = Op.SSTORE(0, Op.MLOAD(32))
+
+    # Contract Deployment
+    code = setup + loop + teardown
+    attack_contract_address = pre.deploy_contract(code=code)
+
+    intrinsic_gas = fork.transaction_intrinsic_cost_calculator()()
+
+    # Transaction Loops
+    txs = []
+    gas_remaining = gas_benchmark_value
+
+    sender = pre.fund_eoa()
+
+    while gas_remaining > intrinsic_gas:
+        gas_available = min(gas_remaining, tx_gas_limit)
+
+        if gas_available < intrinsic_gas:
+            break
+
+        with TestPhaseManager.execution():
+            txs.append(
+                Transaction(
+                    gas_limit=gas_available,
+                    to=attack_contract_address,
+                    sender=sender,
+                )
+            )
+
+        gas_remaining -= gas_available
+
+    blocks = [Block(txs=txs)]
+    benchmark_test(
+        pre=pre,
+        blocks=blocks,
+        skip_gas_used_validation=True,
+        expected_receipt_status=True,
+    )
+
+
 # SLOAD BENCHMARK ARCHITECTURE:
 #
 #   [Pre-deployed ERC20 Contract] ──── Storage slots for balances
@@ -105,6 +192,7 @@ START_SLOT = (
 #   - Simulates real-world contract state accumulation over time
 
 
+@pytest.mark.repricing
 @pytest.mark.parametrize("token_name", SLOAD_TOKENS)
 @pytest.mark.parametrize("existing_slots", [False, True])
 @pytest.mark.parametrize("cache_strategy", list(CacheStrategy))
@@ -270,6 +358,97 @@ def test_sload_erc20_balanceof(
     # FIXME: this should not use gas validation as this one should OOG
     # If it does not OOG, the gas calculation is too high, it should be too low
     benchmark_test(pre=pre, blocks=blocks, skip_gas_used_validation=True)
+
+
+@pytest.mark.parametrize("token_name", SSTORE_TOKENS)
+def test_sstore_erc20_generic(
+    benchmark_test: BenchmarkTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    gas_benchmark_value: int,
+    tx_gas_limit: int,
+    token_name: str,
+) -> None:
+    """Benchmark SSTORE using ERC20 approve."""
+    sender = pre.fund_eoa()
+
+    threshold = 100_000
+
+    # Stub Account
+    erc20_address = pre.deploy_contract(
+        code=Bytecode(),
+        stub=f"test_sstore_erc20_approve_{token_name}",
+    )
+
+    # MEM[0] = function selector
+    # MEM[32] = starting address offset
+    setup = Op.MSTORE(
+        0,
+        APPROVE_SELECTOR,
+    ) + Op.MSTORE(
+        32,
+        Op.SLOAD(0),  # Address Offset
+    )
+
+    call_approve = Op.MSTORE(
+        64,
+        Op.ADD(1, Op.MLOAD(32)),
+    ) + Op.POP(
+        Op.CALL(
+            address=erc20_address,
+            args_offset=28,
+            args_size=68,
+        )
+    )
+
+    loop = While(
+        body=call_approve + Op.MSTORE(32, Op.ADD(Op.MLOAD(32), 1)),
+        condition=Op.GT(Op.GAS, threshold),
+    )
+
+    teardown = Op.SSTORE(0, Op.MLOAD(32))
+
+    # Contract Deployment
+    code = setup + loop + teardown
+    attack_contract_address = pre.deploy_contract(code=code)
+
+    intrinsic_gas = fork.transaction_intrinsic_cost_calculator()()
+
+    # Transaction Loops
+    gas_remaining = gas_benchmark_value
+
+    # Collect tx params first, then build Transaction objects
+    # so that nonces are allocated contiguously per block.
+    tx_gas: list[int] = []
+    while gas_remaining > intrinsic_gas:
+        gas_available = min(gas_remaining, tx_gas_limit)
+
+        if gas_available < intrinsic_gas:
+            break
+
+        tx_gas.append(gas_available)
+
+        gas_remaining -= gas_available
+
+    txs = []
+    with TestPhaseManager.execution():
+        for gas_available in tx_gas:
+            txs.append(
+                Transaction(
+                    gas_limit=gas_available,
+                    to=attack_contract_address,
+                    sender=sender,
+                )
+            )
+
+    blocks = [Block(txs=txs)]
+
+    benchmark_test(
+        pre=pre,
+        blocks=blocks,
+        skip_gas_used_validation=True,
+        expected_receipt_status=True,
+    )
 
 
 @pytest.mark.repricing
@@ -625,6 +804,7 @@ def build_external_call(
     )
 
 
+@pytest.mark.repricing
 @pytest.mark.parametrize("token_name", SSTORE_MINT_TOKENS)
 @pytest.mark.parametrize("existing_slots", [False, True])
 @pytest.mark.parametrize("cache_strategy", list(CacheStrategy))
@@ -1529,6 +1709,7 @@ def test_storage_sload_benchmark(
     )
 
 
+@pytest.mark.repricing
 @pytest.mark.parametrize("storage_keys_pre_set", [False, True])
 def test_storage_sload_same_key_benchmark(
     benchmark_test: BenchmarkTestFiller,

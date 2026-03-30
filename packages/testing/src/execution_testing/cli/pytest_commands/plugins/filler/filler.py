@@ -89,6 +89,7 @@ from ..shared.helpers import (
     get_spec_format_for_item,
     is_help_or_collectonly_mode,
     labeled_format_parameter_set,
+    option_was_explicitly_set,
 )
 from ..spec_version_checker.spec_version_checker import (
     get_ref_spec_from_module,
@@ -796,6 +797,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
             "Only creates debug output when explicitly specified."
         ),
     )
+    debug_group.addoption(
+        "--post-verifications",
+        action="store_true",
+        dest="post_verifications",
+        default=False,
+        help=(
+            "Include a postVerifications field in fixture output "
+            "that records which post-state checks were "
+            "performed during filling."
+        ),
+    )
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -816,7 +828,7 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     # Register custom markers
     # Modify the block gas limit if specified.
-    if config.getoption("block_gas_limit"):
+    if option_was_explicitly_set(config, "--block-gas-limit"):
         EnvironmentDefaults.gas_limit = config.getoption("block_gas_limit")
 
     # Initialize fixture output configuration
@@ -1767,6 +1779,11 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                         )
                 assert fill_result is not None
                 fixture = fill_result.fixture
+                if (
+                    request.config.getoption("post_verifications")
+                    and fill_result.post_verifications is not None
+                ):
+                    fixture.post_verifications = fill_result.post_verifications
                 # If operation mode is benchmarking, check the gas used.
                 self.validate_benchmark_gas(
                     benchmark_gas_used=fill_result.benchmark_gas_used,
@@ -1795,13 +1812,21 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                             fixture.post_state, group.pre
                         )
 
+                fill_metadata: Dict[str, Any] = {}
+                if t8n.opcode_count is not None:
+                    fill_metadata["opcode_count"] = (
+                        t8n.opcode_count.model_dump()
+                    )
+                if fill_result.metadata:
+                    fill_metadata.update(fill_result.metadata)
+
                 fixture.fill_info(
                     t8n.version(),
                     test_case_description,
                     fixture_source_url=fixture_source_url,
-                    opcode_count=t8n.opcode_count,
                     ref_spec=reference_spec,
                     _info_metadata=t8n._info_metadata,
+                    metadata=fill_metadata,
                 )
 
                 output_subdir = resolve_fixture_subfolder(
