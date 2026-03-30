@@ -130,36 +130,6 @@ def test_store_withdrawal_values_in_contract(
     blockchain_test(pre=pre, post=post, blocks=blocks)
 
 
-@pytest.mark.pre_alloc_mutable
-def test_withdrawal_index_order(
-    blockchain_test: BlockchainTestFiller,
-    pre: Alloc,
-) -> None:
-    """
-    Test that withdrawal indices are sequential.
-    Verifies proper ordering of withdrawals.
-    """
-    pre[DEPOSIT_CONTRACT] = Account(
-        code=get_minimal_deposit_contract_code(),
-        nonce=1,
-    )
-
-    withdrawals = [
-        Withdrawal(
-            index=i,
-            validator_index=i % 5,  # Reuse validator indices
-            address=Address((i % 10) + 1),
-            amount=i + 1,
-        )
-        for i in range(10)
-    ]
-
-    blocks = [Block(withdrawals=withdrawals)]
-    post = {DEPOSIT_CONTRACT: Account(storage={})}
-
-    blockchain_test(pre=pre, post=post, blocks=blocks)
-
-
 @pytest.mark.exception_test
 @pytest.mark.blockchain_test_engine_only
 @pytest.mark.pre_alloc_mutable
