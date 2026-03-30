@@ -134,7 +134,7 @@ SINGLE_BYTE_INITCODE.opcode_list = _single_bytecode.opcode_list
     ],
     ids=get_initcode_name,
 )
-@pytest.mark.json_loader
+@pytest.mark.eels_base_coverage
 def test_contract_creating_tx(
     state_test: StateTestFiller,
     env: Environment,

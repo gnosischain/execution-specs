@@ -5,7 +5,7 @@ transactions are the events that move between states.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, TypeGuard
 
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes, Bytes0, Bytes32
@@ -494,6 +494,23 @@ Union type representing any valid transaction type.
 """
 
 
+AccessListCapableTransaction = (
+    AccessListTransaction
+    | FeeMarketTransaction
+    | BlobTransaction
+    | SetCodeTransaction
+)
+"""
+Transaction types that include an [EIP-2930]-style access list.
+
+See [`has_access_list`][hal] and [`Access`][a] for more details.
+
+[EIP-2930]: https://eips.ethereum.org/EIPS/eip-2930
+[hal]: ref:ethereum.forks.amsterdam.transactions.has_access_list
+[a]: ref:ethereum.forks.amsterdam.transactions.Access
+"""
+
+
 def encode_transaction(tx: Transaction) -> LegacyTransaction | Bytes:
     """
     Encode a transaction into its RLP or typed transaction format.
@@ -650,15 +667,7 @@ def calculate_intrinsic_cost(
         create_regular_gas = REGULAR_GAS_CREATE + init_code_cost(ulen(tx.data))
 
     access_list_gas = Uint(0)
-    if isinstance(
-        tx,
-        (
-            AccessListTransaction,
-            FeeMarketTransaction,
-            BlobTransaction,
-            SetCodeTransaction,
-        ),
-    ):
+    if has_access_list(tx):
         for access in tx.access_list:
             access_list_gas += TX_ACCESS_LIST_ADDRESS_COST
             access_list_gas += (
@@ -930,3 +939,17 @@ def get_transaction_hash(tx: Bytes | LegacyTransaction) -> Hash32:
         return keccak256(rlp.encode(tx))
     else:
         return keccak256(tx)
+
+
+def has_access_list(
+    tx: Transaction,
+) -> TypeGuard[AccessListCapableTransaction]:
+    """
+    Return whether the transaction has an [EIP-2930]-style access list.
+
+    [EIP-2930]: https://eips.ethereum.org/EIPS/eip-2930
+    """
+    return isinstance(
+        tx,
+        AccessListCapableTransaction,
+    )
