@@ -61,7 +61,7 @@ combinations = list(itertools.product(list_of_args, repeat=2))
     ],
     pr=["https://github.com/ethereum/execution-spec-tests/pull/1683"],
 )
-@pytest.mark.json_loader
+@pytest.mark.eels_base_coverage
 def test_combinations(
     state_test: StateTestFiller,
     pre: Alloc,

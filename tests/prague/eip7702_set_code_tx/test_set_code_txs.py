@@ -779,6 +779,11 @@ def test_set_code_to_contract_creator(
     [0, 1],
 )
 @pytest.mark.with_all_call_opcodes
+@pytest.mark.filter_combinations(
+    lambda call_opcode, value, **_: "value" in call_opcode.kwargs
+    or value == 0,
+    reason="opcode does not support value argument",
+)
 def test_set_code_to_self_caller(
     state_test: StateTestFiller,
     pre: Alloc,
@@ -786,9 +791,6 @@ def test_set_code_to_self_caller(
     value: int,
 ) -> None:
     """Test the executing a self-call in a set-code transaction."""
-    if "value" not in call_opcode.kwargs and value != 0:
-        pytest.skip(f"Call opcode {call_opcode} does not support value")
-
     storage = Storage()
     auth_signer = pre.fund_eoa(auth_account_start_balance)
 
@@ -843,7 +845,7 @@ def test_set_code_to_self_caller(
 
 
 @pytest.mark.execute(pytest.mark.skip(reason="excessive gas"))
-@pytest.mark.json_loader
+@pytest.mark.eels_base_coverage
 def test_set_code_max_depth_call_stack(
     state_test: StateTestFiller,
     pre: Alloc,
@@ -912,7 +914,12 @@ def test_set_code_max_depth_call_stack(
     "value",
     [0, 1],
 )
-@pytest.mark.json_loader
+@pytest.mark.filter_combinations(
+    lambda call_opcode, value, **_: "value" in call_opcode.kwargs
+    or value == 0,
+    reason="opcode does not support value argument",
+)
+@pytest.mark.eels_base_coverage
 def test_set_code_call_set_code(
     state_test: StateTestFiller,
     pre: Alloc,
@@ -920,9 +927,6 @@ def test_set_code_call_set_code(
     value: int,
 ) -> None:
     """Test the calling a set-code account from another set-code account."""
-    if "value" not in call_opcode.kwargs and value != 0:
-        pytest.skip(f"Call opcode {call_opcode} does not support value")
-
     auth_signer_1 = pre.fund_eoa(auth_account_start_balance)
     storage_1 = Storage()
 
@@ -2416,7 +2420,7 @@ def test_set_code_using_valid_synthetic_signatures(
         ),
     ],
 )
-@pytest.mark.json_loader
+@pytest.mark.eels_base_coverage
 def test_valid_tx_invalid_auth_signature(
     state_test: StateTestFiller,
     pre: Alloc,
@@ -3389,7 +3393,7 @@ def test_reset_code(
 
 
 @pytest.mark.exception_test
-@pytest.mark.json_loader
+@pytest.mark.eels_base_coverage
 def test_contract_create(
     state_test: StateTestFiller,
     pre: Alloc,
@@ -3419,7 +3423,7 @@ def test_contract_create(
 
 
 @pytest.mark.exception_test
-@pytest.mark.json_loader
+@pytest.mark.eels_base_coverage
 def test_empty_authorization_list(
     state_test: StateTestFiller,
     pre: Alloc,
