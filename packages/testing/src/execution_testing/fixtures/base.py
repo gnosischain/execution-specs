@@ -29,7 +29,7 @@ from pydantic import (
 from pydantic_core.core_schema import ValidatorFunctionWrapHandler
 
 from execution_testing.base_types import CamelModel, ReferenceSpec
-from execution_testing.client_clis.cli_types import OpcodeCount
+from execution_testing.fixtures.post_verifications import PostVerifications
 from execution_testing.forks import Fork, TransitionFork
 
 
@@ -73,6 +73,9 @@ class BaseFixture(CamelModel):
 
     info: Dict[str, Dict[str, Any] | str] = Field(
         default_factory=dict, alias="_info"
+    )
+    post_verifications: PostVerifications | None = Field(
+        default=None, alias="postVerifications"
     )
 
     # Fixture format properties
@@ -166,9 +169,9 @@ class BaseFixture(CamelModel):
         t8n_version: str,
         test_case_description: str,
         fixture_source_url: str,
-        opcode_count: OpcodeCount | None,
         ref_spec: ReferenceSpec | None,
         _info_metadata: Dict[str, Any] | None,
+        metadata: Dict[str, Any] | None = None,
     ) -> None:
         """Fill the info field for this fixture."""
         if "comment" not in self.info:
@@ -176,8 +179,8 @@ class BaseFixture(CamelModel):
         self.info["filling-transition-tool"] = t8n_version
         self.info["description"] = test_case_description
         self.info["url"] = fixture_source_url
-        if opcode_count is not None:
-            self.info["opcode_count"] = opcode_count.model_dump()
+        if metadata:
+            self.info["metadata"] = metadata
         if ref_spec is not None:
             ref_spec.write_info(self.info)
         if _info_metadata:
