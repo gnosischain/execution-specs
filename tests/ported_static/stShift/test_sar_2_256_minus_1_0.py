@@ -1,8 +1,8 @@
 """
-Test ported from static filler.
+Test_sar_2_256_minus_1_0.
 
 Ported from:
-tests/static/state_tests/stShift/sar_2^256-1_0Filler.json
+state_tests/stShift/sar_2^256-1_0Filler.json
 """
 
 import pytest
@@ -11,6 +11,7 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    Bytes,
     Environment,
     StateTestFiller,
     Transaction,
@@ -22,7 +23,7 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 
 @pytest.mark.ported_from(
-    ["tests/static/state_tests/stShift/sar_2^256-1_0Filler.json"],
+    ["state_tests/stShift/sar_2^256-1_0Filler.json"],
 )
 @pytest.mark.valid_from("Cancun")
 @pytest.mark.pre_alloc_mutable
@@ -30,8 +31,8 @@ def test_sar_2_256_minus_1_0(
     state_test: StateTestFiller,
     pre: Alloc,
 ) -> None:
-    """Test ported from static filler."""
-    coinbase = Address("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+    """Test_sar_2_256_minus_1_0."""
+    coinbase = Address(0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BA)
     sender = EOA(
         key=0xB1F4CBC3A50042184425A6F9E996D0910F7BA879457CE5DAC5C71E498AD3C005
     )
@@ -45,33 +46,41 @@ def test_sar_2_256_minus_1_0(
         gas_limit=1000000,
     )
 
-    pre[sender] = Account(balance=0xDE0B6B3A7640000)
-    # Source: LLL
+    # Source: lll
     # { (SSTORE 0 (SAR 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff 0)) }  # noqa: E501
-    contract = pre.deploy_contract(
-        code=(
-            Op.SSTORE(
-                key=0x0,
-                value=Op.SAR(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,  # noqa: E501
-                    0x0,
-                ),
-            )
-            + Op.STOP
-        ),
-        storage={0x0: 0x3},
+    target = pre.deploy_contract(  # noqa: F841
+        code=Op.SSTORE(
+            key=0x0,
+            value=Op.SAR(
+                0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,  # noqa: E501
+                0x0,
+            ),
+        )
+        + Op.STOP,
+        storage={0: 3},
         balance=0xDE0B6B3A7640000,
         nonce=0,
-        address=Address("0x488de231f3302a744e2d40ecc611a66f21b4db06"),  # noqa: E501
+        address=Address(0x488DE231F3302A744E2D40ECC611A66F21B4DB06),  # noqa: E501
     )
+    pre[sender] = Account(balance=0xDE0B6B3A7640000)
 
     tx = Transaction(
         sender=sender,
-        to=contract,
+        to=target,
+        data=Bytes(""),
         gas_limit=400000,
-        value=100000,
+        value=0x186A0,
     )
 
-    post: dict = {}
+    post = {
+        target: Account(
+            storage={0: 0},
+            code=bytes.fromhex(
+                "60007fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1d60005500"  # noqa: E501
+            ),
+            balance=0xDE0B6B3A76586A0,
+        ),
+        sender: Account(storage={}, code=b"", nonce=1),
+    }
 
     state_test(env=env, pre=pre, post=post, tx=tx)

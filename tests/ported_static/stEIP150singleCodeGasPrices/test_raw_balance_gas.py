@@ -1,8 +1,8 @@
 """
-Test ported from static filler.
+Test_raw_balance_gas.
 
 Ported from:
-tests/static/state_tests/stEIP150singleCodeGasPrices/RawBalanceGasFiller.json
+state_tests/stEIP150singleCodeGasPrices/RawBalanceGasFiller.json
 """
 
 import pytest
@@ -11,6 +11,7 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    Bytes,
     Environment,
     StateTestFiller,
     Transaction,
@@ -22,9 +23,7 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 
 @pytest.mark.ported_from(
-    [
-        "tests/static/state_tests/stEIP150singleCodeGasPrices/RawBalanceGasFiller.json",  # noqa: E501
-    ],
+    ["state_tests/stEIP150singleCodeGasPrices/RawBalanceGasFiller.json"],
 )
 @pytest.mark.valid_from("Cancun")
 @pytest.mark.pre_alloc_mutable
@@ -32,8 +31,8 @@ def test_raw_balance_gas(
     state_test: StateTestFiller,
     pre: Alloc,
 ) -> None:
-    """Test ported from static filler."""
-    coinbase = Address("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+    """Test_raw_balance_gas."""
+    coinbase = Address(0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BA)
     sender = EOA(
         key=0x4F31B3206FBF0E0E598B9B1A7D8AC86302A0FF1D8930738F1BEBAE9B67173E52
     )
@@ -47,30 +46,27 @@ def test_raw_balance_gas(
         gas_limit=10000000,
     )
 
-    # Source: LLL
-    # { [0] (GAS) (BALANCE <eoa:sender:0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b>) [[1]] (SUB @0 (GAS)) }  # noqa: E501
-    contract = pre.deploy_contract(
-        code=(
-            Op.MSTORE(offset=0x0, value=Op.GAS)
-            + Op.POP(
-                Op.BALANCE(address=0xFAA10B404AB607779993C016CD5DA73AE1F29D7E),
-            )
-            + Op.SSTORE(key=0x1, value=Op.SUB(Op.MLOAD(offset=0x0), Op.GAS))
-            + Op.STOP
-        ),
-        nonce=0,
-        address=Address("0xdfde2d07c7829a62d244d6b9791742b2921af7c0"),  # noqa: E501
-    )
     pre[sender] = Account(balance=0xE8D4A51000)
+    # Source: lll
+    # { [0] (GAS) (BALANCE <eoa:sender:0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b>) [[1]] (SUB @0 (GAS)) }  # noqa: E501
+    target = pre.deploy_contract(  # noqa: F841
+        code=Op.MSTORE(offset=0x0, value=Op.GAS)
+        + Op.POP(
+            Op.BALANCE(address=0xFAA10B404AB607779993C016CD5DA73AE1F29D7E)
+        )
+        + Op.SSTORE(key=0x1, value=Op.SUB(Op.MLOAD(offset=0x0), Op.GAS))
+        + Op.STOP,
+        nonce=0,
+        address=Address(0xDFDE2D07C7829A62D244D6B9791742B2921AF7C0),  # noqa: E501
+    )
 
     tx = Transaction(
         sender=sender,
-        to=contract,
+        to=target,
+        data=Bytes(""),
         gas_limit=600000,
     )
 
-    post = {
-        contract: Account(storage={1: 116}),
-    }
+    post = {target: Account(storage={1: 116})}
 
     state_test(env=env, pre=pre, post=post, tx=tx)

@@ -1,8 +1,8 @@
 """
-push expect 32 bytes. but we have only 10 byte.
+Push expect 32 bytes. but we have only 10 byte.
 
 Ported from:
-tests/static/state_tests/stSpecialTest/push32withoutByteFiller.json
+state_tests/stSpecialTest/push32withoutByteFiller.json
 """
 
 import pytest
@@ -11,6 +11,7 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    Bytes,
     Environment,
     StateTestFiller,
     Transaction,
@@ -21,7 +22,7 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 
 @pytest.mark.ported_from(
-    ["tests/static/state_tests/stSpecialTest/push32withoutByteFiller.json"],
+    ["state_tests/stSpecialTest/push32withoutByteFiller.json"],
 )
 @pytest.mark.valid_from("Cancun")
 @pytest.mark.pre_alloc_mutable
@@ -29,10 +30,10 @@ def test_push32without_byte(
     state_test: StateTestFiller,
     pre: Alloc,
 ) -> None:
-    """Push expect 32 bytes. but we have only 10 byte."""
-    coinbase = Address("0x68795c4aa09d6f4ed3e5deddf8c2ad3049a601da")
+    """Push expect 32 bytes."""
+    coinbase = Address(0x68795C4AA09D6F4ED3E5DEDDF8C2AD3049A601DA)
     sender = EOA(
-        key=0x043F683FF58B5310699989DD19A4E1439E5333E2E3445374F7BC1446BAEDDD80
+        key=0x43F683FF58B5310699989DD19A4E1439E5333E2E3445374F7BC1446BAEDDD80
     )
 
     env = Environment(
@@ -44,21 +45,23 @@ def test_push32without_byte(
         gas_limit=3141592,
     )
 
-    pre[sender] = Account(balance=0x8AC7230489E80000, nonce=1)
-    # Source: raw bytecode
-    contract = pre.deploy_contract(
+    # Source: raw
+    # 0x7f11223344556677889910
+    target = pre.deploy_contract(  # noqa: F841
         code=bytes.fromhex("7f11223344556677889910"),
         nonce=0,
-        address=Address("0xc46ea1c1ad6c8ee63711d0377ef63e51c05d38a0"),  # noqa: E501
+        address=Address(0xC46EA1C1AD6C8EE63711D0377EF63E51C05D38A0),  # noqa: E501
     )
+    pre[sender] = Account(balance=0x8AC7230489E80000, nonce=1)
 
     tx = Transaction(
         sender=sender,
-        to=contract,
+        to=target,
+        data=Bytes(""),
         gas_limit=500000,
         nonce=1,
     )
 
-    post: dict = {}
+    post = {sender: Account(nonce=2)}
 
     state_test(env=env, pre=pre, post=post, tx=tx)

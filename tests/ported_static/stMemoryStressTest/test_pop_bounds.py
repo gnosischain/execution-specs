@@ -1,8 +1,8 @@
 """
-Test ported from static filler.
+Test_pop_bounds.
 
 Ported from:
-tests/static/state_tests/stMemoryStressTest/POP_BoundsFiller.json
+state_tests/stMemoryStressTest/POP_BoundsFiller.json
 """
 
 import pytest
@@ -11,10 +11,12 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    Bytes,
     Environment,
     StateTestFiller,
     Transaction,
 )
+from execution_testing.forks import Fork
 from execution_testing.vm import Op
 
 REFERENCE_SPEC_GIT_PATH = "N/A"
@@ -22,25 +24,37 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 
 @pytest.mark.ported_from(
-    ["tests/static/state_tests/stMemoryStressTest/POP_BoundsFiller.json"],
+    ["state_tests/stMemoryStressTest/POP_BoundsFiller.json"],
 )
 @pytest.mark.valid_from("Cancun")
 @pytest.mark.parametrize(
-    "tx_gas_limit",
+    "d, g, v",
     [
-        150000,
-        16777216,
+        pytest.param(
+            0,
+            0,
+            0,
+            id="-g0",
+        ),
+        pytest.param(
+            0,
+            1,
+            0,
+            id="-g1",
+        ),
     ],
-    ids=["case0", "case1"],
 )
 @pytest.mark.pre_alloc_mutable
 def test_pop_bounds(
     state_test: StateTestFiller,
     pre: Alloc,
-    tx_gas_limit: int,
+    fork: Fork,
+    d: int,
+    g: int,
+    v: int,
 ) -> None:
-    """Test ported from static filler."""
-    coinbase = Address("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+    """Test_pop_bounds."""
+    coinbase = Address(0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BA)
     sender = EOA(
         key=0xFE5BE118AD5955E30E0FFC4E1F1BBDCAA7F5A67CB1426C4AC19E32C80ECCDC06
     )
@@ -54,31 +68,36 @@ def test_pop_bounds(
         gas_limit=9223372036854775807,
     )
 
-    # Source: LLL
+    # Source: lll
     # { (POP 0) (POP 0xffffffff) (POP 0xffffffffffffffff) (POP 0xffffffffffffffffffffffffffffffff) (POP 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff) }  # noqa: E501
-    contract = pre.deploy_contract(
-        code=(
-            Op.POP(0x0)
-            + Op.POP(0xFFFFFFFF)
-            + Op.POP(0xFFFFFFFFFFFFFFFF)
-            + Op.POP(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
-            + Op.POP(
-                0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,  # noqa: E501
-            )
-            + Op.STOP
-        ),
+    target = pre.deploy_contract(  # noqa: F841
+        code=Op.POP(0x0)
+        + Op.POP(0xFFFFFFFF)
+        + Op.POP(0xFFFFFFFFFFFFFFFF)
+        + Op.POP(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+        + Op.POP(
+            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+        )
+        + Op.STOP,
         nonce=0,
-        address=Address("0x5bd3610afcec3b0c20466ca011b505497b0009f0"),  # noqa: E501
+        address=Address(0x5BD3610AFCEC3B0C20466CA011B505497B0009F0),  # noqa: E501
     )
     pre[sender] = Account(balance=0x7FFFFFFFFFFFFFFFFFF)
 
+    tx_data = [
+        Bytes(""),
+    ]
+    tx_gas = [150000, 16777216]
+    tx_value = [1]
+
     tx = Transaction(
         sender=sender,
-        to=contract,
-        gas_limit=tx_gas_limit,
-        value=1,
+        to=target,
+        data=tx_data[d],
+        gas_limit=tx_gas[g],
+        value=tx_value[v],
     )
 
-    post: dict = {}
+    post = {target: Account(balance=1)}
 
     state_test(env=env, pre=pre, post=post, tx=tx)
