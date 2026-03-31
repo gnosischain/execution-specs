@@ -66,6 +66,8 @@ jobs:
           from_fork: ${{ matrix.from_fork }}
           until_fork: ${{ matrix.until_fork }}
           split_label: ${{ matrix.label }}
+          fill_args: ${{ matrix.fill_args }}
+          fill_k: ${{ matrix.fill_k }}
 
   combine:
     name: combine (${{ matrix.feature }})
@@ -87,9 +89,9 @@ jobs:
         run: |
           mkdir -p combined
           for label in ${{ matrix.labels }}; do
-            echo "Downloading: build__${label}"
-            gh run download ${{ github.run_id }} -n "build__${label}" --dir "split_artifacts/build__${label}"
-            cp -r "split_artifacts/build__${label}"/* combined/
+            echo "Downloading: fixtures__${label}"
+            gh run download ${{ github.run_id }} -n "fixtures__${label}" --dir "split_artifacts/fixtures__${label}"
+            cp -r "split_artifacts/fixtures__${label}"/* combined/
           done
           echo "Combined directory contents:"
           find combined -maxdepth 3 -type d | head -30
