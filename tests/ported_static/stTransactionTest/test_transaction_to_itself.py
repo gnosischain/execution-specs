@@ -1,8 +1,8 @@
 """
-Test ported from static filler.
+Test_transaction_to_itself.
 
 Ported from:
-tests/static/state_tests/stTransactionTest/TransactionToItselfFiller.json
+state_tests/stTransactionTest/TransactionToItselfFiller.json
 """
 
 import pytest
@@ -11,6 +11,7 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    Bytes,
     Environment,
     StateTestFiller,
     Transaction,
@@ -21,9 +22,7 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 
 @pytest.mark.ported_from(
-    [
-        "tests/static/state_tests/stTransactionTest/TransactionToItselfFiller.json",  # noqa: E501
-    ],
+    ["state_tests/stTransactionTest/TransactionToItselfFiller.json"],
 )
 @pytest.mark.valid_from("Cancun")
 @pytest.mark.pre_alloc_mutable
@@ -31,8 +30,8 @@ def test_transaction_to_itself(
     state_test: StateTestFiller,
     pre: Alloc,
 ) -> None:
-    """Test ported from static filler."""
-    coinbase = Address("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+    """Test_transaction_to_itself."""
+    coinbase = Address(0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BA)
     sender = EOA(
         key=0xF79127A3004ABDE26A4CBD80C428CB10F829FA11B54D36E7B326F4F4A5927ACF
     )
@@ -51,10 +50,11 @@ def test_transaction_to_itself(
     tx = Transaction(
         sender=sender,
         to=sender,
+        data=Bytes(""),
         gas_limit=25000,
         value=1,
     )
 
-    post: dict = {}
+    post = {sender: Account(balance=0x3B9795B0, nonce=1)}
 
     state_test(env=env, pre=pre, post=post, tx=tx)

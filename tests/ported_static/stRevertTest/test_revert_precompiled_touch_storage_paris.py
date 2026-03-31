@@ -1,9 +1,8 @@
 """
-Test ported from static filler.
+Test_revert_precompiled_touch_storage_paris.
 
 Ported from:
-tests/static/state_tests/stRevertTest
-RevertPrecompiledTouch_storage_ParisFiller.json
+state_tests/stRevertTest/RevertPrecompiledTouch_storage_ParisFiller.json
 """
 
 import pytest
@@ -13,8 +12,13 @@ from execution_testing import (
     Address,
     Alloc,
     Environment,
+    Hash,
     StateTestFiller,
     Transaction,
+)
+from execution_testing.forks import Fork
+from execution_testing.specs.static_state.expect_section import (
+    resolve_expect_post,
 )
 from execution_testing.vm import Op
 
@@ -24,39 +28,61 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 @pytest.mark.ported_from(
     [
-        "tests/static/state_tests/stRevertTest/RevertPrecompiledTouch_storage_ParisFiller.json",  # noqa: E501
+        "state_tests/stRevertTest/RevertPrecompiledTouch_storage_ParisFiller.json"  # noqa: E501
     ],
 )
 @pytest.mark.valid_from("Cancun")
 @pytest.mark.parametrize(
-    "tx_data_hex",
+    "d, g, v",
     [
-        "00000000000000000000000087aaeb9e422487283b0b008ef445e32acb9dd1ae",
-        "00000000000000000000000031f52a66cf9d94c60f089a2ca9c4e784261c57fa",
-        "000000000000000000000000de1200b7ecaea2d15b57d0f331ad5ade8e924255",
-        "00000000000000000000000010ef6d6218ada53728683cec4d5160c8c72159bd",
+        pytest.param(
+            0,
+            0,
+            0,
+            id="d0",
+        ),
+        pytest.param(
+            1,
+            0,
+            0,
+            id="d1",
+        ),
+        pytest.param(
+            2,
+            0,
+            0,
+            id="d2",
+        ),
+        pytest.param(
+            3,
+            0,
+            0,
+            id="d3",
+        ),
     ],
-    ids=["case0", "case1", "case2", "case3"],
 )
 @pytest.mark.pre_alloc_mutable
 def test_revert_precompiled_touch_storage_paris(
     state_test: StateTestFiller,
     pre: Alloc,
-    tx_data_hex: str,
+    fork: Fork,
+    d: int,
+    g: int,
+    v: int,
 ) -> None:
-    """Test ported from static filler."""
-    coinbase = Address("0x68795c4aa09d6f4ed3e5deddf8c2ad3049a601da")
+    """Test_revert_precompiled_touch_storage_paris."""
+    coinbase = Address(0x68795C4AA09D6F4ED3E5DEDDF8C2AD3049A601DA)
+    addr_5 = Address(0x9DEB46A3B3E955BD56ECC4072DA4B42BD9B5DB2C)
+    addr_6 = Address(0xA8FD4CB9C2C538ED7FF94C3B711B2E08A08C7FB8)
+    addr_7 = Address(0x6D15138CE372D9B89EE38FC3973B715477426F11)
+    addr_8 = Address(0x46AC2E7E1550D911E5A72FBC51C15CA817DBB1D5)
+    addr_9 = Address(0x0DC4B229346287FE9FA441960081A9886B71C42D)
+    addr_10 = Address(0x3A3EEE808C401A574F92824DC64D89EDB05FAFE4)
+    addr_11 = Address(0xDA7F8ADD6896B7E58F28331A97B315DDE5FB8CD1)
+    addr_12 = Address(0x4757608F18B70777AE788DD4056EEED52F7AA68F)
     sender = EOA(
-        key=0x0FF8D58222F34F6890DDAA468C023B77D6691ED7D3C4DCDDAE38336212FAF54B
+        key=0xFF8D58222F34F6890DDAA468C023B77D6691ED7D3C4DCDDAE38336212FAF54B
     )
-    callee = Address("0x0dc4b229346287fe9fa441960081a9886b71c42d")
-    callee_3 = Address("0x3a3eee808c401a574f92824dc64d89edb05fafe4")
-    callee_4 = Address("0x46ac2e7e1550d911e5a72fbc51c15ca817dbb1d5")
-    callee_5 = Address("0x4757608f18b70777ae788dd4056eeed52f7aa68f")
-    callee_6 = Address("0x6d15138ce372d9b89ee38fc3973b715477426f11")
-    callee_8 = Address("0x9deb46a3b3e955bd56ecc4072da4b42bd9b5db2c")
-    callee_9 = Address("0xa8fd4cb9c2c538ed7ff94c3b711b2e08a08c7fb8")
-    callee_10 = Address("0xda7f8add6896b7e58f28331a97b315dde5fb8cd1")
 
     env = Environment(
         fee_recipient=coinbase,
@@ -67,429 +93,456 @@ def test_revert_precompiled_touch_storage_paris(
         gas_limit=4012015,
     )
 
-    pre[callee] = Account(balance=10, nonce=0, storage={0x0: 0x1})
-    pre.deploy_contract(
-        code=(
-            Op.POP(
-                Op.STATICCALL(
-                    gas=0xC350,
-                    address=0x1,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.STATICCALL(
-                    gas=0xC350,
-                    address=0x2,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.STATICCALL(
-                    gas=0xC350,
-                    address=0x3,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.STATICCALL(
-                    gas=0xC350,
-                    address=0x4,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.STATICCALL(
-                    gas=0xC350,
-                    address=0x5,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.STATICCALL(
-                    gas=0xC350,
-                    address=0x6,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.STATICCALL(
-                    gas=0xC350,
-                    address=0x7,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.STATICCALL(
-                    gas=0xC350,
-                    address=0x8,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.SSTORE(key=0x1, value=Op.GAS)
-            + Op.SSTORE(key=0x2, value=Op.GAS)
-            + Op.SSTORE(key=0x3, value=Op.GAS)
-            + Op.STOP
-        ),
-        nonce=0,
-        address=Address("0x10ef6d6218ada53728683cec4d5160c8c72159bd"),  # noqa: E501
-    )
-    pre.deploy_contract(
-        code=(
-            Op.POP(
-                Op.DELEGATECALL(
-                    gas=0xC350,
-                    address=0x1,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.DELEGATECALL(
-                    gas=0xC350,
-                    address=0x2,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.DELEGATECALL(
-                    gas=0xC350,
-                    address=0x3,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.DELEGATECALL(
-                    gas=0xC350,
-                    address=0x4,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.DELEGATECALL(
-                    gas=0xC350,
-                    address=0x5,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.DELEGATECALL(
-                    gas=0xC350,
-                    address=0x6,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.DELEGATECALL(
-                    gas=0xC350,
-                    address=0x7,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.DELEGATECALL(
-                    gas=0xC350,
-                    address=0x8,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.SSTORE(key=0x1, value=Op.GAS)
-            + Op.SSTORE(key=0x2, value=Op.GAS)
-            + Op.SSTORE(key=0x3, value=Op.GAS)
-            + Op.STOP
-        ),
-        nonce=0,
-        address=Address("0x31f52a66cf9d94c60f089a2ca9c4e784261c57fa"),  # noqa: E501
-    )
-    pre[callee_3] = Account(balance=10, nonce=0, storage={0x0: 0x1})
-    pre[callee_4] = Account(balance=10, nonce=0, storage={0x0: 0x1})
-    pre[callee_5] = Account(balance=10, nonce=0, storage={0x0: 0x1})
-    pre[callee_6] = Account(balance=10, nonce=0, storage={0x0: 0x1})
-    pre.deploy_contract(
-        code=(
-            Op.POP(
-                Op.CALL(
-                    gas=0xC350,
-                    address=0x1,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALL(
-                    gas=0xC350,
-                    address=0x2,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALL(
-                    gas=0xC350,
-                    address=0x3,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALL(
-                    gas=0xC350,
-                    address=0x4,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALL(
-                    gas=0xC350,
-                    address=0x5,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALL(
-                    gas=0xC350,
-                    address=0x6,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALL(
-                    gas=0xC350,
-                    address=0x7,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALL(
-                    gas=0xC350,
-                    address=0x8,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.SSTORE(key=0x1, value=Op.GAS)
-            + Op.SSTORE(key=0x2, value=Op.GAS)
-            + Op.SSTORE(key=0x3, value=Op.GAS)
-            + Op.STOP
-        ),
-        nonce=0,
-        address=Address("0x87aaeb9e422487283b0b008ef445e32acb9dd1ae"),  # noqa: E501
-    )
-    pre[callee_8] = Account(balance=10, nonce=0, storage={0x0: 0x1})
-    pre[callee_9] = Account(balance=10, nonce=0, storage={0x0: 0x1})
-    pre[sender] = Account(balance=0xDE0B6B3A7640000, nonce=1)
-    pre[callee_10] = Account(balance=10, nonce=0, storage={0x0: 0x1})
-    pre.deploy_contract(
-        code=(
-            Op.POP(
-                Op.CALLCODE(
-                    gas=0xC350,
-                    address=0x1,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALLCODE(
-                    gas=0xC350,
-                    address=0x2,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALLCODE(
-                    gas=0xC350,
-                    address=0x3,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALLCODE(
-                    gas=0xC350,
-                    address=0x4,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALLCODE(
-                    gas=0xC350,
-                    address=0x5,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALLCODE(
-                    gas=0xC350,
-                    address=0x6,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALLCODE(
-                    gas=0xC350,
-                    address=0x7,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.POP(
-                Op.CALLCODE(
-                    gas=0xC350,
-                    address=0x8,
-                    value=0x0,
-                    args_offset=0x0,
-                    args_size=0x0,
-                    ret_offset=0x0,
-                    ret_size=0x0,
-                ),
-            )
-            + Op.SSTORE(key=0x1, value=Op.GAS)
-            + Op.SSTORE(key=0x2, value=Op.GAS)
-            + Op.SSTORE(key=0x3, value=Op.GAS)
-            + Op.STOP
-        ),
-        nonce=0,
-        address=Address("0xde1200b7ecaea2d15b57d0f331ad5ade8e924255"),  # noqa: E501
-    )
-    # Source: LLL
+    # Source: lll
     # {  (CALLCODE (GAS) (CALLDATALOAD 0) 0 0 0 0 0) }
-    contract = pre.deploy_contract(
-        code=(
-            Op.CALLCODE(
-                gas=Op.GAS,
-                address=Op.CALLDATALOAD(offset=0x0),
+    target = pre.deploy_contract(  # noqa: F841
+        code=Op.CALLCODE(
+            gas=Op.GAS,
+            address=Op.CALLDATALOAD(offset=0x0),
+            value=0x0,
+            args_offset=0x0,
+            args_size=0x0,
+            ret_offset=0x0,
+            ret_size=0x0,
+        )
+        + Op.STOP,
+        nonce=0,
+        address=Address(0xE7C596DE24CCC387DAA5C017066AEB25EA8D2F3F),  # noqa: E501
+    )
+    # Source: lll
+    # { (CALL 50000 1 0 0 0 0 0) (CALL 50000 2 0 0 0 0 0) (CALL 50000 3 0 0 0 0 0) (CALL 50000 4 0 0 0 0 0) (CALL 50000 5 0 0 0 0 0) (CALL 50000 6 0 0 0 0 0) (CALL 50000 7 0 0 0 0 0) (CALL 50000 8 0 0 0 0 0) [[1]] (GAS) [[2]] (GAS) [[3]] (GAS) }  # noqa: E501
+    addr = pre.deploy_contract(  # noqa: F841
+        code=Op.POP(
+            Op.CALL(
+                gas=0xC350,
+                address=0x1,
                 value=0x0,
                 args_offset=0x0,
                 args_size=0x0,
                 ret_offset=0x0,
                 ret_size=0x0,
             )
-            + Op.STOP
-        ),
+        )
+        + Op.POP(
+            Op.CALL(
+                gas=0xC350,
+                address=0x2,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALL(
+                gas=0xC350,
+                address=0x3,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALL(
+                gas=0xC350,
+                address=0x4,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALL(
+                gas=0xC350,
+                address=0x5,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALL(
+                gas=0xC350,
+                address=0x6,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALL(
+                gas=0xC350,
+                address=0x7,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALL(
+                gas=0xC350,
+                address=0x8,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.SSTORE(key=0x1, value=Op.GAS)
+        + Op.SSTORE(key=0x2, value=Op.GAS)
+        + Op.SSTORE(key=0x3, value=Op.GAS)
+        + Op.STOP,
         nonce=0,
-        address=Address("0xe7c596de24ccc387daa5c017066aeb25ea8d2f3f"),  # noqa: E501
+        address=Address(0x87AAEB9E422487283B0B008EF445E32ACB9DD1AE),  # noqa: E501
     )
+    # Source: lll
+    # { (DELEGATECALL 50000 1 0 0 0 0) (DELEGATECALL 50000 2 0 0 0 0) (DELEGATECALL 50000 3 0 0 0 0) (DELEGATECALL 50000 4 0 0 0 0) (DELEGATECALL 50000 5 0 0 0 0) (DELEGATECALL 50000 6 0 0 0 0) (DELEGATECALL 50000 7 0 0 0 0) (DELEGATECALL 50000 8 0 0 0 0) [[1]] (GAS) [[2]] (GAS) [[3]] (GAS) }  # noqa: E501
+    addr_2 = pre.deploy_contract(  # noqa: F841
+        code=Op.POP(
+            Op.DELEGATECALL(
+                gas=0xC350,
+                address=0x1,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.DELEGATECALL(
+                gas=0xC350,
+                address=0x2,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.DELEGATECALL(
+                gas=0xC350,
+                address=0x3,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.DELEGATECALL(
+                gas=0xC350,
+                address=0x4,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.DELEGATECALL(
+                gas=0xC350,
+                address=0x5,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.DELEGATECALL(
+                gas=0xC350,
+                address=0x6,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.DELEGATECALL(
+                gas=0xC350,
+                address=0x7,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.DELEGATECALL(
+                gas=0xC350,
+                address=0x8,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.SSTORE(key=0x1, value=Op.GAS)
+        + Op.SSTORE(key=0x2, value=Op.GAS)
+        + Op.SSTORE(key=0x3, value=Op.GAS)
+        + Op.STOP,
+        nonce=0,
+        address=Address(0x31F52A66CF9D94C60F089A2CA9C4E784261C57FA),  # noqa: E501
+    )
+    # Source: lll
+    # { (CALLCODE 50000 1 0 0 0 0 0) (CALLCODE 50000 2 0 0 0 0 0) (CALLCODE 50000 3 0 0 0 0 0) (CALLCODE 50000 4 0 0 0 0 0) (CALLCODE 50000 5 0 0 0 0 0) (CALLCODE 50000 6 0 0 0 0 0) (CALLCODE 50000 7 0 0 0 0 0) (CALLCODE 50000 8 0 0 0 0 0) [[1]] (GAS) [[2]] (GAS) [[3]] (GAS) }  # noqa: E501
+    addr_3 = pre.deploy_contract(  # noqa: F841
+        code=Op.POP(
+            Op.CALLCODE(
+                gas=0xC350,
+                address=0x1,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALLCODE(
+                gas=0xC350,
+                address=0x2,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALLCODE(
+                gas=0xC350,
+                address=0x3,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALLCODE(
+                gas=0xC350,
+                address=0x4,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALLCODE(
+                gas=0xC350,
+                address=0x5,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALLCODE(
+                gas=0xC350,
+                address=0x6,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALLCODE(
+                gas=0xC350,
+                address=0x7,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.CALLCODE(
+                gas=0xC350,
+                address=0x8,
+                value=0x0,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.SSTORE(key=0x1, value=Op.GAS)
+        + Op.SSTORE(key=0x2, value=Op.GAS)
+        + Op.SSTORE(key=0x3, value=Op.GAS)
+        + Op.STOP,
+        nonce=0,
+        address=Address(0xDE1200B7ECAEA2D15B57D0F331AD5ADE8E924255),  # noqa: E501
+    )
+    # Source: lll
+    # { (STATICCALL 50000 1 0 0 0 0) (STATICCALL 50000 2 0 0 0 0) (STATICCALL 50000 3 0 0 0 0) (STATICCALL 50000 4 0 0 0 0) (STATICCALL 50000 5 0 0 0 0) (STATICCALL 50000 6 0 0 0 0) (STATICCALL 50000 7 0 0 0 0) (STATICCALL 50000 8 0 0 0 0) [[1]] (GAS) [[2]] (GAS) [[3]] (GAS) }  # noqa: E501
+    addr_4 = pre.deploy_contract(  # noqa: F841
+        code=Op.POP(
+            Op.STATICCALL(
+                gas=0xC350,
+                address=0x1,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.STATICCALL(
+                gas=0xC350,
+                address=0x2,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.STATICCALL(
+                gas=0xC350,
+                address=0x3,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.STATICCALL(
+                gas=0xC350,
+                address=0x4,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.STATICCALL(
+                gas=0xC350,
+                address=0x5,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.STATICCALL(
+                gas=0xC350,
+                address=0x6,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.STATICCALL(
+                gas=0xC350,
+                address=0x7,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.POP(
+            Op.STATICCALL(
+                gas=0xC350,
+                address=0x8,
+                args_offset=0x0,
+                args_size=0x0,
+                ret_offset=0x0,
+                ret_size=0x0,
+            )
+        )
+        + Op.SSTORE(key=0x1, value=Op.GAS)
+        + Op.SSTORE(key=0x2, value=Op.GAS)
+        + Op.SSTORE(key=0x3, value=Op.GAS)
+        + Op.STOP,
+        nonce=0,
+        address=Address(0x10EF6D6218ADA53728683CEC4D5160C8C72159BD),  # noqa: E501
+    )
+    pre[sender] = Account(balance=0xDE0B6B3A7640000, nonce=1)
+    pre[addr_5] = Account(balance=10, storage={0: 1})
+    pre[addr_6] = Account(balance=10, storage={0: 1})
+    pre[addr_7] = Account(balance=10, storage={0: 1})
+    pre[addr_8] = Account(balance=10, storage={0: 1})
+    pre[addr_9] = Account(balance=10, storage={0: 1})
+    pre[addr_10] = Account(balance=10, storage={0: 1})
+    pre[addr_11] = Account(balance=10, storage={0: 1})
+    pre[addr_12] = Account(balance=10, storage={0: 1})
 
-    tx_data = bytes.fromhex(tx_data_hex) if tx_data_hex else b""
+    expect_entries_: list[dict] = [
+        {
+            "indexes": {"data": [0, 3], "gas": -1, "value": -1},
+            "network": [">=Cancun"],
+            "result": {
+                addr_5: Account(storage={0: 1}),
+                addr_6: Account(storage={0: 1}),
+                addr_7: Account(balance=10),
+                addr_8: Account(storage={0: 1}),
+                addr_9: Account(storage={0: 1}),
+                addr_10: Account(storage={0: 1}),
+                addr_11: Account(storage={0: 1}),
+                addr_12: Account(storage={0: 1}),
+            },
+        },
+        {
+            "indexes": {"data": [1, 2], "gas": -1, "value": -1},
+            "network": [">=Cancun"],
+            "result": {
+                addr_5: Account(storage={0: 1}),
+                addr_6: Account(storage={0: 1}),
+                addr_7: Account(storage={0: 1}),
+                addr_8: Account(storage={0: 1}),
+                addr_9: Account(storage={0: 1}),
+                addr_10: Account(storage={0: 1}),
+                addr_11: Account(storage={0: 1}),
+                addr_12: Account(storage={0: 1}),
+            },
+        },
+    ]
+
+    post, _exc = resolve_expect_post(expect_entries_, d, g, v, fork)
+
+    tx_data = [
+        Hash(addr, left_padding=True),
+        Hash(addr_2, left_padding=True),
+        Hash(addr_3, left_padding=True),
+        Hash(addr_4, left_padding=True),
+    ]
+    tx_gas = [100000]
 
     tx = Transaction(
         sender=sender,
-        to=contract,
-        data=tx_data,
-        gas_limit=100000,
+        to=target,
+        data=tx_data[d],
+        gas_limit=tx_gas[g],
         nonce=1,
+        error=_exc,
     )
-
-    post = {
-        callee: Account(storage={0: 1}),
-        callee_3: Account(storage={0: 1}),
-        callee_4: Account(storage={0: 1}),
-        callee_5: Account(storage={0: 1}),
-        callee_6: Account(storage={0: 1}),
-        callee_8: Account(storage={0: 1}),
-        callee_9: Account(storage={0: 1}),
-        callee_10: Account(storage={0: 1}),
-    }
 
     state_test(env=env, pre=pre, post=post, tx=tx)

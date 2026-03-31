@@ -1,9 +1,8 @@
 """
-Test ported from static filler.
+Test_non_zero_value_transaction_call_to_empty_paris.
 
 Ported from:
-tests/static/state_tests/stNonZeroCallsTest
-NonZeroValue_TransactionCALL_ToEmpty_ParisFiller.json
+state_tests/stNonZeroCallsTest/NonZeroValue_TransactionCALL_ToEmpty_ParisFiller.json
 """
 
 import pytest
@@ -12,6 +11,7 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    Bytes,
     Environment,
     StateTestFiller,
     Transaction,
@@ -23,7 +23,7 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 @pytest.mark.ported_from(
     [
-        "tests/static/state_tests/stNonZeroCallsTest/NonZeroValue_TransactionCALL_ToEmpty_ParisFiller.json",  # noqa: E501
+        "state_tests/stNonZeroCallsTest/NonZeroValue_TransactionCALL_ToEmpty_ParisFiller.json"  # noqa: E501
     ],
 )
 @pytest.mark.valid_from("Cancun")
@@ -32,12 +32,12 @@ def test_non_zero_value_transaction_call_to_empty_paris(
     state_test: StateTestFiller,
     pre: Alloc,
 ) -> None:
-    """Test ported from static filler."""
-    coinbase = Address("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+    """Test_non_zero_value_transaction_call_to_empty_paris."""
+    coinbase = Address(0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BA)
+    addr = Address(0x76FAE819612A29489A1A43208613D8F8557B8898)
     sender = EOA(
         key=0x4F31B3206FBF0E0E598B9B1A7D8AC86302A0FF1D8930738F1BEBAE9B67173E52
     )
-    contract = Address("0x76fae819612a29489a1a43208613d8f8557b8898")
 
     env = Environment(
         fee_recipient=coinbase,
@@ -48,16 +48,17 @@ def test_non_zero_value_transaction_call_to_empty_paris(
         gas_limit=10000000,
     )
 
-    pre[contract] = Account(balance=10, nonce=0)
     pre[sender] = Account(balance=0xE8D4A51000)
+    pre[addr] = Account(balance=10)
 
     tx = Transaction(
         sender=sender,
-        to=contract,
+        to=addr,
+        data=Bytes(""),
         gas_limit=600000,
         value=1,
     )
 
-    post: dict = {}
+    post = {addr: Account(balance=11)}
 
     state_test(env=env, pre=pre, post=post, tx=tx)

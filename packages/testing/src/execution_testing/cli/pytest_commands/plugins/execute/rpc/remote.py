@@ -1,6 +1,5 @@
 """Pytest plugin to run the execute in remote-rpc-mode."""
 
-import os
 from pathlib import Path
 
 import pytest
@@ -11,7 +10,7 @@ from execution_testing.test_types.chain_config_types import (
     ChainConfigDefaults,
 )
 
-from ..pre_alloc import AddressStubs
+from ...shared.helpers import get_rpc_endpoint
 from .chain_builder_eth_rpc import ChainBuilderEthRPC, TestingRPC
 
 
@@ -25,7 +24,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         required=False,
         action="store",
         dest="rpc_endpoint",
-        help="RPC endpoint to an execution client",
+        default=None,
+        help="RPC endpoint to an execution client.",
     )
     remote_rpc_group.addoption(
         "--tx-wait-timeout",
@@ -36,18 +36,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help=(
             "Maximum time in seconds to wait for a transaction to be "
             "included in a block"
-        ),
-    )
-    remote_rpc_group.addoption(
-        "--address-stubs",
-        action="store",
-        dest="address_stubs",
-        default=AddressStubs(root={}),
-        type=AddressStubs.model_validate_json_or_file,
-        help=(
-            "The address stubs for contracts that have already been placed "
-            "in the chain and to use for the test. Can be a JSON formatted "
-            "string or a path to a YAML or JSON file."
         ),
     )
 
@@ -107,9 +95,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def pytest_configure(config: pytest.Config) -> None:
     """Check if a chain ID configuration is provided."""
     # Verify chain ID config is consistent with the remote RPC endpoint
-    rpc_endpoint = config.getoption("rpc_endpoint") or os.environ.get(
-        "RPC_ENDPOINT"
-    )
+    rpc_endpoint = get_rpc_endpoint(config)
     if rpc_endpoint is None:
         pytest.fail(
             "RPC endpoint must be provided with the --rpc-endpoint flag or "
@@ -174,9 +160,7 @@ def rpc_endpoint(request: pytest.FixtureRequest) -> str:
     Return remote RPC endpoint to be used to make requests to the execution
     client.
     """
-    rpc_endpoint = request.config.getoption("rpc_endpoint") or os.environ.get(
-        "RPC_ENDPOINT"
-    )
+    rpc_endpoint = get_rpc_endpoint(request.config)
     assert rpc_endpoint is not None
     return rpc_endpoint
 
