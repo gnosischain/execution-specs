@@ -27,6 +27,7 @@ jobs:
           uv run -q .github/scripts/generate_build_matrix.py "$FEATURE_NAME" >> "$GITHUB_OUTPUT"
 
   build:
+    name: fill (${{ matrix.label || matrix.feature }})
     needs: setup
     runs-on: [self-hosted-ghr, size-gigachungus-x64]
     timeout-minutes: 1440
@@ -67,6 +68,7 @@ jobs:
           split_label: ${{ matrix.label }}
 
   combine:
+    name: combine (${{ matrix.feature }})
     needs: [setup, build]
     if: needs.setup.outputs.combine_matrix != '[]'
     runs-on: ubuntu-latest
