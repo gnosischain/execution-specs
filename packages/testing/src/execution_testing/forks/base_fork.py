@@ -467,6 +467,16 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         pass
 
     @classmethod
+    def transaction_intrinsic_state_gas(
+        cls,
+        *,
+        contract_creation: bool = False,  # noqa: ARG003
+        authorization_count: int = 0,  # noqa: ARG003
+    ) -> int:
+        """Return intrinsic state gas (zero pre-Amsterdam)."""
+        return 0
+
+    @classmethod
     @abstractmethod
     def blob_gas_price_calculator(cls) -> BlobGasPriceCalculator:
         """
@@ -590,6 +600,38 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         """
         Return the transaction gas limit cap, or None if no limit is imposed.
         """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def sstore_state_gas(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> int:
+        """Return state gas for a zero-to-nonzero SSTORE."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def code_deposit_state_gas(
+        cls,
+        *,
+        code_size: int,
+        block_number: int = 0,
+        timestamp: int = 0,
+    ) -> int:
+        """Return state gas for code deposit of the given size."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def create_state_gas(
+        cls,
+        *,
+        code_size: int = 0,
+        block_number: int = 0,
+        timestamp: int = 0,
+    ) -> int:
+        """Return total state gas for CREATE."""
         pass
 
     @classmethod
