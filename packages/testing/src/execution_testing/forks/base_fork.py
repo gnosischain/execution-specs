@@ -2,6 +2,7 @@
 
 import re
 from abc import ABCMeta, abstractmethod
+from enum import Enum, auto
 from typing import (
     TYPE_CHECKING,
     Callable,
@@ -168,6 +169,13 @@ class ExcessBlobGasCalculator(Protocol):
         gas used.
         """
         pass
+
+
+class RefundTypes(Enum):
+    """Enum used to describe all refund types a fork can have."""
+
+    STORAGE_CLEAR = auto()
+    AUTHORIZATION_EXISTING_AUTHORITY = auto()
 
 
 class BaseForkMeta(ABCMeta):
@@ -779,6 +787,15 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
     @abstractmethod
     def max_request_type(cls) -> int:
         """Return max request type supported by the fork."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def refund_types(cls) -> List[RefundTypes]:
+        """
+        Return the list of refund types that are possible given current
+        fork logic.
+        """
         pass
 
     # Meta information about the fork
