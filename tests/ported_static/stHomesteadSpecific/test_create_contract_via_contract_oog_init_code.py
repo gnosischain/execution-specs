@@ -1,9 +1,8 @@
 """
-Test ported from static filler.
+Test_create_contract_via_contract_oog_init_code.
 
 Ported from:
-tests/static/state_tests/stHomesteadSpecific
-createContractViaContractOOGInitCodeFiller.json
+state_tests/stHomesteadSpecific/createContractViaContractOOGInitCodeFiller.json
 """
 
 import pytest
@@ -12,6 +11,7 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    Bytes,
     Environment,
     StateTestFiller,
     Transaction,
@@ -24,7 +24,7 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 @pytest.mark.ported_from(
     [
-        "tests/static/state_tests/stHomesteadSpecific/createContractViaContractOOGInitCodeFiller.json",  # noqa: E501
+        "state_tests/stHomesteadSpecific/createContractViaContractOOGInitCodeFiller.json"  # noqa: E501
     ],
 )
 @pytest.mark.valid_from("Cancun")
@@ -33,8 +33,9 @@ def test_create_contract_via_contract_oog_init_code(
     state_test: StateTestFiller,
     pre: Alloc,
 ) -> None:
-    """Test ported from static filler."""
-    coinbase = Address("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+    """Test_create_contract_via_contract_oog_init_code."""
+    coinbase = Address(0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BA)
+    contract_0 = Address(0x1000000000000000000000000000000000000001)
     sender = EOA(
         key=0x45A915E4D060149EB4365960E6A7A45F334393093061116B197E3240065FF2D8
     )
@@ -48,25 +49,28 @@ def test_create_contract_via_contract_oog_init_code(
         gas_limit=1000000,
     )
 
-    # Source: LLL
-    # { (MSTORE 0 0x602060406000f0600c600055)(CREATE 0 20 12)}
-    contract = pre.deploy_contract(
-        code=(
-            Op.MSTORE(offset=0x0, value=0x602060406000F0600C600055)
-            + Op.CREATE(value=0x0, offset=0x14, size=0xC)
-            + Op.STOP
-        ),
-        nonce=0,
-        address=Address("0x1000000000000000000000000000000000000001"),  # noqa: E501
-    )
     pre[sender] = Account(balance=0x10C8E0)
+    # Source: lll
+    # { (MSTORE 0 0x602060406000f0600c600055)(CREATE 0 20 12)}
+    contract_0 = pre.deploy_contract(  # noqa: F841
+        code=Op.MSTORE(offset=0x0, value=0x602060406000F0600C600055)
+        + Op.CREATE(value=0x0, offset=0x14, size=0xC)
+        + Op.STOP,
+        nonce=0,
+        address=Address(0x1000000000000000000000000000000000000001),  # noqa: E501
+    )
 
     tx = Transaction(
         sender=sender,
-        to=contract,
+        to=contract_0,
+        data=Bytes(""),
         gas_limit=105044,
     )
 
-    post: dict = {}
+    post = {
+        Address(
+            0x4FF884BFFC83E888AE11B32B1D94BF9BC8D1732F
+        ): Account.NONEXISTENT,
+    }
 
     state_test(env=env, pre=pre, post=post, tx=tx)

@@ -1,9 +1,8 @@
 """
-Test ported from static filler.
+Test_create_contract_via_contract.
 
 Ported from:
-tests/static/state_tests/stHomesteadSpecific
-createContractViaContractFiller.json
+state_tests/stHomesteadSpecific/createContractViaContractFiller.json
 """
 
 import pytest
@@ -12,6 +11,7 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    Bytes,
     Environment,
     StateTestFiller,
     Transaction,
@@ -23,9 +23,7 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 
 @pytest.mark.ported_from(
-    [
-        "tests/static/state_tests/stHomesteadSpecific/createContractViaContractFiller.json",  # noqa: E501
-    ],
+    ["state_tests/stHomesteadSpecific/createContractViaContractFiller.json"],
 )
 @pytest.mark.valid_from("Cancun")
 @pytest.mark.pre_alloc_mutable
@@ -33,8 +31,9 @@ def test_create_contract_via_contract(
     state_test: StateTestFiller,
     pre: Alloc,
 ) -> None:
-    """Test ported from static filler."""
-    coinbase = Address("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+    """Test_create_contract_via_contract."""
+    coinbase = Address(0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BA)
+    contract_0 = Address(0x1000000000000000000000000000000000000001)
     sender = EOA(
         key=0x45A915E4D060149EB4365960E6A7A45F334393093061116B197E3240065FF2D8
     )
@@ -48,21 +47,22 @@ def test_create_contract_via_contract(
         gas_limit=1000000,
     )
 
-    # Source: LLL
+    pre[sender] = Account(balance=0xF4240)
+    # Source: lll
     # { (CREATE 0 0 0)}
-    contract = pre.deploy_contract(
+    contract_0 = pre.deploy_contract(  # noqa: F841
         code=Op.CREATE(value=0x0, offset=0x0, size=0x0) + Op.STOP,
         nonce=0,
-        address=Address("0x1000000000000000000000000000000000000001"),  # noqa: E501
+        address=Address(0x1000000000000000000000000000000000000001),  # noqa: E501
     )
-    pre[sender] = Account(balance=0xF4240)
 
     tx = Transaction(
         sender=sender,
-        to=contract,
+        to=contract_0,
+        data=Bytes(""),
         gas_limit=100000,
     )
 
-    post: dict = {}
+    post = {sender: Account(nonce=1)}
 
     state_test(env=env, pre=pre, post=post, tx=tx)

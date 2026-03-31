@@ -1,8 +1,8 @@
 """
-Test ported from static filler.
+Test_create_empty_contract.
 
 Ported from:
-tests/static/state_tests/stCreateTest/CREATE_EmptyContractFiller.json
+state_tests/stCreateTest/CREATE_EmptyContractFiller.json
 """
 
 import pytest
@@ -11,9 +11,11 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    Bytes,
     Environment,
     StateTestFiller,
     Transaction,
+    compute_create_address,
 )
 from execution_testing.vm import Op
 
@@ -22,7 +24,7 @@ REFERENCE_SPEC_VERSION = "N/A"
 
 
 @pytest.mark.ported_from(
-    ["tests/static/state_tests/stCreateTest/CREATE_EmptyContractFiller.json"],
+    ["state_tests/stCreateTest/CREATE_EmptyContractFiller.json"],
 )
 @pytest.mark.valid_from("Cancun")
 @pytest.mark.pre_alloc_mutable
@@ -30,8 +32,9 @@ def test_create_empty_contract(
     state_test: StateTestFiller,
     pre: Alloc,
 ) -> None:
-    """Test ported from static filler."""
-    coinbase = Address("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+    """Test_create_empty_contract."""
+    coinbase = Address(0x2ADC25665018AA1FE0E6BC666DAC8FC2697FF9BA)
+    contract_0 = Address(0xB94F5374FCE5EDBC8E2A8697C15331677E6EBF0B)
     sender = EOA(
         key=0x45A915E4D060149EB4365960E6A7A45F334393093061116B197E3240065FF2D8
     )
@@ -46,29 +49,27 @@ def test_create_empty_contract(
     )
 
     pre[sender] = Account(balance=0xE8D4A51000)
-    # Source: LLL
+    # Source: lll
     # { [[0]](GAS) [[1]] (CREATE 0 0 32) [[100]] (GAS) }
-    contract = pre.deploy_contract(
-        code=(
-            Op.SSTORE(key=0x0, value=Op.GAS)
-            + Op.SSTORE(
-                key=0x1, value=Op.CREATE(value=0x0, offset=0x0, size=0x20)
-            )
-            + Op.SSTORE(key=0x64, value=Op.GAS)
-            + Op.STOP
-        ),
+    contract_0 = pre.deploy_contract(  # noqa: F841
+        code=Op.SSTORE(key=0x0, value=Op.GAS)
+        + Op.SSTORE(key=0x1, value=Op.CREATE(value=0x0, offset=0x0, size=0x20))
+        + Op.SSTORE(key=0x64, value=Op.GAS)
+        + Op.STOP,
         nonce=0,
-        address=Address("0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b"),  # noqa: E501
+        address=Address(0xB94F5374FCE5EDBC8E2A8697C15331677E6EBF0B),  # noqa: E501
     )
 
     tx = Transaction(
         sender=sender,
-        to=contract,
+        to=contract_0,
+        data=Bytes(""),
         gas_limit=600000,
     )
 
     post = {
-        contract: Account(
+        compute_create_address(address=contract_0, nonce=0): Account(nonce=1),
+        contract_0: Account(
             storage={
                 0: 0x8D5B6,
                 1: 0xF1ECF98489FA9ED60A664FC4998DB699CFA39D40,
