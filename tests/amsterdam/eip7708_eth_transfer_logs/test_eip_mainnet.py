@@ -86,7 +86,7 @@ def test_selfdestruct_mainnet(
         sender=sender,
         to=contract,
         value=0,
-        gas_limit=100_000,
+        gas_limit=200_000,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(contract, beneficiary, 500)]
         ),
