@@ -7,34 +7,27 @@ on:
   workflow_dispatch:
 
 jobs:
-  features:
+  setup:
     runs-on: ubuntu-latest
     outputs:
-      features: ${{ steps.parse.outputs.features }}
+      build_matrix: ${{ steps.matrix.outputs.build_matrix }}
+      combine_matrix: ${{ steps.matrix.outputs.combine_matrix }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Get names from .github/configs/feature.yaml
-        id: parse
+      - name: Generate build matrix
+        id: matrix
         shell: bash
         run: |
-          # Get all features without `feature_only: true`
-          grep -Po "^[0-9a-zA-Z_\-]+" ./.github/configs/feature.yaml | \
-          while read -r feature; do
-            if ! awk "/^$feature:/{flag=1; next} /^[[:alnum:]]/{flag=0} flag && /feature_only:.*true/{exit 1}" \
-                  ./.github/configs/feature.yaml; then
-              continue
-            fi
-            echo "$feature"
-          done | jq -R . | jq -cs . > features.json
-          echo "features=$(cat features.json)" >> "$GITHUB_OUTPUT"
+          uv run -q .github/scripts/generate_build_matrix.py --all >> "$GITHUB_OUTPUT"
 
   build:
-    needs: features
+    needs: setup
     runs-on: [self-hosted-ghr, size-gigachungus-x64]
     timeout-minutes: 1440
     strategy:
+      fail-fast: false
       matrix:
-        name: ${{ fromJson(needs.features.outputs.features) }}
+        include: ${{ fromJson(needs.setup.outputs.build_matrix) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -59,12 +52,51 @@ jobs:
           expected_sha256: fb03a29a517452b9f12bcf459ef37d0a543765bb3bbc911e70a87d6a37c30d5f
       - uses: ./.github/actions/build-fixtures
         with:
-          release_name: ${{ matrix.name }}
+          release_name: ${{ matrix.feature }}
+          from_fork: ${{ matrix.from_fork }}
+          until_fork: ${{ matrix.until_fork }}
+          split_label: ${{ matrix.label }}
+
+  combine:
+    needs: [setup, build]
+    if: needs.setup.outputs.combine_matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.setup.outputs.combine_matrix) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: false
+      - name: Install pigz
+        run: sudo apt-get install -y pigz
+      - name: Download and merge split artifacts
+        shell: bash
+        run: |
+          mkdir -p combined
+          for label in ${{ matrix.labels }}; do
+            echo "Downloading: build__${label}"
+            gh run download ${{ github.run_id }} -n "build__${label}" --dir "split_artifacts/build__${label}"
+            cp -r "split_artifacts/build__${label}"/* combined/
+          done
+          echo "Combined directory contents:"
+          find combined -maxdepth 3 -type d | head -30
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Create release tarball
+        shell: bash
+        run: |
+          uv run -q .github/scripts/create_release_tarball.py combined fixtures_${{ matrix.feature }}.tar.gz
+      - name: Upload combined fixture tarball
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: fixtures_${{ matrix.feature }}
+          path: fixtures_${{ matrix.feature }}.tar.gz
 
   release:
     runs-on: ubuntu-latest
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/tests-')
+    needs: [build, combine]
+    if: always() && needs.build.result == 'success' && (needs.combine.result == 'success' || needs.combine.result == 'skipped') && startsWith(github.ref, 'refs/tags/tests-')
     permissions:
       contents: write
     steps:
@@ -73,9 +105,11 @@ jobs:
           submodules: false
           fetch-depth: 0
 
-      - name: Download all artifacts
+      - name: Download release artifacts
+        shell: bash
         run: |
-          gh run download ${{ github.run_id }} --dir ./artifacts
+          gh run download ${{ github.run_id }} -p "fixtures_*" --dir ./artifacts
+          gh run download ${{ github.run_id }} -p "benchmark_genesis_*" --dir ./artifacts || true
         env:
           GH_TOKEN: ${{ github.token }}
 
