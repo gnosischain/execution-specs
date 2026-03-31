@@ -53,7 +53,7 @@ class TestGenerateBuildMatrix:
         matrix, _ = parse_matrix_output(result.stdout)
         features = {e["feature"] for e in matrix}
         assert "stable" in features
-        assert "benchmark" in features
+        assert "benchmark" not in features
         assert "benchmark_fast" not in features
         assert "bal" not in features
 
