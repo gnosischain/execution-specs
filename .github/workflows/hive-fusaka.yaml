@@ -64,7 +64,6 @@ env:
   GLOBAL_EXTRA_FLAGS: >-
     --client.checktimelimit=300s
     --docker.buildoutput
-    --docker.nocache
   # Flags used for the gnosis/eels/consume-engine simulator
   EELS_ENGINE_FLAGS: >-
     --sim.parallelism=2
