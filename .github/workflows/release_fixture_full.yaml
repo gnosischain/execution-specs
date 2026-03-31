@@ -14,6 +14,7 @@ jobs:
       combine_matrix: ${{ steps.matrix.outputs.combine_matrix }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/setup-uv
       - name: Generate build matrix
         id: matrix
         shell: bash
@@ -68,6 +69,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: false
+      - uses: ./.github/actions/setup-uv
       - name: Install pigz
         run: sudo apt-get install -y pigz
       - name: Download and merge split artifacts
