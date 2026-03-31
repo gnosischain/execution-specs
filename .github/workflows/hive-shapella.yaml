@@ -64,14 +64,14 @@ env:
     --docker.buildoutput
   # Flags used for the gnosis/eels/consume-engine simulator
   EELS_ENGINE_FLAGS: >-
-    --sim.parallelism=6
+    --sim.parallelism=2
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
     --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
     --sim.loglevel=3
     --sim.limit=.*Shanghai.*
   # Flags used for the gnosis/eels/consume-rlp simulator
   EELS_RLP_FLAGS: >-
-    --sim.parallelism=6
+    --sim.parallelism=2
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
     --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
     --sim.loglevel=3
@@ -130,6 +130,7 @@ jobs:
         ${{ github.head_ref || inputs }}-${{ matrix.client }}-${{ matrix.simulator }}
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         client: >-
           ${{ fromJSON(format('[{0}]', inputs.client || '
