@@ -27,44 +27,28 @@ def run_script(script: Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
-def parse_matrix_output(
-    stdout: str,
-) -> tuple[list[dict], list[dict]]:
-    """Parse build_matrix and combine_matrix from script stdout."""
-    lines = {
+def parse_matrix_output(stdout: str) -> dict[str, str]:
+    """Parse key=value output from generate_build_matrix.py."""
+    return {
         k: v
         for line in stdout.strip().splitlines()
         if "=" in line
         for k, v in [line.split("=", 1)]
     }
-    return (
-        json.loads(lines["build_matrix"]),
-        json.loads(lines["combine_matrix"]),
-    )
 
 
 class TestGenerateBuildMatrix:
     """Test generate_build_matrix.py."""
 
-    def test_all_mode_includes_non_feature_only(self):
-        """Verify --all excludes feature_only entries."""
-        result = run_script(BUILD_MATRIX_SCRIPT, "--all")
-        assert result.returncode == 0
-        matrix, _ = parse_matrix_output(result.stdout)
-        features = {e["feature"] for e in matrix}
-        assert "mainnet" in features
-        assert "benchmark" not in features
-        assert "benchmark_fast" not in features
-        assert "bal" not in features
-
     def test_split_feature_produces_entries_per_range(self):
         """Verify a split feature expands into one entry per range."""
         result = run_script(BUILD_MATRIX_SCRIPT, "mainnet")
         assert result.returncode == 0
-        matrix, combine = parse_matrix_output(result.stdout)
+        out = parse_matrix_output(result.stdout)
+        matrix = json.loads(out["build_matrix"])
         assert len(matrix) > 1
-        combine_features = [c["feature"] for c in combine]
-        assert "mainnet" in combine_features
+        assert out["feature_name"] == "mainnet"
+        assert out["combine_labels"] != ""
         labels = [e["label"] for e in matrix]
         assert all(lbl != "" for lbl in labels)
         assert all(e["from_fork"] != "" for e in matrix)
@@ -74,9 +58,11 @@ class TestGenerateBuildMatrix:
         """Verify a feature without fork-ranges produces one entry."""
         result = run_script(BUILD_MATRIX_SCRIPT, "benchmark")
         assert result.returncode == 0
-        matrix, combine = parse_matrix_output(result.stdout)
+        out = parse_matrix_output(result.stdout)
+        matrix = json.loads(out["build_matrix"])
         assert len(matrix) == 1
-        assert combine == []
+        assert out["feature_name"] == "benchmark"
+        assert out["combine_labels"] == ""
         assert matrix[0]["label"] == ""
         assert matrix[0]["from_fork"] == ""
         assert matrix[0]["until_fork"] == ""
@@ -85,22 +71,11 @@ class TestGenerateBuildMatrix:
         """Verify feature_only entries work when named directly."""
         result = run_script(BUILD_MATRIX_SCRIPT, "bal")
         assert result.returncode == 0
-        matrix, combine = parse_matrix_output(result.stdout)
+        out = parse_matrix_output(result.stdout)
+        matrix = json.loads(out["build_matrix"])
         assert len(matrix) == 1
         assert matrix[0]["feature"] == "bal"
-        assert combine == []
-
-    def test_multiple_features(self):
-        """Verify passing multiple feature names."""
-        result = run_script(BUILD_MATRIX_SCRIPT, "mainnet", "benchmark")
-        assert result.returncode == 0
-        matrix, combine = parse_matrix_output(result.stdout)
-        features = [e["feature"] for e in matrix]
-        assert "mainnet" in features
-        assert "benchmark" in features
-        combine_features = [c["feature"] for c in combine]
-        assert "mainnet" in combine_features
-        assert "benchmark" not in combine_features
+        assert out["combine_labels"] == ""
 
     def test_unknown_feature_fails(self):
         """Verify error exit for unknown feature name."""
@@ -116,12 +91,13 @@ class TestGenerateBuildMatrix:
 
     def test_output_is_valid_github_actions_format(self):
         """Verify output lines are key=value for GITHUB_OUTPUT."""
-        result = run_script(BUILD_MATRIX_SCRIPT, "--all")
+        result = run_script(BUILD_MATRIX_SCRIPT, "mainnet")
         assert result.returncode == 0
         lines = result.stdout.strip().splitlines()
-        assert len(lines) == 2
+        assert len(lines) == 3
         assert lines[0].startswith("build_matrix=")
-        assert lines[1].startswith("combine_matrix=")
+        assert lines[1].startswith("feature_name=")
+        assert lines[2].startswith("combine_labels=")
 
 
 class TestCreateReleaseTarball:

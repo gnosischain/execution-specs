@@ -1,4 +1,4 @@
-name: Create Fixture Feature Release
+name: Create Fixture Release
 
 on:
   push:
@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_matrix: ${{ steps.matrix.outputs.build_matrix }}
-      combine_matrix: ${{ steps.matrix.outputs.combine_matrix }}
+      feature_name: ${{ steps.matrix.outputs.feature_name }}
+      combine_labels: ${{ steps.matrix.outputs.combine_labels }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -68,13 +69,10 @@ jobs:
           split_label: ${{ matrix.label }}
 
   combine:
-    name: combine (${{ matrix.feature }})
+    name: combine (${{ needs.setup.outputs.feature_name }})
     needs: [setup, build]
-    if: needs.setup.outputs.combine_matrix != '[]'
+    if: needs.setup.outputs.combine_labels != ''
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include: ${{ fromJson(needs.setup.outputs.combine_matrix) }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -86,7 +84,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p combined
-          for label in ${{ matrix.labels }}; do
+          for label in ${{ needs.setup.outputs.combine_labels }}; do
             echo "Downloading: fixtures__${label}"
             if gh run download ${{ github.run_id }} -n "fixtures__${label}" --dir "split_artifacts/fixtures__${label}"; then
               cp -r "split_artifacts/fixtures__${label}"/* combined/
@@ -101,12 +99,12 @@ jobs:
       - name: Create release tarball
         shell: bash
         run: |
-          uv run -q .github/scripts/create_release_tarball.py combined fixtures_${{ matrix.feature }}.tar.gz
+          uv run -q .github/scripts/create_release_tarball.py combined fixtures_${{ needs.setup.outputs.feature_name }}.tar.gz
       - name: Upload combined fixture tarball
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: fixtures_${{ matrix.feature }}
-          path: fixtures_${{ matrix.feature }}.tar.gz
+          name: fixtures_${{ needs.setup.outputs.feature_name }}
+          path: fixtures_${{ needs.setup.outputs.feature_name }}.tar.gz
 
   release:
     runs-on: ubuntu-latest

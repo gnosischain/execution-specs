@@ -193,43 +193,33 @@ def build_matrices(
     return build, combine
 
 
-def get_releasable_features(config: dict) -> list[str]:
-    """Return feature names that are not marked ``feature_only``."""
-    return [
-        name
-        for name, props in config.items()
-        if isinstance(props, dict) and not props.get("feature_only", False)
-    ]
-
-
 def main() -> None:
     """Entry point."""
-    if len(sys.argv) < 2:
+    if len(sys.argv) != 2:
         print(
-            "Usage: generate_build_matrix.py"
-            " --all | <feature> [<feature> ...]",
+            "Usage: generate_build_matrix.py <feature>",
             file=sys.stderr,
         )
         sys.exit(1)
 
     config = load_config(FEATURE_CONFIG)
+    name = sys.argv[1]
 
-    if sys.argv[1] == "--all":
-        names = get_releasable_features(config)
-    else:
-        names = sys.argv[1:]
-        for name in names:
-            if name not in config or not isinstance(config[name], dict):
-                print(
-                    f"Error: feature '{name}' not found in {FEATURE_CONFIG}.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
+    if name not in config or not isinstance(config[name], dict):
+        print(
+            f"Error: feature '{name}' not found in {FEATURE_CONFIG}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-    build, combine = build_matrices(config, names)
+    build, combine = build_matrices(config, [name])
+
+    # Extract combine labels for this feature (empty if unsplit).
+    labels = combine[0]["labels"] if combine else ""
 
     print(f"build_matrix={json.dumps(build)}")
-    print(f"combine_matrix={json.dumps(combine)}")
+    print(f"feature_name={name}")
+    print(f"combine_labels={labels}")
 
 
 if __name__ == "__main__":
