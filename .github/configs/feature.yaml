@@ -23,13 +23,9 @@ fork-ranges:
     from: Amsterdam
     until: Amsterdam
 
-stable:
-  evm-type: stable
-  fill-params: --until=Osaka --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest
-
-develop:
-  evm-type: develop
-  fill-params: --until=Amsterdam --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest
+mainnet:
+  evm-type: eels
+  fill-params: --until=BPO2 --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest
 
 benchmark:
   evm-type: benchmark
@@ -42,6 +38,6 @@ benchmark_fast:
   feature_only: true
 
 bal:
-  evm-type: develop
+  evm-type: eels
   fill-params: --fork=Amsterdam --fill-static-tests
   feature_only: true

@@ -52,19 +52,19 @@ class TestGenerateBuildMatrix:
         assert result.returncode == 0
         matrix, _ = parse_matrix_output(result.stdout)
         features = {e["feature"] for e in matrix}
-        assert "stable" in features
+        assert "mainnet" in features
         assert "benchmark" not in features
         assert "benchmark_fast" not in features
         assert "bal" not in features
 
     def test_split_feature_produces_entries_per_range(self):
         """Verify a split feature expands into one entry per range."""
-        result = run_script(BUILD_MATRIX_SCRIPT, "stable")
+        result = run_script(BUILD_MATRIX_SCRIPT, "mainnet")
         assert result.returncode == 0
         matrix, combine = parse_matrix_output(result.stdout)
         assert len(matrix) > 1
         combine_features = [c["feature"] for c in combine]
-        assert "stable" in combine_features
+        assert "mainnet" in combine_features
         labels = [e["label"] for e in matrix]
         assert all(lbl != "" for lbl in labels)
         assert all(e["from_fork"] != "" for e in matrix)
@@ -92,37 +92,15 @@ class TestGenerateBuildMatrix:
 
     def test_multiple_features(self):
         """Verify passing multiple feature names."""
-        result = run_script(BUILD_MATRIX_SCRIPT, "stable", "benchmark")
+        result = run_script(BUILD_MATRIX_SCRIPT, "mainnet", "benchmark")
         assert result.returncode == 0
         matrix, combine = parse_matrix_output(result.stdout)
         features = [e["feature"] for e in matrix]
-        assert "stable" in features
+        assert "mainnet" in features
         assert "benchmark" in features
         combine_features = [c["feature"] for c in combine]
-        assert "stable" in combine_features
+        assert "mainnet" in combine_features
         assert "benchmark" not in combine_features
-
-    def test_fork_ranges_deduplicated_across_features(self):
-        """Verify shared fork ranges are built once, not per feature."""
-        result = run_script(BUILD_MATRIX_SCRIPT, "stable", "develop")
-        assert result.returncode == 0
-        matrix, combine = parse_matrix_output(result.stdout)
-
-        # Stable and develop share pre-cancun..osaka; only bpo and
-        # amsterdam are unique to develop.
-        labels = [e["label"] for e in matrix]
-        assert labels.count("pre-cancun") == 1
-        assert labels.count("cancun") == 1
-        assert labels.count("prague") == 1
-        assert labels.count("osaka") == 1
-
-        # Combine matrix maps each feature to its applicable labels.
-        by_feature = {c["feature"]: c["labels"] for c in combine}
-        assert "pre-cancun" in by_feature["stable"]
-        assert "osaka" in by_feature["stable"]
-        assert "bpo" not in by_feature["stable"]
-        assert "bpo" in by_feature["develop"]
-        assert "amsterdam" in by_feature["develop"]
 
     def test_unknown_feature_fails(self):
         """Verify error exit for unknown feature name."""
