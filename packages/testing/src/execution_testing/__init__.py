@@ -30,7 +30,7 @@ from .exceptions import (
     TransactionException,
 )
 from .fixtures import BaseFixture, FixtureCollector
-from .forks import Fork, GasCosts
+from .forks import Fork, GasCosts, TransitionFork
 from .specs import (
     BaseTest,
     BenchmarkTest,
@@ -89,11 +89,13 @@ from .tools import (
     CodeGasMeasure,
     Conditional,
     Create2PreimageLayout,
+    CreatePreimageLayout,
     DeploymentTestType,
     FixedIterationsBytecode,
     Initcode,
     IteratingBytecode,
     ParameterSet,
+    SequentialAddressLayout,
     Switch,
     TransactionWithCost,
     While,
@@ -180,6 +182,7 @@ __all__ = (
     "ReferenceSpecTypes",
     "Removable",
     "Requests",
+    "SequentialAddressLayout",
     "StateTest",
     "StateTestFiller",
     "Storage",
@@ -198,6 +201,7 @@ __all__ = (
     "TransactionTestFiller",
     "TransactionType",
     "TransactionWithCost",
+    "TransitionFork",
     "While",
     "CoerceBytes",
     "Withdrawal",
@@ -209,6 +213,7 @@ __all__ = (
     "compute_create2_address",
     "compute_deterministic_create2_address",
     "Create2PreimageLayout",
+    "CreatePreimageLayout",
     "extend_with_defaults",
     "gas_test",
     "generate_system_contract_deploy_test",

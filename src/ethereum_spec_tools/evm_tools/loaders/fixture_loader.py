@@ -80,25 +80,14 @@ class Load(BaseLoad):
             balance = U256(hex_to_uint(account_state.get("balance", "0x0")))
             code = hex_to_bytes(account_state.get("code", ""))
 
-            if uses_code_hash:
-                code_hash = self.fork.set_code(state, code)
-                account = self.fork.Account(
-                    nonce=nonce,
-                    balance=balance,
-                    code_hash=code_hash,
-                )
-            else:
-                account = self.fork.Account(
-                    nonce=nonce,
-                    balance=balance,
-                    code=code,
-                )
+            code_hash = self.fork.store_code(state, code)
+            account = self.fork.Account(
+                nonce=nonce,
+                balance=balance,
+                code_hash=code_hash,
+            )
 
-            if (
-                self.fork.proof_of_stake
-                and account == EMPTY_ACCOUNT
-                and address != SYSTEM_ADDRESS
-            ):
+            if self.fork.proof_of_stake and account == EMPTY_ACCOUNT and address != SYSTEM_ADDRESS:
                 raise StateWithEmptyAccount(f"Empty account at {address_hex}.")
 
             self.fork.set_account(state, address, account)

@@ -6,6 +6,8 @@ and that modifies pytest hooks in order to fill test specs for all tests
 and writes the generated fixtures to file.
 """
 
+from __future__ import annotations
+
 import atexit
 import configparser
 import datetime
@@ -19,7 +21,7 @@ import time
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Self, Set, Type
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Self, Set, Type
 
 import pytest
 import xdist
@@ -63,12 +65,16 @@ from execution_testing.fixtures.pre_alloc_groups import (
 )
 from execution_testing.forks import (
     Fork,
-    get_transition_fork_predecessor,
+    TransitionFork,
     get_transition_forks,
 )
 from execution_testing.specs import BaseTest
 from execution_testing.specs.base import FillResult, OpMode
 from execution_testing.test_types import EnvironmentDefaults
+from execution_testing.test_types.chain_config_types import (
+    DEFAULT_CHAIN_ID,
+    ChainConfigDefaults,
+)
 from execution_testing.tools.utility.versioning import (
     generate_github_url,
     get_current_commit_hash_or_tag,
@@ -83,11 +89,14 @@ from ..shared.helpers import (
     get_spec_format_for_item,
     is_help_or_collectonly_mode,
     labeled_format_parameter_set,
+    option_was_explicitly_set,
 )
 from ..spec_version_checker.spec_version_checker import (
     get_ref_spec_from_module,
 )
-from .pre_alloc import Alloc
+
+if TYPE_CHECKING:
+    from .pre_alloc import Alloc
 
 # Fixture output dir for keyboard interrupt cleanup (set in pytest_configure).
 # Used by _merge_on_exit to merge partial JSONL files on Ctrl+C or SIGTERM.
@@ -576,6 +585,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         ),
     )
     evm_group.addoption(
+        "--chain-id",
+        action="store",
+        dest="chain_id",
+        type=int,
+        default=None,
+        help=(
+            "Specify the chain ID for the test filling. "
+            f"Default: {ChainConfigDefaults.chain_id}."
+        ),
+    )
+    evm_group.addoption(
         "--traces",
         action="store_true",
         dest="evm_collect_traces",
@@ -777,6 +797,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
             "Only creates debug output when explicitly specified."
         ),
     )
+    debug_group.addoption(
+        "--post-verifications",
+        action="store_true",
+        dest="post_verifications",
+        default=False,
+        help=(
+            "Include a postVerifications field in fixture output "
+            "that records which post-state checks were "
+            "performed during filling."
+        ),
+    )
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -797,7 +828,7 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     # Register custom markers
     # Modify the block gas limit if specified.
-    if config.getoption("block_gas_limit"):
+    if option_was_explicitly_set(config, "--block-gas-limit"):
         EnvironmentDefaults.gas_limit = config.getoption("block_gas_limit")
 
     # Initialize fixture output configuration
@@ -926,6 +957,17 @@ def pytest_configure(config: pytest.Config) -> None:
         config.t8n_cache_stats_aggregated = (  # type: ignore[attr-defined]
             TransitionToolCacheStats()
         )
+
+    # Default chain id can be overwritten by user flag or env var
+    ChainConfigDefaults.chain_id = DEFAULT_CHAIN_ID
+    chain_id = config.getoption("chain_id")
+    if chain_id is None:
+        env_chain_id = os.environ.get("CHAIN_ID")
+        if env_chain_id is not None:
+            chain_id = int(env_chain_id)
+
+    if chain_id is not None:
+        ChainConfigDefaults.chain_id = int(chain_id)
 
 
 @pytest.hookimpl(trylast=True)
@@ -1595,7 +1637,7 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
     def base_test_parametrizer_func(
         request: pytest.FixtureRequest,
         t8n: TransitionTool,
-        fork: Fork,
+        fork: Fork | TransitionFork,
         reference_spec: ReferenceSpec,
         pre: Alloc,
         output_dir: Path,
@@ -1692,6 +1734,7 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                         pre_alloc_hash=pre_alloc_hash,
                         test_id=test_id,
                         fork=fork,
+                        chain_id=ChainConfigDefaults.chain_id,
                         environment=genesis_environment,
                         pre=pre,
                     )
@@ -1736,6 +1779,11 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                         )
                 assert fill_result is not None
                 fixture = fill_result.fixture
+                if (
+                    request.config.getoption("post_verifications")
+                    and fill_result.post_verifications is not None
+                ):
+                    fixture.post_verifications = fill_result.post_verifications
                 # If operation mode is benchmarking, check the gas used.
                 self.validate_benchmark_gas(
                     benchmark_gas_used=fill_result.benchmark_gas_used,
@@ -1764,6 +1812,14 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                             fixture.post_state, group.pre
                         )
 
+                fill_metadata: Dict[str, Any] = {}
+                if t8n.opcode_count is not None:
+                    fill_metadata["opcode_count"] = (
+                        t8n.opcode_count.model_dump()
+                    )
+                if fill_result.metadata:
+                    fill_metadata.update(fill_result.metadata)
+
                 fixture.fill_info(
                     t8n.version(),
                     test_case_description,
@@ -1771,6 +1827,7 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                     opcode_count=t8n.opcode_count,
                     ref_spec=reference_spec,
                     _info_metadata=t8n._info_metadata,
+                    metadata=fill_metadata,
                 )
 
                 output_subdir = resolve_fixture_subfolder(
@@ -1855,6 +1912,9 @@ def pytest_collection_modifyitems(
     These can't be handled in this plugins pytest_generate_tests() as the fork
     parametrization occurs in the forks plugin.
     """
+    # Track specs with no fixture formats for warning message
+    specs_without_fixture_formats: Dict[str, Set[str]] = {}
+
     items_for_removal = []
     for i, item in enumerate(items):
         item.name = item.name.strip().replace(" ", "-")
@@ -1866,10 +1926,19 @@ def pytest_collection_modifyitems(
         if not params or "fork" not in params or params["fork"] is None:
             items_for_removal.append(i)
             continue
-        fork: Fork = params["fork"]
+        fork: Fork | TransitionFork = params["fork"]
         spec_type, fixture_format = get_spec_format_for_item(params)
         if isinstance(fixture_format, NotSetType):
             items_for_removal.append(i)
+            # Track this spec type and the test file
+            spec_name = spec_type.__name__
+            if spec_name not in specs_without_fixture_formats:
+                specs_without_fixture_formats[spec_name] = set()
+            # Get the test file path from the item
+            test_file = (
+                str(item.fspath) if hasattr(item, "fspath") else str(item.path)
+            )
+            specs_without_fixture_formats[spec_name].add(test_file)
             continue
         assert issubclass(fixture_format, BaseFixture)
         if not fixture_format.supports_fork(fork):
@@ -1904,7 +1973,7 @@ def pytest_collection_modifyitems(
                 marker.name == "valid_at_transition_to" for marker in markers
             )
             if has_state_test and has_valid_transition:
-                base_fork = get_transition_fork_predecessor(fork)
+                base_fork = fork.transitions_from()
                 item._nodeid = item._nodeid.replace(
                     f"fork_{fork.name()}",
                     f"fork_{base_fork.name()}",
@@ -1912,6 +1981,39 @@ def pytest_collection_modifyitems(
 
     for i in reversed(items_for_removal):
         items.pop(i)
+
+    # Warn users if tests were removed because they have no fixture formats
+    if specs_without_fixture_formats:
+        reporter = config.pluginmanager.get_plugin("terminalreporter")
+        if reporter and isinstance(reporter, TerminalReporter):
+            reporter.write_line("")
+            reporter.write_sep(
+                "=",
+                "NOTICE: Tests ignored (as expected; no fixture formats)",
+                yellow=True,
+                bold=True,
+            )
+            for spec_name, test_files in specs_without_fixture_formats.items():
+                reporter.write_line(
+                    f"  {spec_name} has no supported_fixture_formats "
+                    f"for 'fill' command.",
+                    yellow=True,
+                )
+                for test_file in sorted(test_files):
+                    reporter.write_line(f"    - {test_file}", yellow=True)
+            reporter.write_line("")
+            reporter.write_line(
+                "  These tests are designed for the 'execute' command, "
+                "not 'fill'.",
+                yellow=True,
+            )
+            reporter.write_line(
+                "  Use 'uv run execute hive' or 'uv run execute remote' "
+                "instead.",
+                yellow=True,
+            )
+            reporter.write_sep("=", yellow=True, bold=True)
+            reporter.write_line("")
 
     # Build base_nodeid cache and identify slow groups.
     # If ANY fixture format variant is marked slow, treat ALL variants as slow

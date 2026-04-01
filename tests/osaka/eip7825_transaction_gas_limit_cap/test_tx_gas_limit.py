@@ -37,14 +37,6 @@ REFERENCE_SPEC_GIT_PATH = ref_spec_7825.git_path
 REFERENCE_SPEC_VERSION = ref_spec_7825.version
 
 
-def effective_tx_gas_limit_cap(fork: Fork) -> int | None:
-    """Return the fork tx gas cap, clamped by the current env gas limit."""
-    tx_cap = fork.transaction_gas_limit_cap()
-    if tx_cap is None:
-        return None
-    return min(tx_cap, EnvironmentDefaults.gas_limit)
-
-
 def max_count_with_intrinsic_cost_at_most(
     cost_fn: Callable[[int], int], gas_limit: int
 ) -> int:
@@ -351,6 +343,7 @@ def total_cost_floor_per_token(fork: Fork) -> int:
 )
 @pytest.mark.parametrize("zero_byte", [True, False])
 @pytest.mark.valid_from("Osaka")
+@pytest.mark.eels_base_coverage
 def test_tx_gas_limit_cap_full_calldata(
     state_test: StateTestFiller,
     pre: Alloc,

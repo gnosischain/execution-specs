@@ -22,6 +22,7 @@ from ethereum.fork_criteria import ByBlockNumber, ByTimestamp, Unscheduled
 from ethereum.forks.amsterdam.block_access_lists import (
     BlockAccessIndex,
     BlockAccessListBuilder,
+    validate_block_access_list_gas_limit,
 )
 from ethereum_spec_tools.forks import Hardfork, TemporaryHardfork
 
@@ -337,24 +338,18 @@ class T8N(Load):
             k: self.fork.copy_trie(t)
             for (k, t) in state._storage_tries.items()
         }
-        # TODO: backport pass amsterdam
-        if self.fork.has_block_state:
-            self.alloc.state_backup = (
-                main_trie,
-                storage_tries,
-                dict(state._code_store),
-            )
-        else:
-            self.alloc.state_backup = (main_trie, storage_tries)
+        self.alloc.state_backup = (
+            main_trie,
+            storage_tries,
+            dict(state._code_store),
+        )
 
     def restore_state(self) -> None:
         """Restore the state from the backup."""
         state = self.alloc.state
         state._main_trie = self.alloc.state_backup[0]
         state._storage_tries = self.alloc.state_backup[1]
-        # TODO: backport pass amsterdam
-        if self.fork.has_block_state:
-            state._code_store = self.alloc.state_backup[2]
+        state._code_store = self.alloc.state_backup[2]
 
     def pay_block_rewards(self, block_reward: U256, block_env: Any) -> None:
         """Apply the block rewards to the block coinbase."""
@@ -478,6 +473,12 @@ class T8N(Load):
         if self.fork.has_hash_block_access_list:
             block_output.block_access_list = self.fork.build_block_access_list(
                 block_env.block_access_list_builder, block_env.state
+            )
+
+            # Validate block access list gas limit constraint (EIP-7928)
+            validate_block_access_list_gas_limit(
+                block_access_list=block_output.block_access_list,
+                block_gas_limit=block_env.block_gas_limit,
             )
 
     def run_blockchain_test(self) -> None:

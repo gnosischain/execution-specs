@@ -5,7 +5,7 @@ transactions are the events that move between states.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, TypeGuard
 
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes, Bytes0, Bytes32
@@ -481,6 +481,23 @@ Union type representing any valid transaction type.
 """
 
 
+AccessListCapableTransaction = (
+    AccessListTransaction
+    | FeeMarketTransaction
+    | BlobTransaction
+    | SetCodeTransaction
+)
+"""
+Transaction types that include an [EIP-2930]-style access list.
+
+See [`has_access_list`][hal] and [`Access`][a] for more details.
+
+[EIP-2930]: https://eips.ethereum.org/EIPS/eip-2930
+[hal]: ref:ethereum.forks.amsterdam.transactions.has_access_list
+[a]: ref:ethereum.forks.amsterdam.transactions.Access
+"""
+
+
 def encode_transaction(tx: Transaction) -> LegacyTransaction | Bytes:
     """
     Encode a transaction into its RLP or typed transaction format.
@@ -508,8 +525,12 @@ def decode_transaction(tx: LegacyTransaction | Bytes) -> Transaction:
     Decode a transaction from its RLP or typed transaction format.
     Needed because non-legacy transactions aren't RLP.
 
-    Legacy transactions are returned as-is, while other transaction types
-    are decoded based on their type identifier prefix.
+    Accept a ``LegacyTransaction`` object (returned as-is) or raw
+    bytes.
+
+    EIP-2718 states that the first byte distinguishes the format:
+    [0x00, 0x7f] is a typed transaction, [0xc0, 0xfe] is a legacy
+    transaction (RLP list prefix).
     """
     if isinstance(tx, Bytes):
         if tx[0] == 1:
@@ -520,6 +541,9 @@ def decode_transaction(tx: LegacyTransaction | Bytes) -> Transaction:
             return rlp.decode_to(BlobTransaction, tx[1:])
         elif tx[0] == 4:
             return rlp.decode_to(SetCodeTransaction, tx[1:])
+        elif tx[0] >= 0xC0:
+            assert tx[0] <= 0xFE
+            return rlp.decode_to(LegacyTransaction, tx)
         else:
             raise TransactionTypeError(tx[0])
     else:
@@ -598,12 +622,10 @@ def calculate_intrinsic_cost(tx: Transaction) -> Tuple[Uint, Uint]:
     from .vm.eoa_delegation import GAS_AUTH_PER_EMPTY_ACCOUNT
     from .vm.gas import init_code_cost
 
-    zero_bytes = 0
-    for byte in tx.data:
-        if byte == 0:
-            zero_bytes += 1
+    num_zeros = Uint(tx.data.count(0))
+    num_non_zeros = ulen(tx.data) - num_zeros
 
-    tokens_in_calldata = Uint(zero_bytes + (len(tx.data) - zero_bytes) * 4)
+    tokens_in_calldata = num_zeros + num_non_zeros * Uint(4)
     # EIP-7623 floor price (note: no EVM costs)
     calldata_floor_gas_cost = (
         tokens_in_calldata * GAS_TX_DATA_TOKEN_FLOOR + GAS_TX_BASE
@@ -617,15 +639,7 @@ def calculate_intrinsic_cost(tx: Transaction) -> Tuple[Uint, Uint]:
         create_cost = Uint(0)
 
     access_list_cost = Uint(0)
-    if isinstance(
-        tx,
-        (
-            AccessListTransaction,
-            FeeMarketTransaction,
-            BlobTransaction,
-            SetCodeTransaction,
-        ),
-    ):
+    if has_access_list(tx):
         for access in tx.access_list:
             access_list_cost += GAS_TX_ACCESS_LIST_ADDRESS
             access_list_cost += (
@@ -886,3 +900,17 @@ def get_transaction_hash(tx: Bytes | LegacyTransaction) -> Hash32:
         return keccak256(rlp.encode(tx))
     else:
         return keccak256(tx)
+
+
+def has_access_list(
+    tx: Transaction,
+) -> TypeGuard[AccessListCapableTransaction]:
+    """
+    Return whether the transaction has an [EIP-2930]-style access list.
+
+    [EIP-2930]: https://eips.ethereum.org/EIPS/eip-2930
+    """
+    return isinstance(
+        tx,
+        AccessListCapableTransaction,
+    )

@@ -10,9 +10,9 @@ from execution_testing import (
     Address,
     Alloc,
     Block,
-    Fork,
     Requests,
     Transaction,
+    TransitionFork,
     generate_system_contract_deploy_test,
 )
 from execution_testing.forks import Prague
@@ -24,6 +24,7 @@ REFERENCE_SPEC_GIT_PATH = ref_spec_7002.git_path
 REFERENCE_SPEC_VERSION = ref_spec_7002.version
 
 
+@pytest.mark.eels_base_coverage
 @generate_system_contract_deploy_test(
     fork=Prague,
     tx_json_path=Path(realpath(__file__)).parent / "contract_deploy_tx.json",
@@ -32,7 +33,7 @@ REFERENCE_SPEC_VERSION = ref_spec_7002.version
 )
 def test_system_contract_deployment(
     *,
-    fork: Fork,
+    fork: TransitionFork,
     pre: Alloc,
     **kwargs: Any,
 ) -> Generator[Block, None, None]:
@@ -44,7 +45,9 @@ def test_system_contract_deployment(
         fee=Spec.get_fee(0),
         source_address=sender,
     )
-    intrinsic_gas_calculator = fork.transaction_intrinsic_cost_calculator()
+    intrinsic_gas_calculator = (
+        fork.transitions_to().transaction_intrinsic_cost_calculator()
+    )
     test_transaction_gas = intrinsic_gas_calculator(
         calldata=withdrawal_request.calldata
     )

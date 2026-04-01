@@ -27,30 +27,41 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
 
 jobs:
   static:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: recursive
       - name: Ensure SHA pinned actions
-        uses: zgosalvez/github-actions-ensure-sha-pinned-actions@6124774845927d14c601359ab8138699fa5b70c3 # v4.0.1
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: "3.11"
-      - name: Install Tox and any other packages
+        uses: zgosalvez/github-actions-ensure-sha-pinned-actions@70c4af2ed5282c51ba40566d026d6647852ffa3e # v5.0.1
+      - uses: ./.github/actions/setup-uv
+      - name: Install build dependencies
         shell: bash
-        run: |
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install --yes --force-yes build-essential pkg-config
-          pip install 'tox>=4.11,<5' requests
+        run: sudo DEBIAN_FRONTEND=noninteractive apt-get install --yes --force-yes build-essential pkg-config
+      - name: Detect Python version
+        id: python
+        shell: bash
+        run: echo "version=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" >> "$GITHUB_OUTPUT"
+      - name: Restore mypy cache
+        uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-py${{ steps.python.outputs.version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
+          restore-keys: |
+            mypy-${{ runner.os }}-py${{ steps.python.outputs.version }}-${{ hashFiles('uv.lock') }}-
+            mypy-${{ runner.os }}-py${{ steps.python.outputs.version }}-
       - name: Run static checks
         run: tox -e static
-      - name: Setup uv
-        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182 # v5.4.1
+      - name: Save mypy cache
+        if: always()
+        uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-py${{ steps.python.outputs.version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
       - name: Validate workflow config variables
         run: |
           cat >> .github/actionlint.yaml << 'EOF'
@@ -64,23 +75,42 @@ jobs:
           uvx --from actionlint-py actionlint
 
   py3:
+    name: py3 (${{ matrix.label }})
     runs-on: ubuntu-latest
     needs: static
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: pre-cancun
+            from_fork: Frontier
+            until_fork: Shanghai
+          - label: cancun
+            from_fork: Cancun
+            until_fork: Cancun
+          - label: prague
+            from_fork: Prague
+            until_fork: Prague
+          - label: osaka
+            from_fork: Osaka
+            until_fork: Osaka
+          - label: amsterdam
+            from_fork: Amsterdam
+            until_fork: Amsterdam
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: recursive
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+      - uses: ./.github/actions/setup-uv
         with:
-          python-version: "3.11"
+          python-version: "3.14"
       - uses: ./.github/actions/setup-env
-      - name: Run py3 tests
-        run: tox -e py3
+      - name: Run py3 tests (${{ matrix.label }})
+        run: tox -e py3 -- --from ${{ matrix.from_fork }} --until ${{ matrix.until_fork }}
         env:
           PYTEST_XDIST_AUTO_NUM_WORKERS: auto
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
         with:
           files: .tox/coverage.xml
           flags: unittests
@@ -94,11 +124,10 @@ jobs:
       matrix:
         fork: [Paris, Shanghai, Cancun, Prague, Osaka]
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: recursive
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+      - uses: ./.github/actions/setup-uv
         with:
           python-version: "pypy3.11"
       - uses: ./.github/actions/setup-env
@@ -108,35 +137,28 @@ jobs:
           PYPY_GC_MAX: "2G"
           PYPY_GC_MIN: "1G"
 
-  # json_infra:
-  #   runs-on: ubuntu-latest
-  #   needs: static
-  #   steps:
-  #     - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
-  #       with:
-  #         submodules: recursive
-  #         fetch-depth: 0  # Fetch full history for commit comparison
-  #     - name: Setup Python
-  #       uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-  #       with:
-  #         python-version: "3.11"
-  #     - uses: ./.github/actions/setup-env
-  #     - uses: ./.github/actions/get-changed-files
-  #       id: get-changed-files
-  #     - name: Run json infra tests
-  #       run: tox -e json_infra -- --file-list="${{ steps.get-changed-files.outputs.file_list }}"
+  json_loader:
+    runs-on: ubuntu-latest
+    needs: static
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
+      - uses: ./.github/actions/setup-uv
+      - uses: ./.github/actions/setup-env
+      - name: Fill and run json_loader tests
+        run: tox -e json_loader
+        env:
+          PYTEST_XDIST_AUTO_NUM_WORKERS: auto
 
   tests_pytest_py3:
     runs-on: ubuntu-latest
     needs: static
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: recursive
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: "3.11"
+      - uses: ./.github/actions/setup-uv
       - uses: ./.github/actions/setup-env
       - uses: ./.github/actions/build-evmone
       - name: Run py3 tests
@@ -148,11 +170,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: static
     steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           submodules: recursive
-      - name: Setup Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+      - uses: ./.github/actions/setup-uv
         with:
           python-version: "pypy3.11"
       - uses: ./.github/actions/setup-env

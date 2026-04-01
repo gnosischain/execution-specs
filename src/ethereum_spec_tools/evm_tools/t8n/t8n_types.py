@@ -4,13 +4,14 @@ Define the types used by the t8n tool.
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ethereum_rlp import Simple, rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
 
 from ethereum.crypto.hash import Hash32, keccak256
+from ethereum.state import EMPTY_CODE_HASH
 from ethereum.utils.hexadecimal import hex_to_bytes, hex_to_u256, hex_to_uint
 
 from ..loaders.transaction_loader import TransactionLoad, UnsupportedTxError
@@ -64,15 +65,9 @@ class Alloc:
             if account.nonce:
                 account_data["nonce"] = hex(account.nonce)
 
-            # TODO: backport to forks before amsterdam
-            if hasattr(account, "code_hash"):
-                from ethereum.state import EMPTY_CODE_HASH
-
-                if account.code_hash != EMPTY_CODE_HASH:
-                    code = self.state.get_code(account.code_hash)
-                    account_data["code"] = "0x" + code.hex()
-            elif account.code:
-                account_data["code"] = "0x" + account.code.hex()
+            if account.code_hash != EMPTY_CODE_HASH:
+                code = self.state._code_store[account.code_hash]
+                account_data["code"] = "0x" + code.hex()
 
             if address in self.state._storage_tries:
                 account_data["storage"] = {
@@ -96,7 +91,7 @@ class Txs:
     def __init__(self, t8n: "T8N", stdin: Optional[Dict] = None):
         self.t8n = t8n
         self.successfully_parsed: List[int] = []
-        self.transactions: List[Tuple[Uint, Any]] = []
+        self.transactions: List[Any] = []
         self.rejected_txs = {}
         self.rlp_input = False
         self.all_txs = []
@@ -126,12 +121,14 @@ class Txs:
                     self.successfully_parsed.append(idx)
             except UnsupportedTxError as e:
                 self.t8n.logger.warning(
-                    f"Unsupported transaction type {idx}: {e.error_message}"
+                    f"Unsupported transaction at index {idx}: "
+                    f"{e.error_message}"
                 )
                 self.rejected_txs[idx] = (
                     f"Unsupported transaction type: {e.error_message}"
                 )
-                self.all_txs.append(e.encoded_params)
+                if e.encoded_params is not None:
+                    self.all_txs.append(e.encoded_params)
             except Exception as e:
                 msg = f"Failed to parse transaction {idx}: {str(e)}"
                 self.t8n.logger.warning(msg, exc_info=e)
@@ -222,9 +219,10 @@ class Txs:
             if t8n.fork.has_signing_hash_155:
                 if protected:
                     signing_hash = t8n.fork.signing_hash_155(
-                        tx_decoded, U64(1)
+                        tx_decoded, self.t8n.chain_id
                     )
-                    v_addend = U256(37)  # Assuming chain_id = 1
+                    # EIP-155: CHAIN_ID * 2 + 35
+                    v_addend = U256(self.t8n.chain_id) * U256(2) + U256(35)
                 else:
                     signing_hash = t8n.fork.signing_hash_pre155(tx_decoded)
                     v_addend = U256(27)
@@ -319,25 +317,18 @@ class Result:
             # to the older forks
             from ethereum.forks.amsterdam.state import apply_changes_to_state
             from ethereum.forks.amsterdam.state_tracker import (
-                extract_block_diffs,
+                extract_block_diff,
             )
 
-            account_changes, storage_changes, code_changes = (
-                extract_block_diffs(t8n._block_state)
-            )
+            block_diff = extract_block_diff(t8n._block_state)
             state_root_value, _ = (
                 t8n.alloc.state.compute_state_root_and_trie_changes(
-                    account_changes, storage_changes
+                    block_diff.account_changes, block_diff.storage_changes
                 )
             )
             self.state_root = state_root_value
             # Apply diffs to pre-state for alloc output
-            apply_changes_to_state(
-                t8n.alloc.state,
-                account_changes,
-                storage_changes,
-                code_changes,
-            )
+            apply_changes_to_state(t8n.alloc.state, block_diff)
         else:
             self.state_root = t8n.fork.state_root(block_env.state)
         self.receipts = self.get_receipts_from_output(t8n, block_output)
@@ -362,72 +353,6 @@ class Result:
             self.block_access_list_hash = t8n.fork.hash_block_access_list(
                 block_output.block_access_list
             )
-
-    @staticmethod
-    def _block_access_list_to_json(account_changes: Any) -> Any:
-        """
-        Convert BlockAccessList to JSON format matching the Pydantic models.
-        """
-        json_account_changes = []
-        for account in account_changes:
-            account_data: Dict[str, Any] = {
-                "address": "0x" + account.address.hex()
-            }
-
-            if account.storage_changes:
-                storage_changes = []
-                for slot_change in account.storage_changes:
-                    slot_data: Dict[str, Any] = {
-                        "slot": int(slot_change.slot),
-                        "slotChanges": [],
-                    }
-                    for change in slot_change.changes:
-                        slot_data["slotChanges"].append(
-                            {
-                                "blockAccessIndex": int(
-                                    change.block_access_index
-                                ),
-                                "postValue": int(change.new_value),
-                            }
-                        )
-                    storage_changes.append(slot_data)
-                account_data["storageChanges"] = storage_changes
-
-            if account.storage_reads:
-                account_data["storageReads"] = [
-                    int(slot) for slot in account.storage_reads
-                ]
-
-            if account.balance_changes:
-                account_data["balanceChanges"] = [
-                    {
-                        "blockAccessIndex": int(change.block_access_index),
-                        "postBalance": int(change.post_balance),
-                    }
-                    for change in account.balance_changes
-                ]
-
-            if account.nonce_changes:
-                account_data["nonceChanges"] = [
-                    {
-                        "blockAccessIndex": int(change.block_access_index),
-                        "postNonce": int(change.new_nonce),
-                    }
-                    for change in account.nonce_changes
-                ]
-
-            if account.code_changes:
-                account_data["codeChanges"] = [
-                    {
-                        "blockAccessIndex": int(change.block_access_index),
-                        "newCode": "0x" + change.new_code.hex(),
-                    }
-                    for change in account.code_changes
-                ]
-
-            json_account_changes.append(account_data)
-
-        return json_account_changes
 
     def json_encode_receipts(self) -> Any:
         """
@@ -510,9 +435,10 @@ class Result:
             data["blockException"] = self.block_exception
 
         if self.block_access_list is not None:
-            # Convert BAL to JSON format
-            data["blockAccessList"] = self._block_access_list_to_json(
-                self.block_access_list
+            # Output BAL as RLP-encoded hex bytes; the testing framework
+            # handles JSON serialization.
+            data["blockAccessList"] = encode_to_hex(
+                rlp.encode(self.block_access_list)
             )
 
         if self.block_access_list_hash is not None:
