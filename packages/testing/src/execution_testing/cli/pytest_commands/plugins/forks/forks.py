@@ -29,6 +29,7 @@ from execution_testing.forks import (
     ALL_FORKS,
     ALL_FORKS_WITH_TRANSITIONS,
     Fork,
+    ForkEIPSetAdapter,
     ForkSetAdapter,
     InvalidForkError,
     TransitionFork,
@@ -712,6 +713,13 @@ class ValidityMarker(ABC):
 
     mark: Mark | None
 
+    class ValidityMarkerCombinationError(Exception):
+        """
+        Combination of two validity markers generates an empty fork range.
+        """
+
+        pass
+
     def __init_subclass__(
         cls,
         marker_name: str | None = None,
@@ -749,12 +757,21 @@ class ValidityMarker(ABC):
         self, *fork_args: str
     ) -> Set[Fork | TransitionFork]:
         """Process the fork arguments."""
-        fork_set = ForkSetAdapter.validate_python(fork_args)
-        if len(fork_set) != len(fork_args):
+        fork_eips_set = ForkEIPSetAdapter.validate_python(fork_args)
+        if len(fork_eips_set) != len(fork_args):
             raise Exception(
                 f"Duplicate argument specified in '{self.marker_name}'"
             )
-        return fork_set
+        forks_set: Set[Fork | TransitionFork] = set()
+        for fork_eip in fork_eips_set:
+            if fork_eip.is_transition_fork:
+                forks_set.add(fork_eip)
+            else:
+                if not fork_eip.is_eip():
+                    forks_set.add(fork_eip)
+                else:
+                    forks_set |= fork_eip.enabling_forks()
+        return forks_set
 
     @staticmethod
     def get_all_validity_markers(
@@ -855,7 +872,14 @@ class ValidityMarker(ABC):
             )
         if self.flag:
             return forks - fork_set
-        return forks & fork_set
+        if not fork_set:
+            # Test is marked for an EIP that is not yet enabled in any
+            # fork.
+            return fork_set
+        resulting_set = forks & fork_set
+        if not resulting_set:
+            raise ValidityMarker.ValidityMarkerCombinationError()
+        return resulting_set
 
     @abstractmethod
     def _process_with_marker_args(
@@ -1125,17 +1149,39 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         test_fork_set = ValidityMarker.get_test_fork_set_from_metafunc(
             metafunc
         )
-    except Exception as e:
-        pytest.fail(f"Error generating tests for {test_name}: {e}")
-
-    if not test_fork_set:
+    except ValidityMarker.ValidityMarkerCombinationError:
+        markers = ValidityMarker.get_all_validity_markers(
+            metafunc.definition.iter_markers()
+        )
+        marker_names = [
+            f"@pytest.mark.{marker.marker_name}" for marker in markers
+        ]
         pytest.fail(
             "The test function's "
             f"'{test_name}' fork validity markers generate "
             "an empty fork range. Please check the arguments to its "
-            f"markers:  @pytest.mark.valid_from and "
-            f"@pytest.mark.valid_until."
+            f"markers: {', '.join(marker_names)}."
         )
+    except Exception as e:
+        pytest.fail(f"Error generating tests for {test_name}: {e}")
+
+    pytest_params: List[Any]
+    if not test_fork_set:
+        if metafunc.config.getoption("verbose") >= 2:
+            pytest_params = [
+                pytest.param(
+                    None,
+                    marks=[
+                        pytest.mark.skip(
+                            reason=(
+                                f"{test_name} is not enabled for any fork."
+                            )
+                        )
+                    ],
+                )
+            ]
+            metafunc.parametrize("fork", pytest_params, scope="function")
+        return
 
     # Get the intersection between the test's validity marker and the current
     # filling parameters.
@@ -1146,7 +1192,6 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if "fork" not in metafunc.fixturenames:
         return
 
-    pytest_params: List[Any]
     unsupported_forks: Set[Fork | TransitionFork] = (
         metafunc.config.unsupported_forks  # type: ignore
     )
