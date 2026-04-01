@@ -1,5 +1,5 @@
 name: Setup Environment
-description: Common setup for Ethereum Spec jobs
+description: Common setup for Gnosis Spec jobs
 runs:
   using: "composite"
   steps:
