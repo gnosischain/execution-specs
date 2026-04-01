@@ -94,7 +94,7 @@ jobs:
             cp -r "split_artifacts/fixtures__${label}"/* combined/
           done
           echo "Combined directory contents:"
-          find combined -maxdepth 3 -type d | head -30
+          find combined -maxdepth 3 -type d | head -30 || true
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Create release tarball
