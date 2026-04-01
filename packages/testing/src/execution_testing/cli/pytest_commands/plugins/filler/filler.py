@@ -1824,7 +1824,6 @@ def base_test_parametrizer(cls: Type[BaseTest]) -> Any:
                     t8n.version(),
                     test_case_description,
                     fixture_source_url=fixture_source_url,
-                    opcode_count=t8n.opcode_count,
                     ref_spec=reference_spec,
                     _info_metadata=t8n._info_metadata,
                     metadata=fill_metadata,
