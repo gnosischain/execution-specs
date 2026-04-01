@@ -96,6 +96,19 @@ jobs:
           find combined -maxdepth 3 -type d | head -30 || true
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: Merge split index files
+        shell: bash
+        run: |
+          SPLIT_DIRS=""
+          for label in ${{ needs.setup.outputs.combine_labels }}; do
+            dir="split_artifacts/fixtures__${label}"
+            if [ -d "$dir" ]; then
+              SPLIT_DIRS="$SPLIT_DIRS $dir"
+            fi
+          done
+          if [ -n "$SPLIT_DIRS" ]; then
+            uv run python .github/scripts/merge_index_files.py combined/.meta/index.json $SPLIT_DIRS
+          fi
       - name: Create release tarball
         shell: bash
         run: |
