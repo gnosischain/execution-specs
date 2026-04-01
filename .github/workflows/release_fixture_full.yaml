@@ -58,8 +58,6 @@ jobs:
           from_fork: ${{ matrix.from_fork }}
           until_fork: ${{ matrix.until_fork }}
           split_label: ${{ matrix.label }}
-          fill_args: ${{ matrix.fill_args }}
-          fill_k: ${{ matrix.fill_k }}
 
   combine:
     name: combine (${{ matrix.feature }})

@@ -161,17 +161,14 @@ def build_matrices(
         for r in all_ranges.values():
             if r["label"] not in seen_labels:
                 seen_labels.add(r["label"])
-                entry = {
-                    "feature": ref,
-                    "label": r["label"],
-                    "from_fork": r["from"],
-                    "until_fork": r["until"],
-                }
-                if "fill-args" in r:
-                    entry["fill_args"] = r["fill-args"]
-                if "fill-k" in r:
-                    entry["fill_k"] = r["fill-k"]
-                build.append(entry)
+                build.append(
+                    {
+                        "feature": ref,
+                        "label": r["label"],
+                        "from_fork": r["from"],
+                        "until_fork": r["until"],
+                    }
+                )
 
         # Combine entries map features to their applicable labels.
         for name in group_names:

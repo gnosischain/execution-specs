@@ -13,12 +13,6 @@ inputs:
   split_label:
     description: "Label for this fork-range split. Empty for unsplit builds."
     default: ""
-  fill_args:
-    description: "Override fork-range CLI args (e.g. for transition forks). Empty uses --from/--until."
-    default: ""
-  fill_k:
-    description: "pytest -k expression for additional test filtering."
-    default: ""
 runs:
   using: "composite"
   steps:
@@ -45,25 +39,12 @@ runs:
       run: sudo apt-get install -y pigz
     - name: Generate fixtures using fill
       shell: bash
-      env:
-        FILL_ARGS_OVERRIDE: ${{ inputs.fill_args }}
-        FILL_K: ${{ inputs.fill_k }}
       run: |
         IS_SPLIT="${{ inputs.split_label }}"
 
-        # Build -k array separately to preserve spaces in the expression.
-        K_ARGS=()
-        if [ -n "$FILL_K" ]; then
-          K_ARGS=(-k "$FILL_K")
-        fi
-
         if [ -n "$IS_SPLIT" ]; then
           OUTPUT_ARG="--output=fixtures_${{ inputs.release_name }}"
-          if [ -n "$FILL_ARGS_OVERRIDE" ]; then
-            FORK_ARGS="--generate-all-formats $FILL_ARGS_OVERRIDE"
-          else
-            FORK_ARGS="--generate-all-formats --from=${{ inputs.from_fork }} --until=${{ inputs.until_fork }}"
-          fi
+          FORK_ARGS="--generate-all-formats --from=${{ inputs.from_fork }} --until=${{ inputs.until_fork }}"
         else
           OUTPUT_ARG="--output=fixtures_${{ inputs.release_name }}.tar.gz"
           FORK_ARGS=""
@@ -72,9 +53,9 @@ runs:
         # Allow exit code 5 (NO_TESTS_COLLECTED) for fork ranges with no tests.
         EXIT_CODE=0
         if [ "${{ steps.evm-builder.outputs.impl }}" = "eels" ]; then
-          uv run fill -n ${{ steps.evm-builder.outputs.x-dist }} ${{ steps.properties.outputs.fill-params }} $FORK_ARGS "${K_ARGS[@]}" $OUTPUT_ARG --build-name ${{ inputs.release_name }} --no-html --durations=100 --log-level=DEBUG || EXIT_CODE=$?
+          uv run fill -n ${{ steps.evm-builder.outputs.x-dist }} ${{ steps.properties.outputs.fill-params }} $FORK_ARGS $OUTPUT_ARG --build-name ${{ inputs.release_name }} --no-html --durations=100 --log-level=DEBUG || EXIT_CODE=$?
         else
-          uv run fill -n ${{ steps.evm-builder.outputs.x-dist }} --evm-bin=${{ steps.evm-builder.outputs.evm-bin }} ${{ steps.properties.outputs.fill-params }} $FORK_ARGS "${K_ARGS[@]}" $OUTPUT_ARG --build-name ${{ inputs.release_name }} --no-html --durations=100 --log-level=DEBUG || EXIT_CODE=$?
+          uv run fill -n ${{ steps.evm-builder.outputs.x-dist }} --evm-bin=${{ steps.evm-builder.outputs.evm-bin }} ${{ steps.properties.outputs.fill-params }} $FORK_ARGS $OUTPUT_ARG --build-name ${{ inputs.release_name }} --no-html --durations=100 --log-level=DEBUG || EXIT_CODE=$?
         fi
         if [ "$EXIT_CODE" -ne 0 ] && [ "$EXIT_CODE" -ne 5 ]; then
           exit "$EXIT_CODE"

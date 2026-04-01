@@ -19,8 +19,6 @@ fork-ranges:
   - label: bpo
     from: BPO1
     until: BPO2
-    fill-args: --from OsakaToBPO1AtTime15k --until Amsterdam
-    fill-k: not fork_Amsterdam
   - label: amsterdam
     from: Amsterdam
     until: Amsterdam
