@@ -43,11 +43,6 @@ jobs:
         with:
           type: benchmark
 
-      - uses: ./.github/actions/build-evm-base
-        id: evm-builder
-        with:
-          type: benchmark
-
       - name: Run benchmark unit tests
         run: tox -e tests_benchmark_pytest_py3
         env:

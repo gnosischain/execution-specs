@@ -16,7 +16,6 @@ from execution_testing import (
     Conditional,
     Create2PreimageLayout,
     Fork,
-    Hash,
     Op,
     Transaction,
     While,
