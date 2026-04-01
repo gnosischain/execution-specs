@@ -35,7 +35,7 @@ from ethereum.exceptions import (
     InvalidSenderError,
     NonceMismatchError,
 )
-from ethereum.state import EMPTY_CODE_HASH, Account, Address
+from ethereum.state import EMPTY_CODE_HASH, Address
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
@@ -48,6 +48,7 @@ from .state import (
     State,
     destroy_account,
     get_account,
+    get_code,
     increment_nonce,
     set_account_balance,
     state_root,
@@ -557,7 +558,11 @@ def process_unchecked_system_transaction(
         Output of processing the system transaction.
 
     """
-    system_contract_code = get_account(block_env.state, target_address).code
+    system_contract_code = get_code(
+        block_env.state,
+        get_account(block_env.state, target_address).code_hash,
+    )
+
     return process_system_transaction(
         block_env,
         target_address,

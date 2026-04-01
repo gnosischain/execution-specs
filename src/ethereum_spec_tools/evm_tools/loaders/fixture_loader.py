@@ -68,12 +68,6 @@ class Load(BaseLoad):
         EMPTY_ACCOUNT = self.fork.EMPTY_ACCOUNT  # noqa N806
         SYSTEM_ADDRESS = self.fork.SYSTEM_ADDRESS  # noqa N806
 
-        # TODO: backport to previous forks.
-        # block_state is only in amsterdam, so its a
-        # good proxy for check for code_hash
-
-        uses_code_hash = self.fork.has_block_state
-
         for address_hex, account_state in raw.items():
             address = self.fork.hex_to_address(address_hex)
             nonce = hex_to_uint(account_state.get("nonce", "0x0"))
@@ -87,7 +81,11 @@ class Load(BaseLoad):
                 code_hash=code_hash,
             )
 
-            if self.fork.proof_of_stake and account == EMPTY_ACCOUNT and address != SYSTEM_ADDRESS:
+            if (
+                self.fork.proof_of_stake
+                and account == EMPTY_ACCOUNT
+                and address != SYSTEM_ADDRESS
+            ):
                 raise StateWithEmptyAccount(f"Empty account at {address_hex}.")
 
             self.fork.set_account(state, address, account)
