@@ -109,6 +109,8 @@ jobs:
           if [ ${#SPLIT_DIRS[@]} -gt 0 ]; then
             uv run python .github/scripts/merge_index_files.py combined/.meta/index.json "${SPLIT_DIRS[@]}"
           fi
+      - name: Free disk space
+        run: rm -rf split_artifacts/
       - name: Create release tarball
         shell: bash
         run: |
