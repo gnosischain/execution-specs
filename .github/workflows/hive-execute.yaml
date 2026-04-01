@@ -32,7 +32,7 @@ jobs:
       - name: Cache Docker images
         uses: ./.github/actions/cache-docker-images
         with:
-          images: "docker.io/ethereum/client-go:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
+          images: "ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
 
   test-execute-remote:
     name: Execute Remote E2E
@@ -48,7 +48,7 @@ jobs:
       - name: Checkout Hive
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          repository: ethereum/hive
+          repository: gnosischain/hive
           ref: master
           path: hive
 
@@ -78,7 +78,7 @@ jobs:
         id: start-hive
         uses: ./execution-specs/.github/actions/start-hive-dev
         with:
-          clients: go-ethereum
+          clients: go-ethereum-gnosis
           client-file: execution-specs/.github/configs/hive/latest.yaml
           hive-path: hive
           timeout: "120"
