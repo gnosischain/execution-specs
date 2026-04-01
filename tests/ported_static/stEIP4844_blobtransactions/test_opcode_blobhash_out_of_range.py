@@ -76,7 +76,7 @@ def test_opcode_blobhash_out_of_range(
         value=0x186A0,
         max_fee_per_gas=5000000000,
         max_priority_fee_per_gas=2,
-        max_fee_per_blob_gas=10,
+        max_fee_per_blob_gas=1000000000,
         blob_versioned_hashes=[
             Hash(
                 "0x01a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8"  # noqa: E501
