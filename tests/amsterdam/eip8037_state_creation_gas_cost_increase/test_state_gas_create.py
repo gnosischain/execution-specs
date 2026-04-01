@@ -13,9 +13,13 @@ from typing import Union
 import pytest
 from execution_testing import (
     Account,
+    Address,
     Alloc,
+    Block,
+    BlockchainTestFiller,
     Environment,
     Fork,
+    Header,
     Initcode,
     Op,
     StateTestFiller,
@@ -30,6 +34,12 @@ from .spec import ref_spec_8037
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_8037.git_path
 REFERENCE_SPEC_VERSION = ref_spec_8037.version
+
+
+@pytest.fixture
+def nonexistent_account(pre: Alloc) -> Address:
+    """Return a fresh address that does not exist in pre-state."""
+    return pre.fund_eoa(amount=0)
 
 
 @EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
@@ -799,3 +809,296 @@ def test_create_no_double_charge_new_account(
         create_address: Account(nonce=1),
     }
     state_test(pre=pre, tx=tx, post=post)
+
+
+# TODO: Review for bal-devnet-4. If EIP-8037 adopts top-level state gas
+# refund (https://github.com/ethereum/EIPs/pull/11476), the expected block
+# gas accounting in these tests will change and may need updating.
+@pytest.mark.parametrize(
+    "state_opcode",
+    [
+        pytest.param(Op.CALL, id="call_new_account"),
+        pytest.param(Op.CREATE, id="inner_create"),
+    ],
+)
+@pytest.mark.parametrize(
+    "deposit_fail_mode",
+    [
+        pytest.param("oversized_code", id="oversized_code"),
+        pytest.param("oog_deposit", id="oog_deposit"),
+    ],
+)
+@pytest.mark.valid_from("Amsterdam")
+def test_code_deposit_halt_discards_initcode_state_gas(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    nonexistent_account: Address,
+    state_opcode: Op,
+    deposit_fail_mode: str,
+) -> None:
+    """
+    Verify initcode state gas excluded from block on deposit halt.
+
+    A CREATE tx runs initcode that first performs a state-creating
+    operation (charging GAS_NEW_ACCOUNT state gas), then returns
+    code that triggers a deposit failure (oversized or OOG). The
+    exceptional halt reverts all initcode state changes including
+    the new account. The reverted GAS_NEW_ACCOUNT must NOT count
+    in block_state_gas_used, which determines the block header
+    gas_used via max(block_regular_gas, block_state_gas).
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+
+    if state_opcode == Op.CALL:
+        state_op = Op.POP(
+            Op.CALL(gas=100_000, address=nonexistent_account, value=1)
+        )
+    else:
+        state_op = Op.POP(Op.CREATE(value=0, offset=0, size=1))
+
+    if deposit_fail_mode == "oversized_code":
+        deposit_fail = Op.RETURN(0, fork.max_code_size() + 1)
+    else:
+        # Return code at max size — passes the size check but code
+        # deposit state gas (max_code_size * cost_per_state_byte)
+        # exceeds available state gas in the child frame, causing OOG.
+        deposit_fail = Op.RETURN(0, fork.max_code_size())
+
+    initcode = state_op + deposit_fail
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[
+                    Transaction(
+                        to=None,
+                        data=initcode,
+                        value=10**18,
+                        gas_limit=gas_limit_cap,
+                        sender=pre.fund_eoa(10**21),
+                    ),
+                ],
+            ),
+        ],
+        post={},
+    )
+
+
+@pytest.mark.valid_from("Amsterdam")
+def test_create_tx_header_gas_used(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify block header gas_used for a successful CREATE transaction.
+
+    A contract creation tx (to=None) with known gas costs. Compute
+    exact gas_used from first principles and verify against the block
+    header. Catches bugs where clients report gas_limit instead of
+    actual consumed gas.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+
+    gas_costs = fork.gas_costs()
+    initcode = Op.STOP
+    create_state_gas = fork.create_state_gas(code_size=1)
+
+    tx = Transaction(
+        to=None,
+        data=initcode,
+        gas_limit=gas_limit_cap + create_state_gas,
+        sender=pre.fund_eoa(),
+    )
+
+    # block_gas_used = max(block_regular, block_state)
+    # For a minimal CREATE tx deploying Op.STOP (1 byte),
+    # state gas (new account) dominates regular gas.
+    expected_gas_used = gas_costs.GAS_NEW_ACCOUNT
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[tx],
+                header_verify=Header(gas_used=expected_gas_used),
+            ),
+        ],
+        post={},
+    )
+
+
+@pytest.mark.valid_from("Amsterdam")
+def test_create_initcode_halt_no_code_deposit_state_gas(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify initcode exceptional halt excludes code deposit state gas.
+
+    A CREATE tx runs initcode that hits INVALID (exceptional halt)
+    before returning any code. Code deposit never happens, so code
+    deposit state gas must NOT be charged. Only the intrinsic state
+    gas (new account creation) should count.
+
+    Complements test_create_revert_no_code_deposit_state_gas which
+    covers the REVERT path.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+
+    # Initcode that immediately halts, no code returned
+    initcode = Op.INVALID
+
+    # State gas = new account only (no code deposit on halt)
+    intrinsic_state_gas = fork.create_state_gas(code_size=0)
+
+    gas_limit = gas_limit_cap + intrinsic_state_gas
+
+    tx = Transaction(
+        to=None,
+        data=initcode,
+        gas_limit=gas_limit,
+        sender=pre.fund_eoa(),
+    )
+
+    # On exceptional halt all gas_left is consumed.
+    # block_gas_used = max(block_regular, block_state)
+    # block_state = intrinsic_state_gas (new account only, no deposit)
+    # block_regular = gas_limit - intrinsic_state_gas (all remaining)
+    tx_regular = gas_limit - intrinsic_state_gas
+    tx_state = intrinsic_state_gas
+    expected_gas_used = max(tx_regular, tx_state)
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[tx],
+                header_verify=Header(gas_used=expected_gas_used),
+            ),
+        ],
+        post={},
+    )
+
+
+@pytest.mark.valid_from("Amsterdam")
+def test_state_gas_spill_header_gas_used(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify header gas_used when state gas spills into gas_left.
+
+    A transaction performs an SSTORE with state gas partially from
+    the reservoir and partially spilling into gas_left. Verify the
+    block header gas_used reflects the correct 2D max accounting.
+    """
+    gas_costs = fork.gas_costs()
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    sstore_state_gas = fork.sstore_state_gas()
+
+    # SSTORE zero-to-nonzero with small reservoir
+    sstore_code = Op.SSTORE(0, 1) + Op.STOP
+    contract = pre.deploy_contract(code=sstore_code)
+
+    intrinsic_cost = fork.transaction_intrinsic_cost_calculator()
+    intrinsic_gas = intrinsic_cost()
+
+    evm_regular = 2 * gas_costs.GAS_VERY_LOW + gas_costs.GAS_COLD_STORAGE_WRITE
+
+    # Reservoir = half the SSTORE state gas, rest spills to gas_left
+    reservoir = sstore_state_gas // 2
+    gas_limit = gas_limit_cap + reservoir
+
+    tx = Transaction(
+        to=contract,
+        gas_limit=gas_limit,
+        sender=pre.fund_eoa(),
+    )
+
+    tx_regular = intrinsic_gas + evm_regular
+    tx_state = sstore_state_gas
+    expected_gas_used = max(tx_regular, tx_state)
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[tx],
+                header_verify=Header(gas_used=expected_gas_used),
+            ),
+        ],
+        post={contract: Account(storage={0: 1})},
+    )
+
+
+@pytest.mark.parametrize(
+    "failure_mode",
+    [
+        pytest.param("revert", id="revert"),
+        pytest.param("halt", id="halt"),
+    ],
+)
+@pytest.mark.with_all_create_opcodes()
+@pytest.mark.valid_from("Amsterdam")
+def test_failed_create_header_gas_used(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    create_opcode: Op,
+    failure_mode: str,
+) -> None:
+    """
+    Verify block header gas_used for failed CREATE/CREATE2 via opcode.
+
+    A factory contract calls CREATE/CREATE2 which fails (revert or
+    halt). Verify the block is accepted with correct gas accounting.
+    Parametrized across failure modes and create opcodes.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    create_state_gas = fork.create_state_gas(code_size=0)
+
+    if failure_mode == "revert":
+        init_code = Op.REVERT(0, 0)
+    else:
+        init_code = Op.INVALID
+
+    create_call = (
+        create_opcode(value=0, offset=0, size=len(init_code), salt=0)
+        if create_opcode == Op.CREATE2
+        else create_opcode(value=0, offset=0, size=len(init_code))
+    )
+
+    storage = Storage()
+    factory_code = Op.MSTORE(
+        0,
+        int.from_bytes(bytes(init_code), "big") << (256 - 8 * len(init_code)),
+    ) + Op.SSTORE(
+        storage.store_next(0, "create_fails"),
+        create_call,
+    )
+
+    factory = pre.deploy_contract(factory_code)
+
+    tx = Transaction(
+        to=factory,
+        gas_limit=gas_limit_cap + create_state_gas,
+        sender=pre.fund_eoa(),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(txs=[tx]),
+        ],
+        post={factory: Account(storage=storage)},
+    )

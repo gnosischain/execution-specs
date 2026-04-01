@@ -102,7 +102,9 @@ def block_base_fee_per_gas(
         blob_base_fee = 1
     else:
         parent_excess_blob_gas = parent_excess_blobs * gas_per_blob
-        blob_gas_price_calculator = fork.transitions_to().blob_gas_price_calculator()
+        blob_gas_price_calculator = (
+            fork.transitions_to().blob_gas_price_calculator()
+        )
         blob_base_fee = blob_gas_price_calculator(
             excess_blob_gas=parent_excess_blob_gas
         )
