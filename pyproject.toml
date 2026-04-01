@@ -358,7 +358,7 @@ files = [
 ]
 
 [tool.docc.output]
-path = "api_docs"
+path = ".just/docs-spec"
 extension = ".html"
 
 [tool.vulture]
@@ -436,7 +436,7 @@ builtin = "clear,code,usage"
 skip = [
     ".devcontainer",
     ".git",
-    ".tox",
+    ".just",
     ".venv",
     ".ruff_cache",
     ".mypy_cache",
@@ -484,7 +484,7 @@ exclude = [
     "^\\.git/",
     "^\\.pytest_cache/",
     "^\\.ruff_cache/",
-    "^\\.tox/",
+    "^\\.just/",
     "^\\.venv/",
     "^\\.vscode/",
     "^fixtures/",
