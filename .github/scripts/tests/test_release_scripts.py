@@ -15,6 +15,7 @@ REPO_ROOT = SCRIPTS_DIR.parent.parent
 
 BUILD_MATRIX_SCRIPT = SCRIPTS_DIR / "generate_build_matrix.py"
 TARBALL_SCRIPT = SCRIPTS_DIR / "create_release_tarball.py"
+MERGE_INDEX_SCRIPT = SCRIPTS_DIR / "merge_index_files.py"
 
 
 def run_script(script: Path, *args: str) -> subprocess.CompletedProcess:
@@ -160,5 +161,126 @@ class TestCreateReleaseTarball:
     def test_no_args_fails(self):
         """Verify error when no arguments provided."""
         result = run_script(TARBALL_SCRIPT)
+        assert result.returncode == 1
+        assert "Usage" in result.stderr
+
+
+def _run_merge_script(
+    *args: str,
+) -> subprocess.CompletedProcess:
+    """Run merge_index_files.py via uv run python."""
+    return subprocess.run(
+        ["uv", "run", "python", str(MERGE_INDEX_SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+
+
+class TestMergeIndexFiles:
+    """Test merge_index_files.py."""
+
+    def _write_index(self, fixture_dir: Path, index_data: dict) -> None:
+        """Write a .meta/index.json file in the given directory."""
+        meta = fixture_dir / ".meta"
+        meta.mkdir(parents=True, exist_ok=True)
+        (meta / "index.json").write_text(json.dumps(index_data))
+
+    def test_merges_two_index_files(self, tmp_path):
+        """Verify merging two fixture dirs produces a combined index."""
+        dir_a = tmp_path / "fixtures__cancun"
+        dir_b = tmp_path / "fixtures__prague"
+        output = tmp_path / "combined" / ".meta" / "index.json"
+
+        self._write_index(
+            dir_a,
+            {
+                "root_hash": None,
+                "created_at": "2026-01-01T00:00:00",
+                "test_count": 1,
+                "forks": ["Cancun"],
+                "fixture_formats": ["state_test"],
+                "test_cases": [
+                    {
+                        "id": "test_a",
+                        "json_path": "state_tests/for_cancun/t.json",
+                        "fixture_hash": "0x" + "11" * 32,
+                        "fork": "Cancun",
+                        "format": "state_test",
+                    }
+                ],
+            },
+        )
+        self._write_index(
+            dir_b,
+            {
+                "root_hash": None,
+                "created_at": "2026-01-01T00:00:00",
+                "test_count": 1,
+                "forks": ["Prague"],
+                "fixture_formats": ["blockchain_test"],
+                "test_cases": [
+                    {
+                        "id": "test_b",
+                        "json_path": "blockchain_tests/for_prague/t.json",
+                        "fixture_hash": "0x" + "22" * 32,
+                        "fork": "Prague",
+                        "format": "blockchain_test",
+                    }
+                ],
+            },
+        )
+
+        result = _run_merge_script(
+            str(output),
+            str(dir_a),
+            str(dir_b),
+        )
+        assert result.returncode == 0
+        assert output.exists()
+
+        merged = json.loads(output.read_text())
+        assert merged["test_count"] == 2
+        assert len(merged["test_cases"]) == 2
+        assert merged["root_hash"] is not None
+
+    def test_skips_dirs_without_index(self, tmp_path):
+        """Verify directories without .meta/index.json are skipped."""
+        dir_a = tmp_path / "fixtures__cancun"
+        dir_a.mkdir()
+        dir_b = tmp_path / "fixtures__empty"
+        dir_b.mkdir()
+        output = tmp_path / "out.json"
+
+        self._write_index(
+            dir_a,
+            {
+                "root_hash": None,
+                "created_at": "2026-01-01T00:00:00",
+                "test_count": 1,
+                "forks": ["Cancun"],
+                "fixture_formats": ["state_test"],
+                "test_cases": [
+                    {
+                        "id": "test_a",
+                        "json_path": "state_tests/t.json",
+                        "fixture_hash": "0x" + "11" * 32,
+                        "fork": "Cancun",
+                        "format": "state_test",
+                    }
+                ],
+            },
+        )
+
+        result = _run_merge_script(str(output), str(dir_a), str(dir_b))
+        assert result.returncode == 0
+        assert output.exists()
+
+        merged = json.loads(output.read_text())
+        assert merged["test_count"] == 1
+
+    def test_no_args_fails(self):
+        """Verify error when no arguments provided."""
+        result = _run_merge_script()
         assert result.returncode == 1
         assert "Usage" in result.stderr
