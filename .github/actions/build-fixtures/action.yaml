@@ -69,10 +69,15 @@ runs:
           FORK_ARGS=""
         fi
 
+        # Allow exit code 5 (NO_TESTS_COLLECTED) for fork ranges with no tests.
+        EXIT_CODE=0
         if [ "${{ steps.evm-builder.outputs.impl }}" = "eels" ]; then
-          uv run fill -n ${{ steps.evm-builder.outputs.x-dist }} ${{ steps.properties.outputs.fill-params }} $FORK_ARGS "${K_ARGS[@]}" $OUTPUT_ARG --build-name ${{ inputs.release_name }} --no-html --durations=100 --log-level=DEBUG
+          uv run fill -n ${{ steps.evm-builder.outputs.x-dist }} ${{ steps.properties.outputs.fill-params }} $FORK_ARGS "${K_ARGS[@]}" $OUTPUT_ARG --build-name ${{ inputs.release_name }} --no-html --durations=100 --log-level=DEBUG || EXIT_CODE=$?
         else
-          uv run fill -n ${{ steps.evm-builder.outputs.x-dist }} --evm-bin=${{ steps.evm-builder.outputs.evm-bin }} ${{ steps.properties.outputs.fill-params }} $FORK_ARGS "${K_ARGS[@]}" $OUTPUT_ARG --build-name ${{ inputs.release_name }} --no-html --durations=100 --log-level=DEBUG
+          uv run fill -n ${{ steps.evm-builder.outputs.x-dist }} --evm-bin=${{ steps.evm-builder.outputs.evm-bin }} ${{ steps.properties.outputs.fill-params }} $FORK_ARGS "${K_ARGS[@]}" $OUTPUT_ARG --build-name ${{ inputs.release_name }} --no-html --durations=100 --log-level=DEBUG || EXIT_CODE=$?
+        fi
+        if [ "$EXIT_CODE" -ne 0 ] && [ "$EXIT_CODE" -ne 5 ]; then
+          exit "$EXIT_CODE"
         fi
     - name: Generate Benchmark Genesis Files
       if: inputs.split_label == '' && contains(inputs.release_name, 'benchmark')
@@ -97,3 +102,4 @@ runs:
       with:
         name: fixtures__${{ inputs.split_label }}
         path: fixtures_${{ inputs.release_name }}/
+        if-no-files-found: ignore

@@ -82,8 +82,11 @@ jobs:
           mkdir -p combined
           for label in ${{ matrix.labels }}; do
             echo "Downloading: fixtures__${label}"
-            gh run download ${{ github.run_id }} -n "fixtures__${label}" --dir "split_artifacts/fixtures__${label}"
-            cp -r "split_artifacts/fixtures__${label}"/* combined/
+            if gh run download ${{ github.run_id }} -n "fixtures__${label}" --dir "split_artifacts/fixtures__${label}"; then
+              cp -r "split_artifacts/fixtures__${label}"/* combined/
+            else
+              echo "No artifact for ${label} (no tests collected, skipping)"
+            fi
           done
           echo "Combined directory contents:"
           find combined -maxdepth 3 -type d | head -30 || true
