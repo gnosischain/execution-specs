@@ -93,8 +93,6 @@ def build_refund_tx(
                     for signer in authority_signers
                 ]
                 post[delegated_contract] = Account(code=Bytecode())
-                for signer in authority_signers:
-                    post[signer] = Account(balance=1)
                 auth_state_gas = fork.transaction_intrinsic_state_gas(
                     authorization_count=refunds_count,
                 )
