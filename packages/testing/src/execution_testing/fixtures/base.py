@@ -169,7 +169,6 @@ class BaseFixture(CamelModel):
         t8n_version: str,
         test_case_description: str,
         fixture_source_url: str,
-        opcode_count: OpcodeCount | None,
         ref_spec: ReferenceSpec | None,
         _info_metadata: Dict[str, Any] | None,
         metadata: Dict[str, Any] | None = None,
