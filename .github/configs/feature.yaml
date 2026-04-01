@@ -25,11 +25,11 @@ fork-ranges:
 
 stable:
   evm-type: stable
-  fill-params: --until=Osaka tests/istanbul/eip1344_chainid/
+  fill-params: --until=Osaka --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest
 
 develop:
   evm-type: develop
-  fill-params: --until=Amsterdam tests/istanbul/eip1344_chainid/
+  fill-params: --until=Amsterdam --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest
 
 benchmark:
   evm-type: benchmark
