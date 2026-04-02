@@ -42,9 +42,6 @@ from tests.benchmark.stateful.helpers import (
     BALANCEOF_SELECTOR,
     DECREMENT_COUNTER_CONDITION,
     MINT_SELECTOR,
-    SLOAD_TOKENS,
-    SSTORE_MINT_TOKENS,
-    SSTORE_TOKENS,
     CacheStrategy,
     build_cache_strategy_blocks,
 )
@@ -61,20 +58,22 @@ START_SLOT = (
 )
 
 
-@pytest.mark.parametrize("token_name", SLOAD_TOKENS)
+@pytest.mark.stub_parametrize(
+    "erc20_stub", "test_sload_empty_erc20_balanceof_"
+)
 def test_sload_erc20_generic(
     benchmark_test: BenchmarkTestFiller,
     pre: Alloc,
     fork: Fork,
     gas_benchmark_value: int,
     tx_gas_limit: int,
-    token_name: str,
+    erc20_stub: str,
 ) -> None:
     """Benchmark SLOAD using ERC20 balanceOf on bloatnet."""
     # Stub Account
     erc20_address = pre.deploy_contract(
         code=Bytecode(),
-        stub=f"test_sload_empty_erc20_balanceof_{token_name}",
+        stub=erc20_stub,
     )
     threshold = 100000
 
@@ -193,7 +192,9 @@ def test_sload_erc20_generic(
 
 
 @pytest.mark.repricing
-@pytest.mark.parametrize("token_name", SLOAD_TOKENS)
+@pytest.mark.stub_parametrize(
+    "erc20_stub", "test_sload_empty_erc20_balanceof_"
+)
 @pytest.mark.parametrize("existing_slots", [False, True])
 @pytest.mark.parametrize("cache_strategy", list(CacheStrategy))
 def test_sload_erc20_balanceof(
@@ -202,7 +203,7 @@ def test_sload_erc20_balanceof(
     fork: Fork,
     gas_benchmark_value: int,
     tx_gas_limit: int,
-    token_name: str,
+    erc20_stub: str,
     existing_slots: bool,
     cache_strategy: CacheStrategy,
 ) -> None:
@@ -210,7 +211,7 @@ def test_sload_erc20_balanceof(
     # Stub Account
     erc20_address = pre.deploy_contract(
         code=Bytecode(),
-        stub=f"test_sload_empty_erc20_balanceof_{token_name}",
+        stub=erc20_stub,
     )
 
     # MEM[0] = function selector
@@ -360,14 +361,14 @@ def test_sload_erc20_balanceof(
     benchmark_test(pre=pre, blocks=blocks, skip_gas_used_validation=True)
 
 
-@pytest.mark.parametrize("token_name", SSTORE_TOKENS)
+@pytest.mark.stub_parametrize("erc20_stub", "test_sstore_erc20_approve_")
 def test_sstore_erc20_generic(
     benchmark_test: BenchmarkTestFiller,
     pre: Alloc,
     fork: Fork,
     gas_benchmark_value: int,
     tx_gas_limit: int,
-    token_name: str,
+    erc20_stub: str,
 ) -> None:
     """Benchmark SSTORE using ERC20 approve."""
     sender = pre.fund_eoa()
@@ -377,7 +378,7 @@ def test_sstore_erc20_generic(
     # Stub Account
     erc20_address = pre.deploy_contract(
         code=Bytecode(),
-        stub=f"test_sstore_erc20_approve_{token_name}",
+        stub=erc20_stub,
     )
 
     # MEM[0] = function selector
@@ -453,7 +454,7 @@ def test_sstore_erc20_generic(
 
 @pytest.mark.repricing
 @pytest.mark.parametrize("cache_strategy", list(CacheStrategy))
-@pytest.mark.parametrize("token_name", SSTORE_TOKENS)
+@pytest.mark.stub_parametrize("erc20_stub", "test_sstore_erc20_approve_")
 @pytest.mark.parametrize("write_new_value", [False, True])
 @pytest.mark.parametrize("existing_slot", [True, False])
 def test_sstore_erc20_approve(
@@ -462,7 +463,7 @@ def test_sstore_erc20_approve(
     fork: Fork,
     gas_benchmark_value: int,
     tx_gas_limit: int,
-    token_name: str,
+    erc20_stub: str,
     write_new_value: bool,
     existing_slot: bool,
     cache_strategy: CacheStrategy,
@@ -481,7 +482,7 @@ def test_sstore_erc20_approve(
     # Stub Account
     erc20_address = pre.deploy_contract(
         code=Bytecode(),
-        stub=f"test_sstore_erc20_approve_{token_name}",
+        stub=erc20_stub,
     )
 
     # MEM[0] = function selector
@@ -805,7 +806,7 @@ def build_external_call(
 
 
 @pytest.mark.repricing
-@pytest.mark.parametrize("token_name", SSTORE_MINT_TOKENS)
+@pytest.mark.stub_parametrize("erc20_stub", "test_sstore_erc20_mint_")
 @pytest.mark.parametrize("existing_slots", [False, True])
 @pytest.mark.parametrize("cache_strategy", list(CacheStrategy))
 @pytest.mark.parametrize("no_change", [False, True])
@@ -815,7 +816,7 @@ def test_sstore_erc20_mint(
     fork: Fork,
     gas_benchmark_value: int,
     tx_gas_limit: int,
-    token_name: str,
+    erc20_stub: str,
     existing_slots: bool,
     cache_strategy: CacheStrategy,
     no_change: bool,
@@ -850,7 +851,7 @@ def test_sstore_erc20_mint(
     # Stub Account
     erc20_address = pre.deploy_contract(
         code=Bytecode(),
-        stub=f"test_sstore_erc20_mint_{token_name}",
+        stub=erc20_stub,
     )
 
     mint_amount = 0 if no_change else 1

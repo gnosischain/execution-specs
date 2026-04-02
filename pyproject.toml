@@ -290,6 +290,8 @@ markers = [
     "json_state_tests: marks tests as json_state_tests (deselect with '-m \"not json_state_tests\"')",
     "vm_test: marks tests as vm_test (deselect with '-m \"not vm_test\"')",
     "eels_base_coverage: Minimized subset selected to preserve high EELS line-coverage parity (select with '-m eels_base_coverage')",
+    "repricing: marks tests for gas repricing analysis",
+    "stub_parametrize: parametrize test from address stubs by prefix",
 ]
 
 [tool.coverage.run]
@@ -356,7 +358,7 @@ files = [
 ]
 
 [tool.docc.output]
-path = "api_docs"
+path = ".just/docs-spec"
 extension = ".html"
 
 [tool.vulture]
@@ -434,7 +436,7 @@ builtin = "clear,code,usage"
 skip = [
     ".devcontainer",
     ".git",
-    ".tox",
+    ".just",
     ".venv",
     ".ruff_cache",
     ".mypy_cache",
@@ -482,7 +484,7 @@ exclude = [
     "^\\.git/",
     "^\\.pytest_cache/",
     "^\\.ruff_cache/",
-    "^\\.tox/",
+    "^\\.just/",
     "^\\.venv/",
     "^\\.vscode/",
     "^fixtures/",
