@@ -845,7 +845,6 @@ def process_block_rewards(
 
     incorporate_tx_into_block(reward_state)
 
-
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
     """
     Validates the gas limit for a block.
