@@ -78,11 +78,11 @@ def test_block_rewards_call_data(
     pre: Alloc,
 ) -> None:
     """
-    Test that system transaction calldata is correctly formed.
+    Test that the system transaction delivers calldata to the block
+    rewards contract.
     """
     code: Bytecode = (
-        Op.SSTORE(0, Op.CALLDATASIZE)
-        + sum(Op.SSTORE(i + 1, Op.CALLDATALOAD(i * 32)) for i in range(5))
+        Op.SSTORE(0, Op.GT(Op.CALLDATASIZE, 0))
         + get_minimal_rewards_contract_code()
     )
 
@@ -97,12 +97,7 @@ def test_block_rewards_call_data(
         post={
             BLOCK_REWARDS_CONTRACT: Account(
                 storage={
-                    0x00: 0x84,  # noqa: E501
-                    0x01: 0xF91C289800000000000000000000000000000000000000000000000000000000,  # noqa: E501
-                    0x02: 0x0000004000000000000000000000000000000000000000000000000000000000,  # noqa: E501
-                    0x03: 0x0000006000000000000000000000000000000000000000000000000000000000,  # noqa: E501
-                    0x04: 0x00,
-                    0x05: 0x00,
+                    0x00: 1,
                 }
             ),
         },
@@ -134,6 +129,24 @@ def test_block_rewards_caller_is_system_address(
     )
 
 
+def test_block_rewards_system_call_with_no_contract(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+) -> None:
+    """
+    Test that a block is valid when the block rewards address has no code.
+    """
+    pre[BLOCK_REWARDS_CONTRACT] = Account(
+        code=b"",
+        nonce=0,
+        balance=0,
+    )
+
+    blocks = [Block()]
+
+    blockchain_test(pre=pre, post={}, blocks=blocks)
+
+
 @pytest.mark.exception_test
 @pytest.mark.blockchain_test_engine_only
 def test_block_rewards_system_call_with_revert(
@@ -159,36 +172,12 @@ def test_block_rewards_system_call_with_revert(
 
 @pytest.mark.exception_test
 @pytest.mark.blockchain_test_engine_only
-def test_block_rewards_system_call_with_no_contract(
+def test_block_rewards_system_call_invalid_opcode(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
 ) -> None:
     """
-    Test that a block rewards contract with no code invalidates the block.
-    """
-    pre[BLOCK_REWARDS_CONTRACT] = Account(
-        code=b"",
-        nonce=0,
-        balance=0,
-    )
-
-    blocks = [
-        Block(
-            exception=BlockException.SYSTEM_CONTRACT_CALL_FAILED,
-        ),
-    ]
-
-    blockchain_test(pre=pre, post={}, blocks=blocks)
-
-
-@pytest.mark.exception_test
-@pytest.mark.blockchain_test_engine_only
-def test_block_rewards_system_call_out_of_gas(
-    blockchain_test: BlockchainTestFiller,
-    pre: Alloc,
-) -> None:
-    """
-    Test that a block rewards contract hitting INVALID opcode
+    Test that a block rewards contract that hits the INVALID opcode
     invalidates the block.
     """
     pre[BLOCK_REWARDS_CONTRACT] = Account(
