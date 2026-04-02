@@ -822,20 +822,15 @@ def process_block_rewards(
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
 
-    try:
-        addresses, amounts = decode(
-            ["address[]", "uint256[]"], out.return_data
-        )
-    except Exception as exc:
-        raise InvalidBlock(f"Block rewards system call failed: {exc}") from exc
+    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
 
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
     for addr, amount in zip(addresses, amounts, strict=True):
         address = hex_to_address(addr)
-        balance_after = get_account(block_env.state, address).balance + U256(
-            amount
-        )
-        set_account_balance(block_env.state, address, balance_after)
-
+        balance = get_account(block_env.state, address).balance + U256(amount)
+        set_account_balance(block_env.state, address, balance)
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
     """
