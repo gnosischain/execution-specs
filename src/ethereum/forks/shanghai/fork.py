@@ -834,7 +834,6 @@ def process_block_rewards(
         balance = get_account(block_env.state, address).balance + U256(amount)
         set_account_balance(block_env.state, address, balance)
 
-
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
     """
     Validates the gas limit for a block.
