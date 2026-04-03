@@ -9,11 +9,20 @@ Introduction
 ------------
 
 Entry point for the Ethereum specification.
+
+Gnosis diff
+-----------
+
+   - Added logic to collect base fee into a collector address
+   - Added system call into block rewards contract that may mint tokens
+   - Modified withdrawals processing to make a system call
+   - Added logic to collect blob fee into a collector address
 """
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from eth_abi import decode, encode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.frozen import slotted_freezable
@@ -111,13 +120,24 @@ GAS_LIMIT_MINIMUM = Uint(5000)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
+DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
+    "0xbabe2bed00000000000000000000000000000003"
+)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0x2000000000000000000000000000000000000001"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0x1559000000000000000000000000000000000000"
+)
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
 MAX_BLOB_GAS_PER_BLOCK = BLOB_SCHEDULE_MAX * GAS_PER_BLOB
 VERSIONED_HASH_VERSION_KZG = b"\x01"
-GWEI_TO_WEI = U256(10**9)
-
+BLOB_FEE_COLLECTOR = hex_to_address(
+    "0x1559000000000000000000000000000000000000"
+)
 WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS = hex_to_address(
     "0x00000961Ef480Eb55e80D19ad83579A64c007002"
 )
@@ -836,6 +856,8 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
+    process_block_rewards(block_env)
+
     process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BEACON_ROOTS_ADDRESS,
@@ -851,12 +873,22 @@ def apply_body(
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 
+    # Gnosis: populate withdrawals trie here because
+    # process_withdrawals() is a system call that doesn't
+    # receive block_output (upstream does this internally).
+    for i, wd in enumerate(withdrawals):
+        trie_set(
+            block_output.withdrawals_trie,
+            rlp.encode(Uint(i)),
+            rlp.encode(wd),
+        )
+
     # EIP-7928: Post-execution operations use index N+1
     block_env.block_access_list_builder.block_access_index = BlockAccessIndex(
         Uint(len(transactions)) + Uint(1)
     )
 
-    process_withdrawals(block_env, block_output, withdrawals)
+    process_withdrawals(block_env, withdrawals)
 
     process_general_purpose_requests(
         block_env=block_env,
@@ -1063,6 +1095,27 @@ def process_transaction(
         tx_state, block_env.coinbase, coinbase_balance_after_mining_fee
     )
 
+    # transfer base fee to fee collector address
+    fee_collector_balance_after = get_account(
+        tx_state, FEE_COLLECTOR_ADDRESS
+    ).balance + U256(tx_gas_used_after_refund * block_env.base_fee_per_gas)
+    if fee_collector_balance_after != 0:
+        set_account_balance(
+            tx_state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance_after,
+        )
+
+    # transfer blob fee to blob fee collector address
+    blob_fee_collector_balance_after = get_account(
+        tx_state, BLOB_FEE_COLLECTOR
+    ).balance + U256(blob_gas_fee)
+    set_account_balance(
+        tx_state,
+        BLOB_FEE_COLLECTOR,
+        blob_fee_collector_balance_after,
+    )
+
     if coinbase_balance_after_mining_fee == 0 and account_exists_and_is_empty(
         tx_state, block_env.coinbase
     ):
@@ -1094,26 +1147,78 @@ def process_transaction(
 
 def process_withdrawals(
     block_env: vm.BlockEnvironment,
-    block_output: vm.BlockOutput,
     withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
-    Increase the balance of the withdrawing account.
+    Make a system call to the deposit contract to process withdrawals.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
+    amounts = []
+    addresses = []
+    for w in withdrawals:
+        amounts.append(int(w.amount))
+        addresses.append(w.address)
+    
+    payload = encode(
+        ["uint256", "uint64[]", "address[]"],
+        [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
+    )
+    
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=DEPOSIT_CONTRACT_ADDRESS,
+        data=bytes.fromhex("79d0c0bc") + payload,
+    )
+    if out.error:
+        raise InvalidBlock(f"Withdrawal system call failed: {out.error}")
+
     wd_state = TransactionState(parent=block_env.state)
+    incorporate_tx_into_block(
+        wd_state, block_env.block_access_list_builder
+    )
 
-    for i, wd in enumerate(withdrawals):
-        trie_set(
-            block_output.withdrawals_trie,
-            rlp.encode(Uint(i)),
-            rlp.encode(wd),
-        )
 
-        current_balance = get_account(wd_state, wd.address).balance
-        new_balance = current_balance + wd.amount * GWEI_TO_WEI
-        set_account_balance(wd_state, wd.address, new_balance)
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Call BlockRewardAuRaBase contract reward function
 
-    incorporate_tx_into_block(wd_state, block_env.block_access_list_builder)
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    """
+    # reward(address[],uint16[]) with empty lists
+    data = bytes.fromhex(
+        "f91c2898"
+        "0000000000000000000000000000000000000000000000000000000000000040"
+        "0000000000000000000000000000000000000000000000000000000000000060"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+    )
+    
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        data=data,
+    )
+    if out.error:
+        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
+
+    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    reward_state = TransactionState(parent=block_env.state)
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    for addr, amount in zip(addresses, amounts, strict=True):
+        address = hex_to_address(addr)
+        balance = get_account(reward_state, address).balance + U256(amount)
+        set_account_balance(reward_state, address, balance)
+
+    incorporate_tx_into_block(
+        reward_state, block_env.block_access_list_builder
+    )
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
