@@ -1006,7 +1006,7 @@ def process_transaction(
             fee_collector_balance_after,
         )
 
-    # transfer blob fee to fee collector address
+    # transfer blob fee to blob fee collector address
     blob_fee_collector_balance_after = get_account(
         block_env.state, BLOB_FEE_COLLECTOR
     ).balance + U256(blob_gas_fee)

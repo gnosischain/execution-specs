@@ -64,7 +64,7 @@ There are two phases in the test pipeline: **fill** (generate fixtures from the 
 
 **Core test pipeline** (`test.yaml`): Runs on PRs. Fill only — no consume. Jobs: `static`, `py3` (fill Paris->Osaka), `pypy3`, `tests_pytest_py3`, `tests_pytest_pypy3`. Setup action (`.github/actions/setup-env/`) installs Rust, build-essential, tox, and downloads geth.
 
-**Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Intended to consume fixtures against `go-ethereum-gnosis` via Hive (4 modes: Engine, RLP, Sync, Dev Mode). Currently broken: it downloads upstream Ethereum fixtures (`FIXTURES_URL`) instead of generating Gnosis fixtures via fill, so the state roots never match. Uses `gnosischain/hive` repo (branch `master`) and `gnosis.yaml` client config.
+**Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Intended to consume fixtures against `go-ethereum-gnosis` via Hive (4 modes: Engine, RLP, Sync, Dev Mode). Currently broken: it downloads upstream Ethereum fixtures (`FIXTURES_URL`) instead of generating Gnosis fixtures via fill, so the state roots never match. Uses `gnosischain/hive` repo (branch `master`) and `latest.yaml` client config.
 
 **Manual hive workflows** (workflow_dispatch only, not automated on PRs):
 
