@@ -1158,12 +1158,12 @@ def process_withdrawals(
     for w in withdrawals:
         amounts.append(int(w.amount))
         addresses.append(w.address)
-    
+
     payload = encode(
         ["uint256", "uint64[]", "address[]"],
         [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
     )
-    
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=DEPOSIT_CONTRACT_ADDRESS,
@@ -1173,16 +1173,14 @@ def process_withdrawals(
         raise InvalidBlock(f"Withdrawal system call failed: {out.error}")
 
     wd_state = TransactionState(parent=block_env.state)
-    incorporate_tx_into_block(
-        wd_state, block_env.block_access_list_builder
-    )
+    incorporate_tx_into_block(wd_state, block_env.block_access_list_builder)
 
 
 def process_block_rewards(
     block_env: vm.BlockEnvironment,
 ) -> None:
     """
-    Call BlockRewardAuRaBase contract reward function
+    Call BlockRewardAuRaBase contract reward function.
 
     Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
     Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
@@ -1195,7 +1193,7 @@ def process_block_rewards(
         "0000000000000000000000000000000000000000000000000000000000000000"
         "0000000000000000000000000000000000000000000000000000000000000000"
     )
-    
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
@@ -1204,11 +1202,11 @@ def process_block_rewards(
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
 
-    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    reward_state = TransactionState(parent=block_env.state)
+    account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
     if account.code_hash == EMPTY_CODE_HASH:
         return
 
-    reward_state = TransactionState(parent=block_env.state)
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
     for addr, amount in zip(addresses, amounts, strict=True):
         address = hex_to_address(addr)
