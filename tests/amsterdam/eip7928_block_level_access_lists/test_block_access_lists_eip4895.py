@@ -40,11 +40,11 @@ def test_bal_withdrawal_empty_block(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures withdrawal balance changes in empty block.
+    Ensure BAL produces no entry for withdrawal in an empty block.
 
     Charlie starts with 1 gwei balance (existing account).
     Block with 0 transactions and 1 withdrawal of 10 gwei to Charlie.
-    Charlie ends with 11 gwei balance.
+    Charlie does not appear in BAL and balance is not credited.
     """
     charlie = pre.fund_eoa(amount=1 * GWEI)
 
@@ -59,9 +59,7 @@ def test_bal_withdrawal_empty_block(
             )
         ],
         expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                charlie: BalAccountExpectation.empty(),
-            }
+            account_expectations={}
         ),
     )
 
@@ -79,12 +77,12 @@ def test_bal_withdrawal_and_transaction(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures both transaction and withdrawal balance changes.
+    Ensure BAL captures transaction changes but not withdrawal.
 
     Alice starts with 1 ETH, Bob starts with 0, Charlie starts with 0.
     Alice sends 5 wei to Bob.
-    Charlie receives 10 gwei withdrawal.
-    Bob ends with 5 wei, Charlie ends with 10 gwei.
+    Charlie receives 10 gwei withdrawal but is not captured in BAL.
+    Bob ends with 5 wei, Charlie's balance remains unchanged.
     """
     alice = pre.fund_eoa()
     bob = pre.fund_eoa(amount=0)
@@ -120,7 +118,6 @@ def test_bal_withdrawal_and_transaction(
                         BalBalanceChange(block_access_index=1, post_balance=5)
                     ],
                 ),
-                charlie: BalAccountExpectation.empty(),
             }
         ),
     )
@@ -131,7 +128,6 @@ def test_bal_withdrawal_and_transaction(
         post={
             alice: Account(nonce=1),
             bob: Account(balance=5),
-            charlie: Account.NONEXISTENT,
         },
     )
 
@@ -160,18 +156,14 @@ def test_bal_withdrawal_to_nonexistent_account(
             )
         ],
         expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                charlie: BalAccountExpectation.empty(),
-            }
+            account_expectations={}
         ),
     )
 
     blockchain_test(
         pre=pre,
         blocks=[block],
-        post={
-            charlie: Account.NONEXISTENT,
-        },
+        post={},
     )
 
 
