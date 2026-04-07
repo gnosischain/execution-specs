@@ -14,15 +14,27 @@ Gnosis fork of Ethereum EELS. Branch structure: `forks/osaka` (shipped), `forks/
 
 Currently `hive-consume.yaml` fills all forks on every PR. Once stabilized, switch to latest-fork-only for PRs and full fill on release or scheduled runs.
 
-### 3. Consider adding `gnosischain/specs` as a submodule
+1. Add a `fill` job that generates Gnosis fixtures using the EELS spec (same as `eest_hive_gnosis.yaml` line 72-73)
+2. Upload the generated fixtures as an artifact
+3. In the consume jobs (Engine/RLP/Sync/Dev Mode), download those fixtures instead of `FIXTURES_URL`
+4. Remove or replace the `FIXTURES_URL` env var pointing at `ethereum/execution-spec-tests`
 
-**Rationale**: The Gnosis specs repo documents the delta from Ethereum. Adding it as a submodule at e.g. `specs/gnosis/` would:
+**Files to modify**:
 
-- Pin the spec version the implementation targets
-- Allow agents and developers to grep specs locally
-- Enable potential CI validation that `fork.py` docstrings stay in sync with specs
+- `.github/workflows/hive-consume.yaml` — add fill job, wire artifacts, remove `FIXTURES_URL`
 
-### 4. Re-enable pypy3 fill in CI (`test.yaml`)
+**Alternative**: Merge `eest_hive_gnosis.yaml` logic into `hive-consume.yaml` and trigger it on PRs. The multi-client variant could remain manual.
+
+### 3. Upstream rebase strategy
+
+The `gnosis-osaka` branch is based on upstream `forks/osaka`. As upstream evolves (Amsterdam fork, etc.), the branch needs periodic rebases. Key files that will conflict:
+
+- `fork.py` files (Gnosis modifications in Paris through Osaka)
+- `tox.ini` (fork range, disabled environments)
+- `.github/workflows/` (Gnosis-specific workflow changes)
+- `src/ethereum_spec_tools/evm_tools/` (Gnosis tool modifications)
+
+### 6. Re-enable pypy3 fill in CI (`test.yaml`)
 
 **Status**: Commented out with TODO. The pypy3 job exceeds GitHub Actions resource limits (exit 143 / SIGTERM).
 

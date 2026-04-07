@@ -750,8 +750,10 @@ def process_block_rewards(
     block_env: vm.BlockEnvironment,
 ) -> None:
     """
-    Call BlockRewardAuRaBase contract reward function
-    https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20.
+    Call BlockRewardAuRaBase contract reward function.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
     # reward(address[],uint16[]) with empty lists
     data = bytes.fromhex(
@@ -761,18 +763,24 @@ def process_block_rewards(
         "0000000000000000000000000000000000000000000000000000000000000000"
         "0000000000000000000000000000000000000000000000000000000000000000"
     )
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         data=data,
     )
-    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    if out.error:
+        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
 
-    for address, amount in zip(addresses, amounts, strict=False):
-        balance_after = get_account(block_env.state, address).balance + U256(
-            amount
-        )
-        set_account_balance(block_env.state, address, balance_after)
+    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    for addr, amount in zip(addresses, amounts, strict=True):
+        address = hex_to_address(addr)
+        balance = get_account(block_env.state, address).balance + U256(amount)
+        set_account_balance(block_env.state, address, balance)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
