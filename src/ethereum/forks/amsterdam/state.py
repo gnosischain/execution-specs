@@ -168,15 +168,6 @@ def apply_changes_to_state(state: State, diff: BlockDiff) -> None:
 
     state._code_store.update(diff.code_changes)
 
-    for address, slots in storage_changes.items():
-        trie = state._storage_tries.get(address)
-        if trie is None:
-            trie = Trie(secured=True, default=U256(0))
-            state._storage_tries[address] = trie
-        for key, value in slots.items():
-            trie_set(trie, key, value)
-        if trie._data == {}:
-            del state._storage_tries[address]
 
 def store_code(state: State, code: Bytes) -> Hash32:
     """

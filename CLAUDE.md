@@ -4,11 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the **Gnosis chain fork** of the Ethereum Execution Layer Specifications (EELS) — a Python reference implementation of Ethereum's execution client. It prioritizes readability and correctness over performance. The Gnosis fork adds chain-specific logic (base fee collection, block rewards contract minting, modified withdrawals via system calls).
+This is the **Gnosis chain fork** of the Ethereum Execution Layer Specifications (EELS) — a Python reference implementation of Ethereum's execution client. It prioritizes readability and correctness over performance. See [`GNOSIS.md`](GNOSIS.md) for the full delta from upstream Ethereum, system transaction rules, and links to the authoritative specs.
 
-Current branch `gnosis-osaka` tracks upstream through the Osaka hard fork. The `master` branch is the main branch. The open PR is #2 (`gnosis-osaka` -> `master`).
-
-Gnosis specs are documented at https://github.com/gnosischain/specs (execution layer specs in `execution/` directory). The spec approach is delta-based: only differences from Ethereum are documented.
+The `master` branch is the main branch. The `forks/amsterdam` branch tracks upstream through Amsterdam.
 
 ## Build and Development
 
@@ -113,34 +111,7 @@ Each fork package follows a consistent internal structure:
 
 ### Gnosis-Specific Modifications
 
-Gnosis changes are documented in `fork.py` docstrings (search for "Gnosis diff"). All forks Paris through Osaka are fully implemented.
-
-**Per-fork Gnosis features:**
-
-| Feature | Paris | Shanghai | Cancun | Prague | Osaka |
-|---|---|---|---|---|---|
-| Base fee collection to `FEE_COLLECTOR_ADDRESS` | Yes | Yes | Yes | Yes | Yes |
-| Block rewards system call (`BLOCK_REWARDS_CONTRACT_ADDRESS`) | Yes | Yes | Yes | Yes | Yes |
-| Withdrawals via system call to `DEPOSIT_CONTRACT_ADDRESS` | N/A | Yes | Yes | Yes | Yes |
-| Blob fee collection to `BLOB_FEE_COLLECTOR` | N/A | N/A | N/A | Yes | Yes |
-
-**Key constants** (consistent across forks):
-
-```python
-SYSTEM_ADDRESS                  = 0xfffffffffffffffffffffffffffffffffffffffe
-SYSTEM_TRANSACTION_GAS          = 30_000_000
-BLOCK_REWARDS_CONTRACT_ADDRESS  = 0x2000000000000000000000000000000000000001
-DEPOSIT_CONTRACT_ADDRESS        = 0xbabe2bed00000000000000000000000000000003
-FEE_COLLECTOR_ADDRESS           = 0x1559000000000000000000000000000000000000
-BLOB_FEE_COLLECTOR              = 0x1559000000000000000000000000000000000000
-MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
-```
-
-**Gnosis-specific limits** (Osaka): `BLOB_COUNT_LIMIT = 2`, `MAX_BLOB_GAS_PER_BLOCK = 262144`.
-
-**System transaction pattern**: `process_block_rewards()` calls reward contract with selector `f91c2898`, decodes `(address[], uint256[])` response. `process_withdrawals()` calls deposit contract with selector `79d0c0bc` and ABI-encoded withdrawal data.
-
-**Spec references**: See `gnosischain/specs` repo — `execution/posdao-post-merge.md` (block rewards), `execution/withdrawals.md` (withdrawal system calls).
+**Read [`GNOSIS.md`](GNOSIS.md) first.** It documents every delta from upstream Ethereum: system transaction rules, feature matrix by fork, constants, and links to the authoritative specs. When auditing or modifying Gnosis-specific code, cross-reference the implementation in `fork.py` against the spec URLs in that file.
 
 ### Other Source Packages
 

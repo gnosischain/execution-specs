@@ -225,63 +225,6 @@ class ChainBuilderEthRPC(BaseEthRPC, namespace="eth"):
         payload_attributes = self._payload_attributes(
             next_block_number=next_block_number, next_timestamp=next_timestamp
         )
-
-    def _finalize_payload(
-        self,
-        payload: GetPayloadResponse,
-        parent_beacon_block_root: Hash | None,
-    ) -> None:
-        """
-        Execute *payload* via ``engine_newPayload`` and set it as
-        the canonical head via ``engine_forkchoiceUpdated``.
-        """
-        new_payload_args: List[Any] = [
-            payload.execution_payload,
-        ]
-        if payload.blobs_bundle is not None:
-            new_payload_args.append(
-                payload.blobs_bundle.blob_versioned_hashes()
-            )
-        if parent_beacon_block_root is not None:
-            new_payload_args.append(parent_beacon_block_root)
-        if payload.execution_requests is not None:
-            new_payload_args.append(payload.execution_requests)
-        new_payload_version = self.fork.engine_new_payload_version()
-        assert new_payload_version is not None, (
-            "Fork does not support engine new_payload"
-        )
-        new_payload_response = self.engine_rpc.new_payload(
-            *new_payload_args, version=new_payload_version
-        )
-        assert new_payload_response.status == PayloadStatusEnum.VALID, (
-            "Payload was invalid"
-        )
-
-        fcu_version = self.fork.engine_forkchoice_updated_version()
-        assert fcu_version is not None, (
-            "Fork does not support engine forkchoice_updated"
-        )
-        new_forkchoice_state = ForkchoiceState(
-            head_block_hash=(payload.execution_payload.block_hash),
-        )
-        response = self.engine_rpc.forkchoice_updated(
-            new_forkchoice_state,
-            None,
-            version=fcu_version,
-        )
-        assert response.payload_status.status == PayloadStatusEnum.VALID, (
-            "Payload was invalid"
-        )
-
-    def generate_block(self: "ChainBuilderEthRPC") -> None:
-        """Generate a block using the Engine API."""
-        head_block = self.get_block_by_number("latest")
-        assert head_block is not None
-
-        forkchoice_state = ForkchoiceState(
-            head_block_hash=head_block["hash"],
-        )
-        payload_attributes = self._payload_attributes(head_block)
         forkchoice_updated_version = (
             next_fork.engine_forkchoice_updated_version()
         )

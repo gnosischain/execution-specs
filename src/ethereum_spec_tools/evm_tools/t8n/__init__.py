@@ -465,7 +465,14 @@ class T8N(Load):
                             ]
                         ),
                     )
-            self.fork.process_withdrawals(block_env, self.env.withdrawals)
+            if self.fork.has_process_block_rewards:
+                # Gnosis: 2-arg system call (no block_output)
+                self.fork.process_withdrawals(block_env, self.env.withdrawals)
+            else:
+                # Upstream: 3-arg signature includes block_output
+                self.fork.process_withdrawals(
+                    block_env, block_output, self.env.withdrawals
+                )
 
         if self.fork.has_compute_requests_hash:
             self.fork.process_general_purpose_requests(block_env, block_output)

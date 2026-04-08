@@ -90,7 +90,7 @@ jobs:
         uses: ./.github/actions/start-hive-dev
         with:
           clients: nethermind-gnosis
-          client-file: .github/configs/hive/gnosis.yaml
+          client-file: .github/configs/hive/latest.yaml
           hive-path: hive
           timeout: "300"
 

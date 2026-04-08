@@ -1,11 +1,11 @@
 # Unless filling for special features, all features should fill for previous forks (starting from Paris) too
 stable:
   evm-type: stable
-  fill-params: --until=Prague --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest
+  fill-params: --from=Paris --until=Prague --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest
 
 develop:
   evm-type: develop
-  fill-params: --until=BPO4 --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest
+  fill-params: --from=Paris --until=Osaka --fill-static-tests --ignore=tests/static/state_tests/stQuadraticComplexityTest
 
 benchmark:
   evm-type: benchmark
@@ -16,7 +16,62 @@ benchmark_fast:
   fill-params: --fork=Osaka --gas-benchmark-values 100 ./tests/benchmark/compute
   feature_only: true
 
-bal:
+paris:
   evm-type: develop
-  fill-params: --fork=Amsterdam --fill-static-tests
+  fill-params: >-
+    --fork=Paris --fill-static-tests
+    --ignore=tests/frontier --ignore=tests/homestead
+    --ignore=tests/tangerine_whistle --ignore=tests/byzantium
+    --ignore=tests/constantinople --ignore=tests/istanbul
+    --ignore=tests/berlin --ignore=tests/london
   feature_only: true
+
+shanghai:
+  evm-type: develop
+  fill-params: >-
+    --fork=Shanghai --fill-static-tests
+    --ignore=tests/frontier --ignore=tests/homestead
+    --ignore=tests/tangerine_whistle --ignore=tests/byzantium
+    --ignore=tests/constantinople --ignore=tests/istanbul
+    --ignore=tests/berlin --ignore=tests/london
+  feature_only: true
+
+cancun:
+  evm-type: develop
+  fill-params: >-
+    --fork=Cancun --fill-static-tests
+    --ignore=tests/frontier --ignore=tests/homestead
+    --ignore=tests/tangerine_whistle --ignore=tests/byzantium
+    --ignore=tests/constantinople --ignore=tests/istanbul
+    --ignore=tests/berlin --ignore=tests/london
+  feature_only: true
+
+prague:
+  evm-type: develop
+  fill-params: >-
+    --fork=Prague --fill-static-tests
+    --ignore=tests/frontier --ignore=tests/homestead
+    --ignore=tests/tangerine_whistle --ignore=tests/byzantium
+    --ignore=tests/constantinople --ignore=tests/istanbul
+    --ignore=tests/berlin --ignore=tests/london
+  feature_only: true
+
+osaka:
+  evm-type: develop
+  fill-params: >-
+    --fork=Osaka --fill-static-tests
+    --ignore=tests/frontier --ignore=tests/homestead
+    --ignore=tests/tangerine_whistle --ignore=tests/byzantium
+    --ignore=tests/constantinople --ignore=tests/istanbul
+    --ignore=tests/berlin --ignore=tests/london
+  feature_only: true
+
+# bal:
+#   evm-type: develop
+#   fill-params: >-
+#     --fork=Amsterdam --fill-static-tests
+#     --ignore=tests/frontier --ignore=tests/homestead
+#     --ignore=tests/tangerine_whistle --ignore=tests/byzantium
+#     --ignore=tests/constantinople --ignore=tests/istanbul
+#     --ignore=tests/berlin --ignore=tests/london
+#   feature_only: true
