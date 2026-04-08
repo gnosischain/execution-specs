@@ -38,7 +38,7 @@ from execution_testing.test_types import (
 )
 from execution_testing.tools import Initcode
 
-from ..shared.execute_fill import stub_accounts_key
+from ..shared.execute_fill import stub_accounts_key, stub_eoas_key
 from ..shared.pre_alloc import Alloc as SharedAlloc
 from ..shared.pre_alloc import AllocFlags
 
@@ -69,6 +69,7 @@ class Alloc(SharedAlloc):
     _eoa_fund_amount_default: int = PrivateAttr(10**21)
     _account_salt: Dict[Hash, int] = PrivateAttr(default_factory=dict)
     _stub_accounts: Dict[str, Account] = PrivateAttr(default_factory=dict)
+    _stub_eoas: Dict[str, EOA] = PrivateAttr(default_factory=dict)
 
     def __init__(
         self,
@@ -76,12 +77,24 @@ class Alloc(SharedAlloc):
         fork: Fork,
         flags: AllocFlags,
         stub_accounts: Dict[str, Account] | None = None,
+        stub_eoas: Dict[str, EOA] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the pre-alloc."""
         super().__init__(*args, fork=fork, flags=flags, **kwargs)
         if stub_accounts is not None:
             self._stub_accounts = stub_accounts
+        if stub_eoas is not None:
+            self._stub_eoas = stub_eoas
+
+    def stub_eoa(self, label: str) -> EOA:
+        """Return the EOA for a key-bearing stub."""
+        if label not in self._stub_eoas:
+            raise ValueError(
+                f"Stub EOA '{label}' not found. "
+                "Provide --address-stubs with a pkey entry."
+            )
+        return self._stub_eoas[label]
 
     def get_next_account_salt(self, account_hash: Hash) -> int:
         """Retrieve the next salt for this account."""
@@ -477,12 +490,21 @@ def stub_accounts(
     return request.config.stash.get(stub_accounts_key, {})
 
 
+@pytest.fixture(scope="session")
+def stub_eoas(
+    request: pytest.FixtureRequest,
+) -> Dict[str, EOA]:
+    """Return stub EOAs pre-populated during configuration."""
+    return request.config.stash.get(stub_eoas_key, {})
+
+
 @pytest.fixture(scope="function")
 def pre(
     alloc_flags: AllocFlags,
     fork: Fork | None,
     request: pytest.FixtureRequest,
     stub_accounts: Dict[str, Account],
+    stub_eoas: Dict[str, EOA],
 ) -> Alloc:
     """Return default pre allocation for all tests (Empty alloc)."""
     # FIXME: Static tests don't have a fork so we need to get it from the node.
@@ -495,4 +517,5 @@ def pre(
         flags=alloc_flags,
         fork=actual_fork,
         stub_accounts=stub_accounts,
+        stub_eoas=stub_eoas,
     )
