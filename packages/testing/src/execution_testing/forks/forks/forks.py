@@ -961,8 +961,17 @@ class Frontier(
 
     @classmethod
     def system_contracts(cls) -> List[Address]:
-        """At Genesis, no system contracts are present."""
-        return []
+        """At Genesis, block rewards and deposit contract are present."""
+        return [
+            Address(
+                0x2000000000000000000000000000000000000001,
+                label="BLOCK_REWARDS_CONTRACT_ADDRESS",
+            ),
+            Address(
+                0xBABE2BED00000000000000000000000000000003,
+                label="DEPOSIT_CONTRACT_ADDRESS",
+            ),
+        ]
 
     @classmethod
     def deterministic_factory_predeploy_address(cls) -> Address | None:
@@ -1369,20 +1378,6 @@ class Paris(
     """Paris (Merge) fork."""
 
     pass
-
-    @classmethod
-    def system_contracts(cls) -> List[Address]:
-        """Paris introduces system contracts for block rewards and deposit handling."""  # noqa: E501
-        return [
-            Address(
-                0x2000000000000000000000000000000000000001,
-                label="BLOCK_REWARDS_CONTRACT_ADDRESS",
-            ),
-            Address(
-                0xBABE2BED00000000000000000000000000000003,
-                label="DEPOSIT_CONTRACT_ADDRESS",
-            ),
-        ]
 
 
 class Shanghai(
