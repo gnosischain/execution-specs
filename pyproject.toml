@@ -215,7 +215,7 @@ test = [
 ]
 lint = [
     "codespell==2.4.1",
-    "mypy==1.17.0",
+    "mypy==1.20.0",
     "ruff==0.13.2",
     "vulture==2.14.0",
     "types-requests>=2.31,<2.33",
@@ -359,7 +359,7 @@ files = [
 ]
 
 [tool.docc.output]
-path = "api_docs"
+path = ".just/docs-spec"
 extension = ".html"
 
 [tool.vulture]
@@ -423,6 +423,7 @@ ignore = [
 "tests/*" = ["ARG001"]
 "vulture_whitelist.py" = [
     "B018",  # Useless expression (intentional for Vulture whitelisting)
+    "E402",  # Module-level imports throughout file (needed for whitelisting)
     "F403",  # Star imports needed for whitelisting
     "F405",  # Undefined names from star imports
 ]
@@ -437,7 +438,7 @@ builtin = "clear,code,usage"
 skip = [
     ".devcontainer",
     ".git",
-    ".tox",
+    ".just",
     ".venv",
     ".ruff_cache",
     ".mypy_cache",
@@ -485,7 +486,7 @@ exclude = [
     "^\\.git/",
     "^\\.pytest_cache/",
     "^\\.ruff_cache/",
-    "^\\.tox/",
+    "^\\.just/",
     "^\\.venv/",
     "^\\.vscode/",
     "^fixtures/",
