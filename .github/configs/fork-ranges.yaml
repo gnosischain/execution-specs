@@ -2,7 +2,7 @@
 # Features using --until are automatically split using applicable ranges.
 # Features using --fork (single fork) are never split.
 - label: pre-cancun
-  from: Frontier
+  from: Paris
   until: Shanghai
 - label: cancun
   from: Cancun
@@ -13,9 +13,6 @@
 - label: osaka
   from: Osaka
   until: Osaka
-- label: bpo
-  from: BPO1
-  until: BPO2
 - label: amsterdam
   from: Amsterdam
   until: Amsterdam
