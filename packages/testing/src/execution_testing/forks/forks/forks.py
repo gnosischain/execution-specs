@@ -1461,6 +1461,7 @@ class Paris(
     pass
 
 
+
 class Shanghai(
     eips.EIP3855,
     eips.EIP3860,
