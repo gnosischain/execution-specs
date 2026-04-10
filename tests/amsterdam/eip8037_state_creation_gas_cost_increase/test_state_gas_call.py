@@ -21,8 +21,10 @@ from execution_testing import (
     Alloc,
     Block,
     BlockchainTestFiller,
+    Bytecode,
     Environment,
     Fork,
+    Header,
     Op,
     StateTestFiller,
     Storage,
@@ -913,4 +915,79 @@ def test_call_new_account_header_gas_used(
             Block(txs=[tx]),
         ],
         post={contract: Account(storage=storage)},
+    )
+
+
+@pytest.mark.parametrize(
+    "reservoir_delta",
+    [
+        pytest.param(-1, id="reservoir_one_short"),
+        pytest.param(0, id="reservoir_exact"),
+        pytest.param(1, id="reservoir_one_over"),
+    ],
+)
+@pytest.mark.parametrize(
+    "child_termination",
+    [
+        pytest.param("revert", id="child_revert"),
+        pytest.param("halt", id="child_halt"),
+    ],
+)
+@pytest.mark.valid_from("EIP8037")
+def test_top_level_halt_preserves_restored_reservoir(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    child_termination: str,
+    reservoir_delta: int,
+) -> None:
+    """
+    Test reservoir preserved on top-level halt after child restore.
+
+    The child performs an SSTORE drawing state gas from the reservoir,
+    then fails (revert or exceptional halt). All state gas is restored
+    to the parent's reservoir. The parent then hits INVALID, halting
+    the outermost frame. On a top-level exceptional halt, gas_left is
+    zeroed but the reservoir is preserved for refund.
+
+    The reservoir_delta parameter offsets the initial reservoir by ±1
+    around the exact SSTORE state gas cost. When the reservoir is one
+    short, 1 gas spills from gas_left into state gas; on child
+    failure the spilled gas is restored to the parent's reservoir,
+    increasing it beyond its initial value.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    sstore_state_gas = fork.sstore_state_gas()
+
+    if child_termination == "revert":
+        child_code: Bytecode = Op.SSTORE(0, 1) + Op.REVERT(0, 0)
+    else:
+        child_code = Op.SSTORE(0, 1) + Op.INVALID
+
+    child = pre.deploy_contract(code=child_code)
+
+    parent = pre.deploy_contract(
+        code=(Op.POP(Op.CALL(gas=500_000, address=child)) + Op.INVALID),
+    )
+
+    tx = Transaction(
+        to=parent,
+        gas_limit=gas_limit_cap + sstore_state_gas + reservoir_delta,
+        sender=pre.fund_eoa(),
+    )
+
+    # When delta < 0, the spill-restore moves gas from gas_left into
+    # the reservoir, so block gas_used is reduced by the spill amount.
+    expected_gas_used = gas_limit_cap + min(reservoir_delta, 0)
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[tx],
+                header_verify=Header(gas_used=expected_gas_used),
+            ),
+        ],
+        post={child: Account(storage={0: 0})},
     )

@@ -15,6 +15,7 @@ Tests for [EIP-8037: State Creation Gas Cost Increase]
 
 import pytest
 from execution_testing import (
+    AccessList,
     Account,
     Alloc,
     Block,
@@ -415,3 +416,54 @@ def test_create_tx_reservoir(
     )
 
     state_test(env=env, pre=pre, post={}, tx=tx)
+
+
+@pytest.mark.parametrize(
+    "num_access_list_entries",
+    [
+        pytest.param(1, id="one_entry"),
+        pytest.param(10, id="ten_entries"),
+    ],
+)
+@pytest.mark.parametrize(
+    "slots_per_entry",
+    [
+        pytest.param(0, id="addresses_only"),
+        pytest.param(3, id="with_storage_keys"),
+    ],
+)
+@pytest.mark.valid_from("EIP8037")
+def test_access_list_gas_is_regular_not_state(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    num_access_list_entries: int,
+    slots_per_entry: int,
+) -> None:
+    """
+    Test that EIP-2930 access list gas is classified as regular
+    intrinsic gas. A transaction with an access list and no state
+    operations verifies the gas dimension split in the block header.
+    """
+    contract = pre.deploy_contract(code=Op.STOP)
+
+    access_list = []
+    for _ in range(num_access_list_entries):
+        target = pre.fund_eoa(amount=0)
+        storage_keys = list(range(slots_per_entry))
+        access_list.append(
+            AccessList(address=target, storage_keys=storage_keys)
+        )
+
+    tx = Transaction(
+        to=contract,
+        gas_limit=fork.transaction_gas_limit_cap(),
+        sender=pre.fund_eoa(),
+        access_list=access_list,
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[Block(txs=[tx])],
+        post={},
+    )

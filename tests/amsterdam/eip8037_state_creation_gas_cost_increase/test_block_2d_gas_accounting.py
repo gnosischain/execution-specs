@@ -459,3 +459,74 @@ def test_multi_block_dimension_flip(
         ],
         post=post_2,
     )
+
+
+@pytest.mark.parametrize(
+    "tx2_gas_limit_equals_block_gas_limit",
+    [
+        pytest.param(True, id="tx_gas_limit_equals_block_limit"),
+        pytest.param(False, id="tx_gas_limit_just_above_remaining"),
+    ],
+)
+@pytest.mark.valid_from("EIP8037")
+def test_block_2d_gas_tx_gas_limit_exceeds_regular_remaining(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    tx2_gas_limit_equals_block_gas_limit: bool,
+) -> None:
+    """
+    Verify block valid when tx.gas_limit exceeds regular gas remaining.
+
+    After a preceding STOP tx consumes regular gas, the second tx has
+    gas_limit >> TX_MAX_GAS_LIMIT. The tx inclusion check must use
+    min(TX_MAX_GAS_LIMIT, tx.gas_limit) against cumulative regular
+    gas, not the raw tx.gas_limit. Clients that subtract the full
+    tx.gas_limit from the regular pool reject this valid block.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    intrinsic_gas = fork.transaction_intrinsic_cost_calculator()()
+    env = Environment()
+    block_gas_limit = int(env.gas_limit)
+
+    if tx2_gas_limit_equals_block_gas_limit:
+        tx2_gas_limit = block_gas_limit
+    else:
+        tx2_gas_limit = block_gas_limit - intrinsic_gas + 1
+
+    assert tx2_gas_limit > gas_limit_cap
+    assert tx2_gas_limit > block_gas_limit - intrinsic_gas
+
+    stop_contract = pre.deploy_contract(code=Op.STOP)
+
+    storage = Storage()
+    sstore_contract = pre.deploy_contract(
+        code=Op.SSTORE(storage.store_next(1), 1),
+    )
+
+    tx1_regular = intrinsic_gas
+    tx2_regular, tx2_state = sstore_tx_gas(fork)
+    expected_gas_used = max(tx1_regular + tx2_regular, tx2_state)
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[
+                    Transaction(
+                        to=stop_contract,
+                        gas_limit=intrinsic_gas,
+                        sender=pre.fund_eoa(),
+                    ),
+                    Transaction(
+                        to=sstore_contract,
+                        gas_limit=tx2_gas_limit,
+                        sender=pre.fund_eoa(),
+                    ),
+                ],
+                header_verify=Header(gas_used=expected_gas_used),
+            ),
+        ],
+        post={sstore_contract: Account(storage=storage)},
+    )
