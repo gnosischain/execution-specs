@@ -22,6 +22,7 @@ from execution_testing import (
     Op,
     Storage,
     Transaction,
+    TransactionException,
 )
 
 from .spec import ref_spec_8037
@@ -424,6 +425,58 @@ def test_block_gas_used_create_tx(
 
 
 @pytest.mark.valid_from("Amsterdam")
+@pytest.mark.exception_test
+def test_tx_rejected_when_regular_gas_exceeds_block_limit(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Reject tx when cumulative regular gas exceeds block gas limit.
+
+    The final tx has gas_limit < TX_MAX_GAS_LIMIT and would fit in the
+    bottleneck dimension after execution, but the pre-execution check
+    rejects it because
+    tx.gas_limit + cumulative_regular_used > block.gas_limit.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    intrinsic_gas = fork.transaction_intrinsic_cost_calculator()()
+
+    block_gas_limit = intrinsic_gas * 2
+
+    filler_contract = pre.deploy_contract(code=Op.STOP)
+    filler_tx = Transaction(
+        to=filler_contract,
+        gas_limit=intrinsic_gas,
+        sender=pre.fund_eoa(),
+    )
+
+    rejected_gas_limit = intrinsic_gas + 1
+    assert rejected_gas_limit < gas_limit_cap
+    rejected_contract = pre.deploy_contract(code=Op.STOP)
+    rejected_tx = Transaction(
+        to=rejected_contract,
+        gas_limit=rejected_gas_limit,
+        sender=pre.fund_eoa(),
+        error=TransactionException.GAS_ALLOWANCE_EXCEEDED,
+    )
+
+    blockchain_test(
+        genesis_environment=Environment(gas_limit=block_gas_limit),
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[filler_tx, rejected_tx],
+                gas_limit=block_gas_limit,
+                exception=TransactionException.GAS_ALLOWANCE_EXCEEDED,
+            )
+        ],
+        post={},
+    )
+
+
+@pytest.mark.valid_from("Amsterdam")
 def test_multi_block_dimension_flip(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -468,7 +521,7 @@ def test_multi_block_dimension_flip(
         pytest.param(False, id="tx_gas_limit_just_above_remaining"),
     ],
 )
-@pytest.mark.valid_from("EIP8037")
+@pytest.mark.valid_from("Amsterdam")
 def test_block_2d_gas_tx_gas_limit_exceeds_regular_remaining(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
