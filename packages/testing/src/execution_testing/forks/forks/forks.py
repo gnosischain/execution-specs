@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from os.path import realpath
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Sized
 
 if TYPE_CHECKING:
@@ -35,6 +37,19 @@ from ..base_fork import (
 from ..gas_costs import GasCosts
 from . import eips
 from .helpers import ceiling_division
+
+CONTRACTS_DIR = Path(realpath(__file__)).parent / "contracts"
+SYSTEM_ADDRESS = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
+BLOCK_REWARDS_CONTRACT_ADDRESS = 0x2000000000000000000000000000000000000001
+DEPOSIT_CONTRACT_ADDRESS = 0xBABE2BED00000000000000000000000000000003
+BLOCK_REWARDS_CONTRACT_BYTECODE_FILE = (
+    CONTRACTS_DIR / "block_reward_contract.bin"
+)
+DEPOSIT_CONTRACT_BYTECODE_FILE = CONTRACTS_DIR / "deposit_contract.bin"
+BLOCK_REWARDS_CONTRACT_BYTECODE = (
+    BLOCK_REWARDS_CONTRACT_BYTECODE_FILE.read_bytes()
+)
+DEPOSIT_CONTRACT_BYTECODE = DEPOSIT_CONTRACT_BYTECODE_FILE.read_bytes()
 
 
 # All forks must be listed here !!! in the order they were introduced !!!
@@ -1171,9 +1186,24 @@ class Frontier(
         """
         Return whether the fork expects pre-allocation of accounts.
 
-        Frontier does not require pre-allocated accounts
+        Frontier pre-allocates block rewards and deposit contracts.
         """
-        return {}
+        return {
+            BLOCK_REWARDS_CONTRACT_ADDRESS: {
+                "nonce": 1,
+                "code": BLOCK_REWARDS_CONTRACT_BYTECODE,
+            },
+            DEPOSIT_CONTRACT_ADDRESS: {
+                "nonce": 1,
+                "code": DEPOSIT_CONTRACT_BYTECODE,
+            },
+            SYSTEM_ADDRESS: {
+                "nonce": 0,
+                "balance": 0,
+                "code": b"",
+                "storage": {},
+            },
+        }
 
     @classmethod
     def build_default_block_header(

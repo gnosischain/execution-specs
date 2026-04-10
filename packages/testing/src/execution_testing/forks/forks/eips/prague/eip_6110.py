@@ -15,7 +15,9 @@ from typing import Mapping
 from ....base_fork import BaseFork
 
 BYTECODE_FILE = (
-    Path(realpath(__file__)).parent / "contracts" / "deposit_contract.bin"
+    Path(realpath(__file__)).parent.parent.parent
+    / "contracts"
+    / "deposit_contract.bin"
 )
 DEPOSIT_CONTRACT_ADDRESS = 0xBABE2BED00000000000000000000000000000003
 DEPOSIT_CONTRACT_BYTECODE = BYTECODE_FILE.read_bytes()
