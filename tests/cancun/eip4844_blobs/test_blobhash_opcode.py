@@ -346,7 +346,7 @@ def test_blobhash_invalid_blob_index(
                         data=Hash(0),
                         access_list=[],
                         max_fee_per_blob_gas=(
-                            fork.min_base_fee_per_blob_gas() * 10
+                            fork.min_base_fee_per_blob_gas() * 10**10
                         ),
                         blob_versioned_hashes=blobs,
                     )
