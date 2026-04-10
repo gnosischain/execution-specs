@@ -10,9 +10,7 @@ https://eips.ethereum.org/EIPS/eip-6110
 from hashlib import sha256
 from os.path import realpath
 from pathlib import Path
-from typing import List, Mapping
-
-from execution_testing.base_types import Address
+from typing import Mapping
 
 from ....base_fork import BaseFork
 
@@ -27,18 +25,8 @@ class EIP6110(BaseFork):
     """EIP-6110 class."""
 
     @classmethod
-    def system_contracts(cls) -> List[Address]:
-        """Add the beacon chain deposit contract."""
-        return [
-            Address(
-                DEPOSIT_CONTRACT_ADDRESS,
-                label="DEPOSIT_CONTRACT_ADDRESS",
-            ),
-        ] + super(EIP6110, cls).system_contracts()
-
-    @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:
-        """Pre-allocate the beacon chain deposit contract."""
+        """Upgrade the beacon chain deposit contract."""
         deposit_contract_tree_depth = 32
         storage = {}
         next_hash = sha256(b"\x00" * 64).digest()
