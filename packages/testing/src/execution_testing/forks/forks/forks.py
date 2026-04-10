@@ -1384,6 +1384,7 @@ class Paris(
             ),
         ]
 
+
 class Shanghai(
     eips.EIP3855,
     eips.EIP3860,

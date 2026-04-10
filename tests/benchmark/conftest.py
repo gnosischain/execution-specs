@@ -11,15 +11,6 @@ from execution_testing.cli.pytest_commands.plugins.shared.address_stubs import (
 
 DEFAULT_BENCHMARK_FORK = "Prague"
 
-_stub_config_key = pytest.StashKey[StubConfig]()
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    """Build StubConfig from ``--address-stubs``."""
-    address_stubs = config.getoption("address_stubs", default=None)
-    stubs = address_stubs.root if address_stubs else {}
-    config.stash[_stub_config_key] = StubConfig(stubs=stubs)
-
 
 def pytest_generate_tests(metafunc: Any) -> None:
     """
