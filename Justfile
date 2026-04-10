@@ -180,8 +180,6 @@ json-loader *args:
 test-tests *args:
     @mkdir -p "{{ output_dir }}/test-tests/tmp"
     cd packages/testing && uv run pytest \
-        --from Paris \
-        --until "{{ latest_fork }}" \
         -n {{ xdist_workers }} \
         --basetemp="{{ output_dir }}/test-tests/tmp" \
         --ignore=src/execution_testing/cli/pytest_commands/plugins/filler/tests/test_benchmarking.py \
@@ -194,8 +192,6 @@ test-tests-pypy *args:
     @mkdir -p "{{ output_dir }}/test-tests-pypy/tmp"
     cd packages/testing && uv run --python pypy3.11 pytest \
         -n auto --maxprocesses 6 \
-        --from Paris \
-        --until "{{ latest_fork }}" \
         --basetemp="{{ output_dir }}/test-tests-pypy/tmp" \
         --ignore=src/execution_testing/cli/pytest_commands/plugins/filler/tests/test_benchmarking.py \
         "$@" \
