@@ -187,7 +187,6 @@ def test_withdrawal_system_call_with_revert(
         Block(
             withdrawals=[withdrawal],
             exception=BlockException.SYSTEM_CONTRACT_CALL_FAILED,
-            skip_exception_verification=True,
         ),
     ]
 
@@ -223,7 +222,6 @@ def test_withdrawal_system_call_out_of_gas(
         Block(
             withdrawals=[withdrawal],
             exception=BlockException.SYSTEM_CONTRACT_CALL_FAILED,
-            skip_exception_verification=True,
         ),
     ]
 

@@ -85,7 +85,14 @@ class SendTransactionExceptionError(Exception):
         if self.tx is not None:
             return f"{base} Transaction={self.tx.model_dump_json()}"
         elif self.tx_rlp is not None:
-            return f"{base} Transaction RLP={self.tx_rlp.hex()}"
+            rlp_hex = self.tx_rlp.hex()
+            # Cap RLP output at 200 characters to avoid overwhelming output
+            max_rlp_length = 200
+            if len(rlp_hex) > max_rlp_length:
+                rlp_display = f"{rlp_hex[:max_rlp_length]}... (truncated)"
+            else:
+                rlp_display = rlp_hex
+            return f"{base} Transaction RLP={rlp_display}"
         return base
 
 
@@ -178,6 +185,7 @@ class BaseRPC:
         self.url = url
         self.request_id_counter = count(1)
         self.response_validation_context = response_validation_context
+        self.session = requests.Session()
 
     def __init_subclass__(cls, namespace: str | None = None) -> None:
         """
@@ -218,7 +226,7 @@ class BaseRPC:
           application-level issues rather than transient network problems
         """
         logger.debug(f"Making HTTP request to {url}, timeout={timeout}")
-        return requests.post(
+        return self.session.post(
             url, json=json_payload, headers=headers, timeout=timeout
         )
 
@@ -579,6 +587,30 @@ class EthRPC(BaseRPC):
         ).result_or_raise()
         return int(response, 16)
 
+    def get_balances(
+        self,
+        addresses: List[Address],
+        block_number: BlockNumberType = "latest",
+    ) -> List[int]:
+        """`eth_getBalance` batch: Return balance for multiple addresses."""
+        if not addresses:
+            return []
+        block = (
+            hex(block_number)
+            if isinstance(block_number, int)
+            else block_number
+        )
+        logger.info(
+            f"Batch requesting balance of {len(addresses)} addresses "
+            f"at block {block}"
+        )
+        calls = [
+            RPCCall(method="getBalance", params=[f"{addr}", block])
+            for addr in addresses
+        ]
+        responses = self.post_batch_request(calls=calls)
+        return [int(r.result_or_raise(), 16) for r in responses]
+
     def get_code(
         self, address: Address, block_number: BlockNumberType = "latest"
     ) -> Bytes:
@@ -594,6 +626,30 @@ class EthRPC(BaseRPC):
             request=RPCCall(method="getCode", params=params)
         ).result_or_raise()
         return Bytes(response)
+
+    def get_codes(
+        self,
+        addresses: List[Address],
+        block_number: BlockNumberType = "latest",
+    ) -> List[Bytes]:
+        """`eth_getCode` batch: Return code for multiple addresses."""
+        if not addresses:
+            return []
+        block = (
+            hex(block_number)
+            if isinstance(block_number, int)
+            else block_number
+        )
+        logger.info(
+            f"Batch requesting code of {len(addresses)} addresses "
+            f"at block {block}"
+        )
+        calls = [
+            RPCCall(method="getCode", params=[f"{addr}", block])
+            for addr in addresses
+        ]
+        responses = self.post_batch_request(calls=calls)
+        return [Bytes(r.result_or_raise()) for r in responses]
 
     def get_transaction_count(
         self, address: Address, block_number: BlockNumberType = "latest"

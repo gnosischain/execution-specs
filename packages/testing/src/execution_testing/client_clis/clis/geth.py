@@ -128,6 +128,7 @@ class GethExceptionMapper(ExceptionMapper):
         BlockException.INVALID_RECEIPTS_ROOT: "invalid receipt root hash",
         BlockException.INVALID_LOG_BLOOM: "invalid bloom",
         BlockException.INVALID_STATE_ROOT: "invalid merkle root",
+        BlockException.GAS_USED_OVERFLOW: "bal validation failure",
     }
     mapping_regex: ClassVar[Dict[ExceptionBase, str]] = {
         TransactionException.TYPE_3_TX_MAX_BLOB_GAS_ALLOWANCE_EXCEEDED: (
@@ -163,13 +164,21 @@ class GethExceptionMapper(ExceptionMapper):
         BlockException.INVALID_BAL_HASH: (r"invalid block access list:"),
         BlockException.INVALID_BAL_MISSING_ACCOUNT: (
             r"computed state diff contained mutated accounts "
-            r"which weren't reported in BAL"
+            r"which weren't reported in BAL|"
+            r"invalid block access list:"
         ),
         BlockException.INVALID_BLOCK_ACCESS_LIST: (
             r"difference between computed state diff and "
             r"BAL entry for account|invalid block access list:"
         ),
         BlockException.INCORRECT_BLOCK_FORMAT: (r"invalid block access list:"),
+        BlockException.BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED: (
+            r"block access list exceeds gas limit"
+        ),
+        BlockException.GAS_USED_OVERFLOW: (r"gas limit reached"),
+        TransactionException.INTRINSIC_GAS_TOO_LOW: (
+            r"insufficient gas for floor data gas cost"
+        ),
     }
 
 

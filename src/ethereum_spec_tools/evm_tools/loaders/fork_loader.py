@@ -25,6 +25,26 @@ class ForkLoad:
         """Imports a module from the fork."""
         return self.hardfork.module(name)
 
+    def tx_types(self) -> list[int]:
+        """Return the transaction types supported by the given fork."""
+        transactions = self._module("transactions")
+        tx_types = [0]
+
+        for tx_type, attribute in (
+            (1, "AccessListTransaction"),
+            (2, "FeeMarketTransaction"),
+            (3, "BlobTransaction"),
+            (4, "SetCodeTransaction"),
+        ):
+            if hasattr(transactions, attribute):
+                tx_types.append(tx_type)
+
+        return tx_types
+
+    def supports_tx_type(self, tx_type: int) -> bool:
+        """Return whether the given fork supports the provided tx type."""
+        return tx_type in self.tx_types()
+
     @property
     def proof_of_stake(self) -> bool:
         """Whether the fork is proof of stake."""
@@ -217,9 +237,7 @@ class ForkLoad:
     @property
     def EMPTY_ACCOUNT(self) -> Any:
         """EMPTY_ACCOUNT of the fork."""
-        if self.has_block_state:
-            return EMPTY_ACCOUNT
-        return self._module("fork_types").EMPTY_ACCOUNT
+        return EMPTY_ACCOUNT
 
     @property
     def Header(self) -> Any:
@@ -314,13 +332,9 @@ class ForkLoad:
         return self._module("state").set_account
 
     @property
-    def set_code(self) -> Any:
-        """set_code function of the fork."""
-        # TODO: Remove once we backport it
-        # pass amsterdam fork
-        if self.has_block_state:
-            return self._module("state").set_code
-        return None
+    def store_code(self) -> Any:
+        """store_code function of the fork."""
+        return getattr(self._module("state"), "store_code", None)
 
     @property
     def set_storage(self) -> Any:
