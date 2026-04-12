@@ -1402,6 +1402,7 @@ class Cancun(
     eips.EIP4788,
     eips.EIP4844,
     eips.EIP7516,
+    eips.EIP6780,
     Shanghai,
 ):
     """Cancun fork."""
