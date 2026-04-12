@@ -49,8 +49,10 @@ class EIP7928(
           EIP-2935 history storage:        1 address + 1 write          = 2
           EIP-7002 withdrawal requests:    1 address + 4 reads          = 5
           EIP-7251 consolidation requests: 1 address + 4 reads          = 5
+          Withdrawal system call:          1 read                       = 1
+          Block rewards system call:       1 read                       = 1
         """
-        return 15
+        return 17
 
     @classmethod
     def engine_execution_payload_block_access_list(cls) -> bool:
