@@ -15,7 +15,7 @@ class EIP7594(
     engine_get_blobs_version_bump=True,
     update_blob_constants={
         "AMOUNT_CELL_PROOFS": 128,
-        "MAX_BLOBS_PER_TX": 6,
+        "MAX_BLOBS_PER_TX": 2,
     },
 ):
     """EIP-7594 class."""

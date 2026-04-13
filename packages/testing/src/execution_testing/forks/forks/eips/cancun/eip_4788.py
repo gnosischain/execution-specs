@@ -26,7 +26,12 @@ class EIP4788(BaseFork):
     @classmethod
     def system_contracts(cls) -> List[Address]:
         """Add the beacon roots system contract."""
-        return [Address(BEACON_ROOTS_ADDRESS, label="BEACON_ROOTS_ADDRESS")]
+        return [
+            Address(
+                BEACON_ROOTS_ADDRESS,
+                label="BEACON_ROOTS_ADDRESS",
+            ),
+        ] + super(EIP4788, cls).system_contracts()
 
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:

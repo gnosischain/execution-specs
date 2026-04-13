@@ -130,7 +130,7 @@ You can provide address stubs in several formats:
 **JSON string:**
 
 ```bash
-uv run execute remote --fork=Prague --rpc-endpoint=https://rpc.endpoint.io --rpc-seed-key 0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f --chain-id 12345 --address-stubs '{"DEPOSIT_CONTRACT": "0x00000000219ab540356cbb839cbe05303d7705fa", "UNISWAP_V3_FACTORY": "0x1F98431c8aD98523631AE4a59f267346ea31F984"}'
+uv run execute remote --fork=Prague --rpc-endpoint=https://rpc.endpoint.io --rpc-seed-key 0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f --chain-id 12345 --address-stubs '{"DEPOSIT_CONTRACT": "0xbabe2bed00000000000000000000000000000003", "UNISWAP_V3_FACTORY": "0x1F98431c8aD98523631AE4a59f267346ea31F984"}'
 ```
 
 **JSON file:**
@@ -151,7 +151,7 @@ uv run execute remote --fork=Prague --rpc-endpoint=https://rpc.endpoint.io --rpc
 
 ```json
 {
-  "DEPOSIT_CONTRACT": "0x00000000219ab540356cbb839cbe05303d7705fa",
+  "DEPOSIT_CONTRACT": "0xbabe2bed00000000000000000000000000000003",
   "UNISWAP_V3_FACTORY": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
   "COMPOUND_COMPTROLLER": "0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B"
 }
@@ -160,7 +160,7 @@ uv run execute remote --fork=Prague --rpc-endpoint=https://rpc.endpoint.io --rpc
 **YAML format (contracts.yaml):**
 
 ```yaml
-DEPOSIT_CONTRACT: 0x00000000219ab540356cbb839cbe05303d7705fa
+DEPOSIT_CONTRACT: 0xbabe2bed00000000000000000000000000000003
 UNISWAP_V3_FACTORY: 0x1F98431c8aD98523631AE4a59f267346ea31F984
 COMPOUND_COMPTROLLER: 0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B
 ```
