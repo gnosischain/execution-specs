@@ -13,6 +13,9 @@
 - label: osaka
   from: Osaka
   until: Osaka
+- label: bpo
+  from: BPO1
+  until: BPO2
 - label: amsterdam
   from: Amsterdam
   until: Amsterdam
