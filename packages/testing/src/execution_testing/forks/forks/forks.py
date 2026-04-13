@@ -1546,7 +1546,7 @@ class BPO5(
 
 class Amsterdam(
     eips.EIP7928,
-    BPO2,
+    Osaka,
     deployed=False,
 ):
     """Amsterdam fork."""
