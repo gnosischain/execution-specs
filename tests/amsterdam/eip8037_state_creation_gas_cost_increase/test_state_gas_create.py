@@ -1694,3 +1694,156 @@ def test_create_oog_during_state_gas_charge(
 
     post = {parent: Account(storage=storage)}
     state_test(pre=pre, post=post, tx=tx)
+
+
+@pytest.mark.valid_from("EIP8037")
+def test_create_nonce_overflow_state_gas_consumed(
+    state_test: StateTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify CREATE at max nonce consumes state gas despite failure.
+
+    A factory with nonce 2^64-1 attempts CREATE. The nonce overflow
+    causes a silent failure (returns 0), but GAS_NEW_ACCOUNT is
+    already consumed. The reservoir is preserved and the parent can
+    still SSTORE after the failed CREATE.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    sstore_state_gas = fork.sstore_state_gas()
+
+    init_code = Op.STOP
+
+    storage = Storage()
+    factory = pre.deploy_contract(
+        code=(
+            Op.MSTORE(
+                0,
+                int.from_bytes(bytes(init_code), "big") << 248,
+            )
+            + Op.SSTORE(
+                storage.store_next(0, "create_fails"),
+                Op.CREATE(0, 31, 1),
+            )
+            + Op.SSTORE(storage.store_next(1, "reservoir_ok"), 1)
+        ),
+        nonce=2**64 - 1,
+    )
+
+    tx = Transaction(
+        to=factory,
+        gas_limit=gas_limit_cap + sstore_state_gas,
+        sender=pre.fund_eoa(),
+    )
+
+    post = {factory: Account(storage=storage)}
+    state_test(pre=pre, post=post, tx=tx)
+
+
+@pytest.mark.valid_from("EIP8037")
+def test_create_stack_depth_state_gas_consumed(
+    state_test: StateTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify CREATE at stack depth 1024 consumes state gas despite failure.
+
+    A contract recursively CALLs itself until depth ~1023, then
+    attempts CREATE at depth 1024. The depth limit causes a silent
+    failure (returns 0), but GAS_NEW_ACCOUNT is already consumed.
+    After recursion unwinds, the outermost frame SSTOREs to prove
+    the reservoir is preserved.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    sstore_state_gas = fork.sstore_state_gas()
+
+    init_code = Op.STOP
+
+    storage = Storage()
+    recursive = pre.deploy_contract(
+        code=(
+            Op.MSTORE(
+                0,
+                int.from_bytes(bytes(init_code), "big") << 248,
+            )
+            # Recursive CALL until depth exhausted
+            + Op.POP(Op.CALL(Op.GAS, Op.ADDRESS, 0, 0, 0, 0, 0))
+            # At max depth, CREATE fails silently (returns 0).
+            # After unwinding, only outermost frame reaches SSTORE.
+            + Op.SSTORE(storage.store_next(1, "after_recursion"), 1)
+        ),
+    )
+
+    tx = Transaction(
+        to=recursive,
+        gas_limit=gas_limit_cap + sstore_state_gas,
+        sender=pre.fund_eoa(),
+    )
+
+    post = {recursive: Account(storage=storage)}
+    state_test(pre=pre, post=post, tx=tx)
+
+
+@pytest.mark.valid_from("EIP8037")
+def test_create2_collision_state_gas_block_accounting(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify block state gas includes collision CREATE2 charge.
+
+    A factory does CREATE2 (succeeds), then CREATE2 with the same
+    salt (collision, returns 0). Both attempts charge GAS_NEW_ACCOUNT.
+    The block header gas_used reflects both state gas charges via
+    2D accounting.
+    """
+    gas_costs = fork.gas_costs()
+    create_state_gas = gas_costs.GAS_NEW_ACCOUNT
+
+    init_code = Op.STOP
+    salt = 0
+
+    factory_code = (
+        Op.MSTORE(
+            0,
+            int.from_bytes(bytes(init_code), "big") << 248,
+        )
+        # First CREATE2 succeeds
+        + Op.POP(Op.CREATE2(0, 31, 1, salt))
+        # Second CREATE2 collides — returns 0 but state gas consumed
+        + Op.POP(Op.CREATE2(0, 31, 1, salt))
+    )
+    factory = pre.deploy_contract(factory_code)
+
+    intrinsic_gas = fork.transaction_intrinsic_cost_calculator()()
+
+    # Both CREATE2 attempts charge GAS_NEW_ACCOUNT. The first
+    # CREATE2's child OOGs on code deposit (tight gas), so only
+    # account-creation state gas counts for each attempt.
+    expected_state = 2 * create_state_gas
+
+    factory_gas = factory_code.gas_cost(fork)
+    gas_limit = intrinsic_gas + factory_gas + 1000
+    assert gas_limit - expected_state < expected_state
+
+    tx = Transaction(
+        to=factory,
+        gas_limit=gas_limit,
+        sender=pre.fund_eoa(),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[tx],
+                header_verify=Header(gas_used=expected_state),
+            ),
+        ],
+        post={},
+    )
