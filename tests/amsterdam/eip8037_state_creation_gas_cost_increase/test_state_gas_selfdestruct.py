@@ -308,3 +308,74 @@ def test_create_selfdestruct_same_tx_no_state_gas_refund(
         ],
         post={},
     )
+
+
+@pytest.mark.with_all_create_opcodes()
+@pytest.mark.valid_from("EIP8037")
+def test_call_value_to_selfdestructed_same_tx_account(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    create_opcode: Op,
+) -> None:
+    """
+    Verify CALL with value to same-TX self-destructed account does
+    NOT charge GAS_NEW_ACCOUNT.
+
+    A factory CREATE/CREATE2s a contract that SELFDESTRUCTs to
+    itself (EIP-6780: marked for deletion). Then the factory CALLs
+    the address with value. Despite being marked for deletion,
+    is_account_alive returns true during execution (actual deletion
+    deferred to end of tx), so no GAS_NEW_ACCOUNT is charged.
+    """
+    gas_costs = fork.gas_costs()
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    sstore_state_gas = fork.sstore_state_gas()
+
+    inner_code = Op.SELFDESTRUCT(Op.ADDRESS)
+    inner_bytes = bytes(inner_code)
+
+    create_call = (
+        create_opcode(value=1, offset=0, size=len(inner_bytes), salt=0)
+        if create_opcode == Op.CREATE2
+        else create_opcode(value=1, offset=0, size=len(inner_bytes))
+    )
+
+    factory_code = (
+        Op.MSTORE(
+            0,
+            int.from_bytes(inner_bytes, "big") << (256 - 8 * len(inner_bytes)),
+        )
+        + Op.SSTORE(0, create_call)
+        + Op.POP(Op.CALL(gas=Op.GAS, address=Op.SLOAD(0), value=1))
+    )
+    factory = pre.deploy_contract(factory_code, balance=10**18)
+
+    intrinsic_gas = fork.transaction_intrinsic_cost_calculator()()
+
+    # State gas: GAS_NEW_ACCOUNT (CREATE) + sstore_state_gas
+    # (SSTORE slot 0). No GAS_NEW_ACCOUNT for the CALL because
+    # the account is still alive during execution.
+    expected_state = gas_costs.GAS_NEW_ACCOUNT + sstore_state_gas
+
+    factory_gas = factory_code.gas_cost(fork)
+    gas_limit = intrinsic_gas + factory_gas + 1000
+    assert gas_limit - expected_state < expected_state
+
+    tx = Transaction(
+        to=factory,
+        gas_limit=gas_limit,
+        sender=pre.fund_eoa(),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[tx],
+                header_verify=Header(gas_used=expected_state),
+            ),
+        ],
+        post={},
+    )
