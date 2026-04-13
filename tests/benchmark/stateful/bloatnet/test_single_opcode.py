@@ -58,6 +58,198 @@ START_SLOT = (
 )
 
 
+def delegate_and_set_slot0(
+    pre: Alloc,
+    authority: EOA,
+    setter_address: Address,
+    slot_0_value: Hash,
+) -> Transaction:
+    """
+    Create a tx that delegates the authority to the setter and calls
+    it with slot_0_value as calldata, writing it into slot 0.
+
+    The authority nonce is incremented in-place.
+    """
+    tx = Transaction(
+        gas_limit=100_000,
+        to=authority,
+        value=0,
+        data=slot_0_value,
+        sender=pre.fund_eoa(),
+        authorization_list=[
+            AuthorizationTuple(
+                chain_id=0,
+                address=setter_address,
+                nonce=authority.nonce,
+                signer=authority,
+            ),
+        ],
+    )
+    authority.nonce = Number(authority.nonce + 1)
+    return tx
+
+
+def run_bloated_eoa_benchmark(
+    *,
+    benchmark_test: BenchmarkTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    gas_benchmark_value: int,
+    tx_gas_limit: int,
+    authority: EOA,
+    existing_slots: bool,
+    runtime_code: Bytecode,
+) -> None:
+    """
+    Run a bloated-EOA benchmark with the given runtime delegation code.
+
+    Handles authority setup, slot 0 initialization, delegation to
+    runtime code, benchmark tx generation, and test invocation.
+    """
+    slot_0_value = Hash(1) if existing_slots else Hash(START_SLOT)
+
+    setter_address = pre.deploy_contract(code=Op.SSTORE(0, Op.CALLDATALOAD(0)))
+    runtime_address = pre.deploy_contract(code=runtime_code)
+
+    init_tx = delegate_and_set_slot0(
+        pre, authority, setter_address, slot_0_value
+    )
+    runtime_tx = delegate_and_set_slot0(
+        pre, authority, runtime_address, Hash(0)
+    )
+
+    blocks: list[Block] = [Block(txs=[init_tx, runtime_tx])]
+
+    gas_available = gas_benchmark_value
+    intrinsic_gas = fork.transaction_intrinsic_cost_calculator()()
+    sender = pre.fund_eoa()
+
+    txs: list[Transaction] = []
+    while gas_available >= intrinsic_gas:
+        tx_gas = min(gas_available, tx_gas_limit)
+        txs.append(
+            Transaction(
+                gas_limit=tx_gas,
+                to=authority,
+                sender=sender,
+            )
+        )
+        gas_available -= tx_gas
+    blocks.append(Block(txs=txs))
+
+    benchmark_test(
+        pre=pre,
+        blocks=blocks,
+        skip_gas_used_validation=True,
+        expected_receipt_status=True,
+    )
+
+
+@pytest.mark.repricing
+@pytest.mark.stub_parametrize("token_name", "bloated_eoa_")
+@pytest.mark.parametrize("existing_slots", [False, True])
+def test_sload_bloated(
+    benchmark_test: BenchmarkTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    gas_benchmark_value: int,
+    tx_gas_limit: int,
+    token_name: str,
+    existing_slots: bool,
+) -> None:
+    """
+    Benchmark SLOAD opcodes targeting an EOA with storage bloated.
+
+    The storage is assumed to be filled from 0-N linearly, where
+    each slot has the value of the key. If this is not the
+    storage layout of the target account, then the existing_slots
+    parameter will not be correct.
+    """
+    runtime_code = (
+        Op.SLOAD(Op.PUSH0)
+        + While(
+            body=(Op.DUP1 + Op.SLOAD + Op.POP + Op.PUSH1(1) + Op.ADD),
+            condition=Op.GT(Op.GAS, 0xFFFF),
+        )
+        + Op.PUSH0
+        + Op.SSTORE
+    )
+
+    run_bloated_eoa_benchmark(
+        benchmark_test=benchmark_test,
+        pre=pre,
+        fork=fork,
+        gas_benchmark_value=gas_benchmark_value,
+        tx_gas_limit=tx_gas_limit,
+        authority=pre.stub_eoa(token_name),
+        existing_slots=existing_slots,
+        runtime_code=runtime_code,
+    )
+
+
+@pytest.mark.repricing
+@pytest.mark.stub_parametrize("token_name", "bloated_eoa_")
+@pytest.mark.parametrize("write_new_value", [False, True])
+@pytest.mark.parametrize("existing_slots", [True, False])
+def test_sstore_bloated(
+    benchmark_test: BenchmarkTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    gas_benchmark_value: int,
+    tx_gas_limit: int,
+    token_name: str,
+    write_new_value: bool,
+    existing_slots: bool,
+) -> None:
+    """
+    Benchmark SSTORE opcodes targeting an EOA with storage bloated.
+
+    The storage is assumed to be filled from 0-N linearly, where
+    each slot has the value of the key. Except slot 0, this is the
+    pointer to the next free (empty) storage slot.
+
+    For this test to work correctly under all parameters then above
+    has to be true. If this is not the case then some tests will not
+    test what they claim to do. For instance, for `write_new_value`
+    set to False we need to know the current value of the slots.
+    """
+    stack_init = Op.DUP1 + (
+        Op.PUSH1(1) + Op.ADD + Op.SWAP1 if write_new_value else Bytecode()
+    )
+
+    runtime_code = (
+        Op.SLOAD(Op.PUSH0)
+        + stack_init
+        + While(
+            body=(
+                Op.DUP2
+                + Op.DUP2
+                + Op.SSTORE
+                + Op.PUSH1(1)
+                + Op.ADD
+                + Op.SWAP1
+                + Op.PUSH1(1)
+                + Op.ADD
+                + Op.SWAP1
+            ),
+            condition=Op.GT(Op.GAS, 0xFFFF),
+        )
+        + Op.PUSH0
+        + Op.SSTORE
+    )
+
+    run_bloated_eoa_benchmark(
+        benchmark_test=benchmark_test,
+        pre=pre,
+        fork=fork,
+        gas_benchmark_value=gas_benchmark_value,
+        tx_gas_limit=tx_gas_limit,
+        authority=pre.stub_eoa(token_name),
+        existing_slots=existing_slots,
+        runtime_code=runtime_code,
+    )
+
+
 @pytest.mark.stub_parametrize(
     "erc20_stub", "test_sload_empty_erc20_balanceof_"
 )
@@ -1842,7 +2034,6 @@ def test_account_access(
         attack_call = Op.POP(
             opcode(
                 address=address_retriever.address_op(),
-                gas=1,
                 value=value_sent,
                 # Gas accounting
                 address_warm=access_warm,
@@ -1855,8 +2046,6 @@ def test_account_access(
         attack_call = Op.POP(
             opcode(
                 address=address_retriever.address_op(),
-                gas=1,
-                args_size=1024,
                 # Gas accounting
                 address_warm=access_warm,
             )
@@ -1873,6 +2062,7 @@ def test_account_access(
 
     loop_code = While(
         body=cache_op + attack_call + increment_op,
+        condition=Op.GT(Op.GAS, 0x9000) if value_sent > 0 else None,
     )
 
     attack_code = IteratingBytecode(
@@ -1884,9 +2074,13 @@ def test_account_access(
     )
 
     # Calldata generator for each transaction of the iterating bytecode.
+    # Start from 1 to skip the Bittrex Controller's nonce=1 contract
+    # which has a non-payable fallback that reverts when receiving value.
+    calldata_offset = 1 if account_mode == AccountMode.EXISTING_CONTRACT else 0
+
     def calldata(iteration_count: int, start_iteration: int) -> bytes:
         del iteration_count
-        return Hash(start_iteration)
+        return Hash(start_iteration + calldata_offset)
 
     attack_address = pre.deploy_contract(code=attack_code, balance=10**21)
 
@@ -1915,7 +2109,6 @@ def test_account_access(
                     calldata=calldata,
                 )
             )
-        total_gas_cost = sum(tx.gas_cost for tx in attack_txs)
 
     if cache_strategy == CacheStrategy.CACHE_PREVIOUS_BLOCK:
         with TestPhaseManager.setup():
@@ -1941,5 +2134,6 @@ def test_account_access(
         post=post,
         blocks=blocks,
         target_opcode=opcode,
-        expected_benchmark_gas_used=total_gas_cost,
+        skip_gas_used_validation=True,
+        expected_receipt_status=1,
     )

@@ -16,6 +16,10 @@ These markers are used to specify the forks for which a test is valid.
 
 :::execution_testing.cli.pytest_commands.plugins.forks.forks.ValidUntil
 
+### `@pytest.mark.valid_before("FORK_OR_EIP")`
+
+:::execution_testing.cli.pytest_commands.plugins.forks.forks.ValidBefore
+
 ### `@pytest.mark.valid_at("FORK_NAME_1", "FORK_NAME_2", ...)`
 
 :::execution_testing.cli.pytest_commands.plugins.forks.forks.ValidAt
@@ -328,7 +332,7 @@ In this example, the test will be marked as expected to fail when it is being ex
 
 ### `@pytest.mark.slow`
 
-This marker is used to mark tests that are slow to run. These tests are not run during [`tox` checks](./verifying_changes.md), and are only run when a release is being prepared.
+This marker is used to mark tests that are slow to run. These tests are not run during [CI checks](./verifying_changes.md), and are only run when a release is being prepared.
 
 ### `@pytest.mark.pre_alloc_mutable`
 

@@ -130,7 +130,7 @@ HISTORY_STORAGE_ADDRESS = hex_to_address(
 MAX_BLOCK_SIZE = 10_485_760
 SAFETY_MARGIN = 2_097_152
 MAX_RLP_BLOCK_SIZE = MAX_BLOCK_SIZE - SAFETY_MARGIN
-BLOB_COUNT_LIMIT = 6
+BLOB_COUNT_LIMIT = 2
 
 
 @slotted_freezable
@@ -793,7 +793,6 @@ def process_unchecked_system_transaction(
         accessed_storage_keys=set(),
         disable_precompiles=False,
         parent_evm=None,
-        is_create=False,
     )
 
     system_tx_output = process_message_call(system_tx_message)

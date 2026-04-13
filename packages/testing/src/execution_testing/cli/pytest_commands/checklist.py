@@ -4,7 +4,14 @@ from typing import Any
 
 import click
 
+from ...forks import get_development_forks
 from .fill import FillCommand
+
+
+def _last_development_fork() -> str | None:
+    """Return the name of the last development fork, if any."""
+    dev_forks = get_development_forks()
+    return dev_forks[-1].name() if dev_forks else None
 
 
 @click.command()
@@ -22,12 +29,24 @@ from .fill import FillCommand
     multiple=True,
     help="Generate checklist only for specific EIP(s)",
 )
-def checklist(output: str, eip: tuple[int, ...], **kwargs: Any) -> None:
+@click.option(
+    "--until",
+    "-u",
+    type=str,
+    default=None,
+    help="Include upcoming forks up to and including this fork",
+)
+def checklist(
+    output: str, eip: tuple[int, ...], until: str | None, **kwargs: Any
+) -> None:
     """
     Generate EIP test checklists based on pytest.mark.eip_checklist markers.
 
     This command scans test files for eip_checklist markers and generates
     filled checklists showing which checklist items have been implemented.
+
+    By default, includes all development forks so that checklists for
+    upcoming EIPs are generated without needing --until.
 
     Examples:
         # Generate checklists for all EIPs
@@ -38,6 +57,9 @@ def checklist(output: str, eip: tuple[int, ...], **kwargs: Any) -> None:
 
         # Generate checklists for specific test path
         uv run checklist tests/prague/eip7702*
+
+        # Limit to a specific fork
+        uv run checklist --until Prague
 
         # Specify output directory
         uv run checklist --output ./my-checklists
@@ -51,6 +73,13 @@ def checklist(output: str, eip: tuple[int, ...], **kwargs: Any) -> None:
     # Add EIP filter if specified
     for eip_num in eip:
         args.extend(["--checklist-eip", str(eip_num)])
+
+    # Default --until to the last development fork so checklists for
+    # upcoming EIPs are generated without requiring the flag explicitly.
+    if until is None:
+        until = _last_development_fork()
+    if until:
+        args.extend(["--until", until])
 
     command = FillCommand(
         plugins=[
