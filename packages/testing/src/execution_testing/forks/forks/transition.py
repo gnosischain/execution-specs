@@ -2,7 +2,6 @@
 
 from ..transition_base_fork import TransitionBaseClass, transition_fork
 from .forks import (
-    BPO1,
     BPO2,
     BPO3,
     BPO4,
