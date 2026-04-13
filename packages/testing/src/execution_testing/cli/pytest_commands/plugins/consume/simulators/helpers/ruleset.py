@@ -5,10 +5,10 @@ from typing import Dict
 from execution_testing.forks import (
     ALL_FORKS_WITH_TRANSITIONS,
     Amsterdam,
-    OsakaToAmsterdamAtTime15k,
     Byzantium,
     Fork,
     London,
+    OsakaToAmsterdamAtTime15k,
     TransitionFork,
 )
 
