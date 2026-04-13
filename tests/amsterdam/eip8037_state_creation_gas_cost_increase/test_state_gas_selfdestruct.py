@@ -18,6 +18,7 @@ from execution_testing import (
     BlockchainTestFiller,
     Environment,
     Fork,
+    Header,
     Op,
     StateTestFiller,
     Storage,
@@ -247,4 +248,63 @@ def test_selfdestruct_new_beneficiary_header_gas_used(
             Block(txs=[tx]),
         ],
         post={caller: Account(storage=storage)},
+    )
+
+
+@pytest.mark.with_all_create_opcodes()
+@pytest.mark.valid_from("EIP8037")
+def test_create_selfdestruct_same_tx_no_state_gas_refund(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    create_opcode: Op,
+) -> None:
+    """
+    Verify CREATE/CREATE2 state gas not refunded on same-TX SELFDESTRUCT.
+
+    A factory CREATEs a contract whose initcode SELFDESTRUCTs to
+    itself (EIP-6780: same-creation context, destroyed). Net state
+    is zero but GAS_NEW_ACCOUNT stays consumed. No SELFDESTRUCT
+    refund exists post-London (EIP-3529).
+    """
+    gas_costs = fork.gas_costs()
+    create_state_gas = gas_costs.GAS_NEW_ACCOUNT
+
+    inner_code = Op.SELFDESTRUCT(Op.ADDRESS)
+    inner_bytes = bytes(inner_code)
+
+    create_call = (
+        create_opcode(value=1, offset=0, size=len(inner_bytes), salt=0)
+        if create_opcode == Op.CREATE2
+        else create_opcode(value=1, offset=0, size=len(inner_bytes))
+    )
+
+    factory_code = Op.MSTORE(
+        0,
+        int.from_bytes(inner_bytes, "big") << (256 - 8 * len(inner_bytes)),
+    ) + Op.POP(create_call)
+    factory = pre.deploy_contract(factory_code, balance=1)
+
+    intrinsic_gas = fork.transaction_intrinsic_cost_calculator()()
+    expected_state = create_state_gas
+
+    factory_gas = factory_code.gas_cost(fork)
+    gas_limit = intrinsic_gas + factory_gas + 1000
+    assert gas_limit - expected_state < expected_state
+
+    tx = Transaction(
+        to=factory,
+        gas_limit=gas_limit,
+        sender=pre.fund_eoa(),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[tx],
+                header_verify=Header(gas_used=expected_state),
+            ),
+        ],
+        post={},
     )
