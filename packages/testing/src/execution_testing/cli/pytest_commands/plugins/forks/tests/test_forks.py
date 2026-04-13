@@ -7,8 +7,6 @@ from execution_testing.client_clis.clis.execution_specs import (
 )
 from execution_testing.fixtures import LabeledFixtureFormat
 from execution_testing.forks import (
-    BPO1,
-    BPO2,
     Amsterdam,
     ArrowGlacier,
     Fork,
