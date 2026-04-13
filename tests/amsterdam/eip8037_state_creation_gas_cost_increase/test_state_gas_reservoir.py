@@ -444,6 +444,10 @@ def test_access_list_gas_is_regular_not_state(
     Test that EIP-2930 access list gas is classified as regular
     intrinsic gas. A transaction with an access list and no state
     operations verifies the gas dimension split in the block header.
+
+    If a client incorrectly classifies access list gas as state gas,
+    the header gas_used will differ because max(regular, state) would
+    shift the dominant dimension.
     """
     contract = pre.deploy_contract(code=Op.STOP)
 
@@ -455,15 +459,89 @@ def test_access_list_gas_is_regular_not_state(
             AccessList(address=target, storage_keys=storage_keys)
         )
 
+    intrinsic_calc = fork.transaction_intrinsic_cost_calculator()
+    gas_needed = intrinsic_calc(access_list=access_list)
+
     tx = Transaction(
         to=contract,
-        gas_limit=fork.transaction_gas_limit_cap(),
+        gas_limit=gas_needed,
+        sender=pre.fund_eoa(),
+        access_list=access_list,
+    )
+
+    # No state ops, so block_state_gas = 0. header gas_used =
+    # regular gas only. A client putting access list gas into
+    # the state dimension would produce a different gas_used.
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[tx],
+                header_verify=Header(gas_used=gas_needed),
+            ),
+        ],
+        post={},
+    )
+
+
+@pytest.mark.valid_from("EIP8037")
+def test_access_list_warm_savings_stay_regular(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify warm access savings from access list stay in regular gas.
+
+    A transaction with an access list pre-warms a storage slot. The
+    contract SLOADs that slot (warm, not cold). The gas savings from
+    warm access must remain in the regular dimension. A client that
+    credits the cold-to-warm difference to state gas would produce
+    a different header gas_used.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    sstore_state_gas = fork.sstore_state_gas()
+
+    # Contract: SLOAD slot 0 (warm via access list), then SSTORE
+    # it back (nonzero-to-nonzero, no state gas change)
+    contract = pre.deploy_contract(
+        code=Op.SSTORE(0, Op.SLOAD(0)),
+        storage={0: 1},
+    )
+
+    access_list = [AccessList(address=contract, storage_keys=[0])]
+
+    intrinsic_calc = fork.transaction_intrinsic_cost_calculator()
+    intrinsic_gas = intrinsic_calc(access_list=access_list)
+
+    # Warm SLOAD + warm nonzero-to-nonzero SSTORE = all regular.
+    # No state gas (not zero-to-nonzero).
+    contract_code = Op.SSTORE.with_metadata(
+        key_warm=True,
+        original_value=1,
+        current_value=1,
+        new_value=1,
+    )(0, Op.SLOAD.with_metadata(key_warm=True)(0))
+    evm_gas = contract_code.gas_cost(fork)
+
+    expected_gas_used = intrinsic_gas + evm_gas
+    gas_limit = gas_limit_cap + sstore_state_gas
+
+    tx = Transaction(
+        to=contract,
+        gas_limit=gas_limit,
         sender=pre.fund_eoa(),
         access_list=access_list,
     )
 
     blockchain_test(
         pre=pre,
-        blocks=[Block(txs=[tx])],
-        post={},
+        blocks=[
+            Block(
+                txs=[tx],
+                header_verify=Header(gas_used=expected_gas_used),
+            ),
+        ],
+        post={contract: Account(storage={0: 1})},
     )
