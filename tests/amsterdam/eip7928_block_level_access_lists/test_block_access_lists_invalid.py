@@ -722,7 +722,6 @@ def test_bal_invalid_missing_tx_account(
 
 
 @pytest.mark.valid_from("Amsterdam")
-@pytest.mark.exception_test
 def test_bal_invalid_missing_withdrawal_account_empty_block(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
