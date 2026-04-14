@@ -432,7 +432,7 @@ def test_create_tx_reservoir(
         pytest.param(3, id="with_storage_keys"),
     ],
 )
-@pytest.mark.valid_from("EIP8037")
+@pytest.mark.valid_from("Amsterdam")
 def test_access_list_gas_is_regular_not_state(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -484,7 +484,7 @@ def test_access_list_gas_is_regular_not_state(
     )
 
 
-@pytest.mark.valid_from("EIP8037")
+@pytest.mark.valid_from("Amsterdam")
 def test_access_list_warm_savings_stay_regular(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,

@@ -583,3 +583,47 @@ def test_block_2d_gas_tx_gas_limit_exceeds_regular_remaining(
         ],
         post={sstore_contract: Account(storage=storage)},
     )
+
+
+@pytest.mark.valid_from("Amsterdam")
+def test_receipt_cumulative_differs_from_header_gas_used(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify receipt cumulative_gas_used can differ from header gas_used.
+
+    Under 2D accounting, header gas_used = max(sum_regular, sum_state)
+    while receipt cumulative_gas_used = sum of per-tx (regular + state).
+    A block with SSTORE txs where state dominates produces a header
+    gas_used less than the receipt cumulative, because the header uses
+    the 2D max, not the 1D sum.
+
+    A client that uses receipt cumulative for header validation (or
+    vice versa) would reject valid blocks.
+    """
+    tx_regular, tx_state = sstore_tx_gas(fork)
+    num_txs = 3
+
+    txs, post = sstore_txs(pre, fork, num_txs)
+
+    block_regular = num_txs * tx_regular
+    block_state = num_txs * tx_state
+    header_gas_used = max(block_regular, block_state)
+    receipt_cumulative = num_txs * (tx_regular + tx_state)
+
+    # State dominates, so header < receipt cumulative
+    assert block_state > block_regular
+    assert header_gas_used < receipt_cumulative
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=txs,
+                header_verify=Header(gas_used=header_gas_used),
+            ),
+        ],
+        post=post,
+    )

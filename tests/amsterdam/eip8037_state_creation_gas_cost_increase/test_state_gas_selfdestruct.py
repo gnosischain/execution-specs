@@ -252,7 +252,7 @@ def test_selfdestruct_new_beneficiary_header_gas_used(
 
 
 @pytest.mark.with_all_create_opcodes()
-@pytest.mark.valid_from("EIP8037")
+@pytest.mark.valid_from("Amsterdam")
 def test_create_selfdestruct_same_tx_no_state_gas_refund(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -311,7 +311,7 @@ def test_create_selfdestruct_same_tx_no_state_gas_refund(
 
 
 @pytest.mark.with_all_create_opcodes()
-@pytest.mark.valid_from("EIP8037")
+@pytest.mark.valid_from("Amsterdam")
 def test_call_value_to_selfdestructed_same_tx_account(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,

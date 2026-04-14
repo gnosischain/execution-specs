@@ -933,7 +933,7 @@ def test_call_new_account_header_gas_used(
         pytest.param("halt", id="child_halt"),
     ],
 )
-@pytest.mark.valid_from("EIP8037")
+@pytest.mark.valid_from("Amsterdam")
 def test_top_level_halt_preserves_restored_reservoir(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -991,3 +991,47 @@ def test_top_level_halt_preserves_restored_reservoir(
         ],
         post={child: Account(storage={0: 0})},
     )
+
+
+@pytest.mark.valid_from("Amsterdam")
+def test_callcode_value_no_new_account_state_gas(
+    state_test: StateTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify CALLCODE with value does not charge GAS_NEW_ACCOUNT.
+
+    CALLCODE transfers value to the caller, not the target. No new
+    account is created regardless of whether the target exists. The
+    reservoir should be fully available for a subsequent SSTORE.
+    """
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    assert gas_limit_cap is not None
+    sstore_state_gas = fork.sstore_state_gas()
+
+    target = pre.fund_eoa(amount=0)
+
+    storage = Storage()
+    contract = pre.deploy_contract(
+        code=(
+            Op.POP(
+                Op.CALLCODE(
+                    gas=Op.GAS,
+                    address=target,
+                    value=1,
+                )
+            )
+            + Op.SSTORE(storage.store_next(1, "reservoir_ok"), 1)
+        ),
+        balance=10**18,
+    )
+
+    tx = Transaction(
+        to=contract,
+        gas_limit=gas_limit_cap + sstore_state_gas,
+        sender=pre.fund_eoa(),
+    )
+
+    post = {contract: Account(storage=storage)}
+    state_test(pre=pre, post=post, tx=tx)

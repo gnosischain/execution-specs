@@ -1696,7 +1696,7 @@ def test_create_oog_during_state_gas_charge(
     state_test(pre=pre, post=post, tx=tx)
 
 
-@pytest.mark.valid_from("EIP8037")
+@pytest.mark.valid_from("Amsterdam")
 def test_create_nonce_overflow_state_gas_consumed(
     state_test: StateTestFiller,
     pre: Alloc,
@@ -1742,7 +1742,7 @@ def test_create_nonce_overflow_state_gas_consumed(
     state_test(pre=pre, post=post, tx=tx)
 
 
-@pytest.mark.valid_from("EIP8037")
+@pytest.mark.valid_from("Amsterdam")
 def test_create_stack_depth_state_gas_consumed(
     state_test: StateTestFiller,
     pre: Alloc,
@@ -1788,7 +1788,7 @@ def test_create_stack_depth_state_gas_consumed(
     state_test(pre=pre, post=post, tx=tx)
 
 
-@pytest.mark.valid_from("EIP8037")
+@pytest.mark.valid_from("Amsterdam")
 def test_create2_collision_state_gas_block_accounting(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
