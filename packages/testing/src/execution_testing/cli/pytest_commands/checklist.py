@@ -1,11 +1,30 @@
 """CLI entry point for the `checklist` pytest-based command."""
 
-from typing import Any
+from typing import Any, ClassVar, List
 
 import click
+import pytest
 
 from ...forks import get_development_forks
-from .fill import FillCommand
+from .base import PytestCommand
+
+
+class ChecklistCommand(PytestCommand):
+    """
+    Pytest command to generate checklist documentation.
+
+    The checklist command only collects tests to analyze markers and does
+    not run them, so ``NO_TESTS_COLLECTED`` is treated as success.
+    """
+
+    allowed_exit_codes: ClassVar[List[pytest.ExitCode]] = [
+        pytest.ExitCode.OK,
+        pytest.ExitCode.NO_TESTS_COLLECTED,
+    ]
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize checklist command."""
+        super().__init__(config_file="pytest-fill.ini", **kwargs)
 
 
 def _last_development_fork() -> str | None:
@@ -81,7 +100,7 @@ def checklist(
     if until:
         args.extend(["--until", until])
 
-    command = FillCommand(
+    command = ChecklistCommand(
         plugins=[
             "execution_testing.cli.pytest_commands.plugins.filler.eip_checklist"
         ],

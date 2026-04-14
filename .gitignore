@@ -93,3 +93,6 @@ logs/
 env.yaml
 
 site/
+
+# Temporary data; used for generated checklists
+tmp/
