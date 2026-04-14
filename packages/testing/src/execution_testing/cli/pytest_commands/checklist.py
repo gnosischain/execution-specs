@@ -34,6 +34,11 @@ def _last_development_fork() -> str | None:
 
 
 @click.command()
+@click.argument(
+    "paths",
+    nargs=-1,
+    type=click.Path(),
+)
 @click.option(
     "--output",
     "-o",
@@ -56,7 +61,11 @@ def _last_development_fork() -> str | None:
     help="Include upcoming forks up to and including this fork",
 )
 def checklist(
-    output: str, eip: tuple[int, ...], until: str | None, **kwargs: Any
+    paths: tuple[str, ...],
+    output: str,
+    eip: tuple[int, ...],
+    until: str | None,
+    **kwargs: Any,
 ) -> None:
     """
     Generate EIP test checklists based on pytest.mark.eip_checklist markers.
@@ -64,20 +73,23 @@ def checklist(
     This command scans test files for eip_checklist markers and generates
     filled checklists showing which checklist items have been implemented.
 
+    By default it scans `tests` plus `tests/benchmark`; pass one or more
+    paths to limit collection to a subset.
+
     By default, includes all development forks so that checklists for
     upcoming EIPs are generated without needing --until.
 
     Examples:
-        # Generate checklists for all EIPs
+        # Generate checklists for all EIPs (default: tests + tests/benchmark)
         uv run checklist
 
         # Generate checklist for specific EIP
         uv run checklist --eip 7702
 
-        # Generate checklists for specific test path
-        uv run checklist tests/prague/eip7702*
+        # Generate checklists for a specific test path
+        uv run checklist tests/prague/eip7702_set_code_tx
 
-        # Limit to a specific fork
+        # Generate until a specific fork
         uv run checklist --until Prague
 
         # Specify output directory
@@ -99,6 +111,16 @@ def checklist(
         until = _last_development_fork()
     if until:
         args.extend(["--until", until])
+
+    # When no paths are provided, scan `tests/` and force inclusion of
+    # `tests/benchmark/` via `--include-benchmark`. The conftest normally
+    # hides `tests/benchmark/` from a plain `tests/` collection, and
+    # passing both as positional paths triggers pytest path deduplication
+    # which drops the broader `tests/`.
+    if not paths:
+        paths = ("tests",)
+        args.append("--include-benchmark")
+    args.extend(paths)
 
     command = ChecklistCommand(
         plugins=[
