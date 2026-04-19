@@ -31,6 +31,7 @@ from ..base_fork import (
     CalldataGasCalculator,
     ExcessBlobGasCalculator,
     MemoryExpansionGasCalculator,
+    RefundTypes,
     TransactionDataFloorCostCalculator,
     TransactionIntrinsicCostCalculator,
 )
@@ -889,6 +890,11 @@ class Frontier(
         return False
 
     @classmethod
+    def header_slot_number_required(cls) -> bool:
+        """At genesis, header must not contain slot number (EIP-7843)."""
+        return False
+
+    @classmethod
     def engine_new_payload_blob_hashes(cls) -> bool:
         """At genesis, payloads do not have blob hashes."""
         return False
@@ -955,6 +961,30 @@ class Frontier(
     def transaction_gas_limit_cap(cls) -> int | None:
         """At Genesis, no transaction gas limit cap is imposed."""
         return None
+
+    @classmethod
+    def sstore_state_gas(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> int:
+        """Return the state gas for a zero-to-nonzero SSTORE."""
+        del block_number, timestamp
+        return 0
+
+    @classmethod
+    def code_deposit_state_gas(
+        cls, *, code_size: int, block_number: int = 0, timestamp: int = 0
+    ) -> int:
+        """Return the state gas for code deposit of the given size."""
+        del code_size, block_number, timestamp
+        return 0
+
+    @classmethod
+    def create_state_gas(
+        cls, *, code_size: int = 0, block_number: int = 0, timestamp: int = 0
+    ) -> int:
+        """Return total state gas for CREATE (new account + code deposit)."""
+        del code_size, block_number, timestamp
+        return 0
 
     @classmethod
     def block_rlp_size_limit(cls) -> int | None:
@@ -1171,6 +1201,13 @@ class Frontier(
     def max_request_type(cls) -> int:
         """At genesis, no request type is supported, signaled by -1."""
         return -1
+
+    @classmethod
+    def refund_types(cls) -> List[RefundTypes]:
+        """
+        At genesis, storage clearing refund is introduced.
+        """
+        return [RefundTypes.STORAGE_CLEAR]
 
     @classmethod
     def pre_allocation(cls) -> Mapping:

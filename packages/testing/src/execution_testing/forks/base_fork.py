@@ -2,6 +2,7 @@
 
 import re
 from abc import ABCMeta, abstractmethod
+from enum import Enum, auto
 from typing import (
     TYPE_CHECKING,
     Callable,
@@ -166,6 +167,13 @@ class ExcessBlobGasCalculator(Protocol):
         gas used.
         """
         pass
+
+
+class RefundTypes(Enum):
+    """Enum used to describe all refund types a fork can have."""
+
+    STORAGE_CLEAR = auto()
+    AUTHORIZATION_EXISTING_AUTHORITY = auto()
 
 
 class BaseForkMeta(ABCMeta):
@@ -428,6 +436,12 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         """
         pass
 
+    @classmethod
+    @abstractmethod
+    def header_slot_number_required(cls) -> bool:
+        """Return true if the header must contain slot number (EIP-7843)."""
+        pass
+
     # Gas related abstract methods
 
     @classmethod
@@ -621,6 +635,16 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         pass
 
     @classmethod
+    def transaction_intrinsic_state_gas(
+        cls,
+        *,
+        contract_creation: bool = False,  # noqa: ARG003
+        authorization_count: int = 0,  # noqa: ARG003
+    ) -> int:
+        """Return intrinsic state gas (zero pre-Amsterdam)."""
+        return 0
+
+    @classmethod
     @abstractmethod
     def blob_gas_price_calculator(cls) -> BlobGasPriceCalculator:
         """
@@ -753,6 +777,38 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         """
         Return the transaction gas limit cap, or None if no limit is imposed.
         """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def sstore_state_gas(
+        cls, *, block_number: int = 0, timestamp: int = 0
+    ) -> int:
+        """Return state gas for a zero-to-nonzero SSTORE."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def code_deposit_state_gas(
+        cls,
+        *,
+        code_size: int,
+        block_number: int = 0,
+        timestamp: int = 0,
+    ) -> int:
+        """Return state gas for code deposit of the given size."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def create_state_gas(
+        cls,
+        *,
+        code_size: int = 0,
+        block_number: int = 0,
+        timestamp: int = 0,
+    ) -> int:
+        """Return total state gas for CREATE."""
         pass
 
     @classmethod
@@ -977,6 +1033,15 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
     @abstractmethod
     def max_request_type(cls) -> int:
         """Return max request type supported by the fork."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def refund_types(cls) -> List[RefundTypes]:
+        """
+        Return the list of refund types that are possible given current
+        fork logic.
+        """
         pass
 
     # Meta information about the fork
