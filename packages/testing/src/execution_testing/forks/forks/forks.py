@@ -1582,7 +1582,10 @@ class BPO5(
 
 
 class Amsterdam(
+    eips.EIP7954,
+    eips.EIP7843,
     eips.EIP7928,
+    eips.EIP8037,
     Osaka,
     deployed=False,
 ):
