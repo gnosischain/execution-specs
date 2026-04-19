@@ -1172,9 +1172,6 @@ def process_withdrawals(
     if out.error:
         raise InvalidBlock(f"Withdrawal system call failed: {out.error}")
 
-    wd_state = TransactionState(parent=block_env.state)
-    incorporate_tx_into_block(wd_state, block_env.block_access_list_builder)
-
 
 def process_block_rewards(
     block_env: vm.BlockEnvironment,
