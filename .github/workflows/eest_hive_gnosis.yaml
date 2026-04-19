@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
 
       - name: Clone Hive repository
-        run: git clone -b master https://github.com/gnosischain/hive.git
+        run: git clone -b fix/client-files https://github.com/gnosischain/hive.git
 
       - name: Install Go (for Hive)
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
