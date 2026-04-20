@@ -37,12 +37,30 @@ from execution_testing.fixtures import (
     FixtureFormat,
     LabeledFixtureFormat,
 )
-from execution_testing.forks import Fork
+from execution_testing.forks import Fork, TransitionFork
 from execution_testing.test_types import Alloc, Environment, Transaction
 from execution_testing.vm import Bytecode, Op
 
 from .base import BaseTest, FillResult
 from .blockchain import Block, BlockchainTest
+
+
+@dataclass(frozen=True)
+class OpcodeTarget:
+    """
+    Map a display name to an underlying opcode for count validation.
+
+    Use when the fixture metadata should show a descriptive label (e.g. a
+    precompile name) while opcode-count validation targets the real EVM
+    opcode that gets executed (e.g. STATICCALL).
+    """
+
+    name: str
+    opcode: Op
+
+    def __str__(self) -> str:
+        """Return the display name."""
+        return self.name
 
 
 @dataclass(kw_only=True)
@@ -287,7 +305,7 @@ class BenchmarkTest(BaseTest):
         default_factory=lambda: int(Environment().gas_limit)
     )
     fixed_opcode_count: float | None = None
-    target_opcode: Op | None = None
+    target_opcode: Op | OpcodeTarget | None = None
     code_generator: BenchmarkCodeGenerator | None = None
     # By default, benchmark tests require neither of these
     include_full_post_state_in_output: bool = False
@@ -375,7 +393,9 @@ class BenchmarkTest(BaseTest):
 
         elif self.tx is not None:
             gas_limit = (
-                self.fork.transaction_gas_limit_cap()
+                self.fork.fork_at(
+                    block_number=0, timestamp=0
+                ).transaction_gas_limit_cap()
                 or self.gas_benchmark_value
             )
 
@@ -403,7 +423,7 @@ class BenchmarkTest(BaseTest):
     def discard_fixture_format_by_marks(
         cls,
         fixture_format: FixtureFormat,
-        fork: Fork,
+        fork: Fork | TransitionFork,
         markers: List[pytest.Mark],
     ) -> bool:
         """
@@ -456,9 +476,14 @@ class BenchmarkTest(BaseTest):
         """Generate blocks using the code generator."""
         if self.code_generator is None:
             raise Exception("Code generator is not set")
-        self.code_generator.deploy_contracts(pre=self.pre, fork=self.fork)
+        self.code_generator.deploy_contracts(
+            pre=self.pre, fork=self.fork.fork_at(block_number=0, timestamp=0)
+        )
         gas_limit = (
-            self.fork.transaction_gas_limit_cap() or self.gas_benchmark_value
+            self.fork.fork_at(
+                block_number=0, timestamp=0
+            ).transaction_gas_limit_cap()
+            or self.gas_benchmark_value
         )
         benchmark_tx = self.code_generator.generate_transaction(
             pre=self.pre, gas_benchmark_value=gas_limit
@@ -474,10 +499,13 @@ class BenchmarkTest(BaseTest):
         if self.code_generator is None:
             raise Exception("Code generator is not set")
         self.code_generator.deploy_fix_count_contracts(
-            pre=self.pre, fork=self.fork
+            pre=self.pre, fork=self.fork.fork_at(block_number=0, timestamp=0)
         )
         gas_limit = (
-            self.fork.transaction_gas_limit_cap() or self.gas_benchmark_value
+            self.fork.fork_at(
+                block_number=0, timestamp=0
+            ).transaction_gas_limit_cap()
+            or self.gas_benchmark_value
         )
         benchmark_tx = self.code_generator.generate_transaction(
             pre=self.pre, gas_benchmark_value=gas_limit
@@ -513,7 +541,12 @@ class BenchmarkTest(BaseTest):
         # fixed_opcode_count is in thousands units
         expected = self.fixed_opcode_count * 1000
 
-        actual = opcode_count.root.get(self.target_opcode, 0)
+        count_opcode = (
+            self.target_opcode.opcode
+            if isinstance(self.target_opcode, OpcodeTarget)
+            else self.target_opcode
+        )
+        actual = opcode_count.root.get(count_opcode, 0)
         tolerance = expected * 0.05  # 5% tolerance
 
         if abs(actual - expected) > tolerance:
@@ -544,6 +577,10 @@ class BenchmarkTest(BaseTest):
                 self._verify_target_opcode_count(
                     fill_result.benchmark_opcode_count
                 )
+
+            if self.target_opcode is not None:
+                fill_result.metadata["target_opcode"] = str(self.target_opcode)
+
             return fill_result
         else:
             raise Exception(f"Unsupported fixture format: {fixture_format}")

@@ -74,7 +74,8 @@ from execution_testing.fixtures.common import (
     FixtureBlobSchedule,
     FixtureTransactionReceipt,
 )
-from execution_testing.forks import Fork
+from execution_testing.fixtures.post_verifications import PostVerifications
+from execution_testing.forks import Fork, TransitionFork
 from execution_testing.test_types import (
     Alloc,
     Environment,
@@ -87,6 +88,7 @@ from execution_testing.test_types.block_access_list import (
     BlockAccessList,
     BlockAccessListExpectation,
 )
+from execution_testing.test_types.chain_config_types import ChainConfigDefaults
 
 from .base import BaseTest, FillResult, OpMode, verify_result
 from .debugging import print_traces
@@ -464,10 +466,7 @@ class BuiltBlock(CamelModel):
             self.result.block_exception
         )
         # Verify exceptions that are not caught by the transition tool.
-        fork_block_rlp_size_limit = self.fork.block_rlp_size_limit(
-            block_number=self.env.number,
-            timestamp=self.env.timestamp,
-        )
+        fork_block_rlp_size_limit = self.fork.block_rlp_size_limit()
         if fork_block_rlp_size_limit is not None:
             rlp_size = len(self.get_block_rlp())
             if rlp_size > fork_block_rlp_size_limit:
@@ -504,7 +503,10 @@ class BlockchainTest(BaseTest):
     post: Alloc
     blocks: List[Block]
     genesis_environment: Environment = Field(default_factory=Environment)
-    chain_id: int = 1
+    chain_id: int = Field(
+        default_factory=lambda: ChainConfigDefaults.chain_id,
+        validate_default=True,
+    )
     include_full_post_state_in_output: bool = True
     """
     Include the post state in the fixture output. Otherwise, the state
@@ -542,7 +544,7 @@ class BlockchainTest(BaseTest):
     def discard_fixture_format_by_marks(
         cls,
         fixture_format: FixtureFormat,
-        fork: Fork,
+        fork: Fork | TransitionFork,
         markers: List[pytest.Mark],
     ) -> bool:
         """
@@ -568,7 +570,7 @@ class BlockchainTest(BaseTest):
     def get_genesis_environment(self) -> Environment:
         """Get the genesis environment for pre-allocation groups."""
         modified_values = self.genesis_environment.set_fork_requirements(
-            self.fork
+            self.fork.transitions_from()
         ).model_dump(exclude_unset=True)
         return Environment(**(GENESIS_ENVIRONMENT_DEFAULTS | modified_values))
 
@@ -588,13 +590,17 @@ class BlockchainTest(BaseTest):
         pre_alloc = self.pre
         if apply_pre_allocation_blockchain:
             pre_alloc = Alloc.merge(
-                Alloc.model_validate(self.fork.pre_allocation_blockchain()),
+                Alloc.model_validate(
+                    self.fork.transitions_to().pre_allocation_blockchain()
+                ),
                 pre_alloc,
             )
         if empty_accounts := pre_alloc.empty_accounts():
             raise Exception(f"Empty accounts in pre state: {empty_accounts}")
         state_root = pre_alloc.state_root()
-        genesis = FixtureHeader.genesis(self.fork, env, state_root)
+        genesis = FixtureHeader.genesis(
+            self.fork.transitions_from(), env, state_root
+        )
 
         return (
             pre_alloc,
@@ -615,7 +621,10 @@ class BlockchainTest(BaseTest):
         Generate common block data for both make_fixture and make_hive_fixture.
         """
         env = block.set_environment(previous_env)
-        env = env.set_fork_requirements(self.fork)
+        fork = self.fork.fork_at(
+            block_number=env.number, timestamp=env.timestamp
+        )
+        env = env.set_fork_requirements(fork)
         txs = [tx.with_signature_and_sender() for tx in block.txs]
 
         if failing_tx_count := len([tx for tx in txs if tx.error]) > 0:
@@ -635,12 +644,10 @@ class BlockchainTest(BaseTest):
                 alloc=previous_alloc,
                 txs=txs,
                 env=env,
-                fork=self.fork,
+                fork=fork,
                 chain_id=self.chain_id,
-                reward=self.fork.get_reward(
-                    block_number=env.number, timestamp=env.timestamp
-                ),
-                blob_schedule=self.fork.blob_schedule(),
+                reward=fork.get_reward(),
+                blob_schedule=fork.blob_schedule(),
             ),
             slow_request=self.is_tx_gas_heavy_test,
         )
@@ -651,12 +658,9 @@ class BlockchainTest(BaseTest):
         # executing the block by simply counting the type-3 txs, we need to set
         # the correct value by default.
         blob_gas_used: int | None = None
-        if (
-            blob_gas_per_blob := self.fork.blob_gas_per_blob(
-                block_number=env.number, timestamp=env.timestamp
-            )
-        ) > 0:
-            blob_gas_used = blob_gas_per_blob * count_blobs(txs)
+        if fork.supports_blobs():
+            if (blob_gas_per_blob := fork.blob_gas_per_blob()) > 0:
+                blob_gas_used = blob_gas_per_blob * count_blobs(txs)
 
         header = FixtureHeader(
             **(
@@ -671,7 +675,7 @@ class BlockchainTest(BaseTest):
             extra_data=block.extra_data
             if block.extra_data is not None
             else b"",
-            fork=self.fork,
+            fork=fork,
         )
 
         if block.header_verify is not None:
@@ -684,9 +688,7 @@ class BlockchainTest(BaseTest):
                 ) from e
 
         requests_list: List[Bytes] | None = None
-        if self.fork.header_requests_required(
-            block_number=header.number, timestamp=header.timestamp
-        ):
+        if fork.header_requests_required():
             assert transition_tool_output.result.requests is not None, (
                 "Requests are required for this block"
             )
@@ -709,18 +711,19 @@ class BlockchainTest(BaseTest):
             )
             requests_list = block.requests
 
-        if self.fork.header_bal_hash_required(
-            block_number=header.number, timestamp=header.timestamp
-        ):
-            assert (
-                transition_tool_output.result.block_access_list is not None
-            ), (
+        # Decode BAL from RLP bytes provided by the transition tool.
+        t8n_bal_rlp = transition_tool_output.result.block_access_list
+        t8n_bal: BlockAccessList | None = None
+        if t8n_bal_rlp is not None:
+            t8n_bal = BlockAccessList.from_rlp(t8n_bal_rlp)
+
+        if fork.header_bal_hash_required():
+            assert t8n_bal is not None, (
                 "Block access list is required for this block but was not "
                 "provided by the transition tool"
             )
 
-            rlp = transition_tool_output.result.block_access_list.rlp
-            computed_bal_hash = Hash(rlp.keccak256())
+            computed_bal_hash = Hash(t8n_bal.rlp.keccak256())
             assert computed_bal_hash == header.block_access_list_hash, (
                 "Block access list hash in header does not match the "
                 f"computed hash from BAL: {header.block_access_list_hash} "
@@ -731,13 +734,10 @@ class BlockchainTest(BaseTest):
             # Modify any parameter specified in the `rlp_modifier` after
             # transition tool processing.
             header = block.rlp_modifier.apply(header)
-            header.fork = (
-                self.fork
-            )  # Deleted during `apply` because `exclude=True`
+            header.fork = fork  # Deleted during `apply` because `exclude=True`
 
         # Process block access list - apply transformer if present for invalid
         # tests
-        t8n_bal = transition_tool_output.result.block_access_list
         bal = t8n_bal
 
         # Always validate BAL structural integrity (ordering, duplicates)
@@ -771,7 +771,7 @@ class BlockchainTest(BaseTest):
             result=transition_tool_output.result,
             expected_exception=block.exception,
             engine_api_error_code=block.engine_api_error_code,
-            fork=self.fork,
+            fork=fork,
             block_access_list=bal,
         )
 
@@ -852,8 +852,7 @@ class BlockchainTest(BaseTest):
         invalid_blocks = 0
         benchmark_gas_used: int | None = None
         benchmark_opcode_count: OpcodeCount | None = None
-        for i, block in enumerate(self.blocks):
-            is_last_block = i == len(self.blocks) - 1
+        for block in self.blocks:
             # This is the most common case, the RLP needs to be constructed
             # based on the transactions to be included in the block.
             # Set the environment according to the block to execute.
@@ -863,9 +862,16 @@ class BlockchainTest(BaseTest):
                 previous_env=env,
                 previous_alloc=alloc,
             )
+            block_number = int(built_block.header.number)
+            is_last_block = block is self.blocks[-1]
             if is_last_block and self.operation_mode == OpMode.BENCHMARKING:
                 benchmark_gas_used = int(built_block.result.gas_used)
                 benchmark_opcode_count = built_block.result.opcode_count
+            if built_block.result.receipts:
+                self.validate_receipt_status(
+                    receipts=built_block.result.receipts,
+                    block_number=block_number,
+                )
             include_receipts = (
                 block.include_receipts_in_output
                 if block.include_receipts_in_output is not None
@@ -916,7 +922,7 @@ class BlockchainTest(BaseTest):
             config=FixtureConfig(
                 fork=self.fork,
                 blob_schedule=FixtureBlobSchedule.from_blob_schedule(
-                    self.fork.blob_schedule()
+                    self.fork.transitions_to().blob_schedule()
                 ),
                 chain_id=self.chain_id,
             ),
@@ -926,6 +932,7 @@ class BlockchainTest(BaseTest):
             gas_optimization=None,
             benchmark_gas_used=benchmark_gas_used,
             benchmark_opcode_count=benchmark_opcode_count,
+            post_verifications=PostVerifications.from_alloc(self.post),
         )
 
     def make_hive_fixture(
@@ -947,17 +954,23 @@ class BlockchainTest(BaseTest):
         invalid_blocks = 0
         benchmark_gas_used: int | None = None
         benchmark_opcode_count: OpcodeCount | None = None
-        for i, block in enumerate(self.blocks):
-            is_last_block = i == len(self.blocks) - 1
+        for block in self.blocks:
             built_block = self.generate_block_data(
                 t8n=t8n,
                 block=block,
                 previous_env=env,
                 previous_alloc=alloc,
             )
+            block_number = int(built_block.header.number)
+            is_last_block = block is self.blocks[-1]
             if is_last_block and self.operation_mode == OpMode.BENCHMARKING:
                 benchmark_gas_used = int(built_block.result.gas_used)
                 benchmark_opcode_count = built_block.result.opcode_count
+            if built_block.result.receipts:
+                self.validate_receipt_status(
+                    receipts=built_block.result.receipts,
+                    block_number=block_number,
+                )
             fixture_payloads.append(
                 built_block.get_fixture_engine_new_payload()
             )
@@ -978,9 +991,8 @@ class BlockchainTest(BaseTest):
                     expected_state=block.expected_post_state,
                 )
         self.check_exception_test(exception=invalid_blocks > 0)
-        fcu_version = self.fork.engine_forkchoice_updated_version(
-            block_number=built_block.header.number,
-            timestamp=built_block.header.timestamp,
+        fcu_version = (
+            self.fork.transitions_from().engine_forkchoice_updated_version()
         )
         assert fcu_version is not None, (
             "A hive fixture was requested but no forkchoice update is defined."
@@ -991,7 +1003,7 @@ class BlockchainTest(BaseTest):
         self.verify_post_state(t8n, t8n_state=alloc)
 
         # Create base fixture data, common to all fixture formats
-        fixture_data = {
+        fixture_data: Dict[str, Any] = {
             "fork": self.fork,
             "genesis": genesis.header,
             "payloads": fixture_payloads,
@@ -1003,7 +1015,7 @@ class BlockchainTest(BaseTest):
                 fork=self.fork,
                 chain_id=self.chain_id,
                 blob_schedule=FixtureBlobSchedule.from_blob_schedule(
-                    self.fork.blob_schedule()
+                    self.fork.transitions_to().blob_schedule()
                 ),
             ),
         }
@@ -1066,6 +1078,7 @@ class BlockchainTest(BaseTest):
             gas_optimization=None,
             benchmark_gas_used=benchmark_gas_used,
             benchmark_opcode_count=benchmark_opcode_count,
+            post_verifications=PostVerifications.from_alloc(self.post),
         )
 
     def generate(

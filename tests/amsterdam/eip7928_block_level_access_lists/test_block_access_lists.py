@@ -18,6 +18,7 @@ from execution_testing import (
     Block,
     BlockAccessListExpectation,
     BlockchainTestFiller,
+    BlockException,
     Environment,
     Fork,
     Hash,
@@ -1504,7 +1505,7 @@ def test_bal_precompile_funded(
     "precompile",
     lambda fork: [
         pytest.param(addr, id=f"0x{int.from_bytes(addr, 'big'):02x}")
-        for addr in fork.precompiles(block_number=0, timestamp=0)
+        for addr in fork.precompiles()
     ],
 )
 def test_bal_precompile_call(
@@ -1984,6 +1985,7 @@ def test_bal_multiple_storage_writes_same_slot(
         pytest.param([2, 3, 4], id="depth_3"),
     ],
 )
+@pytest.mark.eels_base_coverage
 def test_bal_nested_delegatecall_storage_writes_net_zero(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
@@ -2644,4 +2646,54 @@ def test_bal_lexicographic_address_ordering(
             addr_endian_low: Account(balance=addr_balance),
             addr_endian_high: Account(balance=addr_balance),
         },
+    )
+
+
+@pytest.mark.parametrize(
+    "boundary_offset",
+    [
+        pytest.param(0, id="at_boundary"),
+        pytest.param(
+            -1,
+            marks=pytest.mark.exception_test,
+            id="below_boundary",
+        ),
+    ],
+)
+def test_bal_gas_limit_boundary(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    boundary_offset: int,
+) -> None:
+    """
+    Test the BAL max items gas limit boundary for an empty block.
+
+    The consensus rule requires
+    ``bal_items <= block_gas_limit // GAS_BLOCK_ACCESS_LIST_ITEM``.
+    The boundary gas limit is derived from the fork's system-contract
+    BAL footprint.  At the boundary the check passes; one below it fails.
+    """
+    # EIP-7928
+    # bal_items <= block_gas_limit // ITEM_COST
+    min_gas_limit = (
+        fork.empty_block_bal_item_count()
+        * fork.gas_costs().GAS_BLOCK_ACCESS_LIST_ITEM
+    )
+    gas_limit = min_gas_limit + boundary_offset
+
+    block = Block(
+        txs=[],
+        exception=(
+            BlockException.BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED
+            if boundary_offset < 0
+            else None
+        ),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[block],
+        post={},
+        genesis_environment=Environment(gas_limit=gas_limit),
     )

@@ -16,11 +16,18 @@ These markers are used to specify the forks for which a test is valid.
 
 :::execution_testing.cli.pytest_commands.plugins.forks.forks.ValidUntil
 
+### `@pytest.mark.valid_before("FORK_OR_EIP")`
+
+:::execution_testing.cli.pytest_commands.plugins.forks.forks.ValidBefore
+
 ### `@pytest.mark.valid_at("FORK_NAME_1", "FORK_NAME_2", ...)`
 
 :::execution_testing.cli.pytest_commands.plugins.forks.forks.ValidAt
 
 ### `@pytest.mark.valid_at_transition_to("FORK_NAME")`
+
+!!! important
+    Tests using this marker must type their `fork` parameter as `TransitionFork` (imported from `execution_testing`) instead of the regular `Fork` type. The `TransitionFork` type provides transition-specific methods such as `fork_at()`, `transitions_to()`, and `transitions_from()`. See [Transition Fork Tests](./writing_a_new_test.md#transition-fork-tests) for details.
 
 :::execution_testing.cli.pytest_commands.plugins.forks.forks.ValidAtTransitionTo
 
@@ -325,7 +332,7 @@ In this example, the test will be marked as expected to fail when it is being ex
 
 ### `@pytest.mark.slow`
 
-This marker is used to mark tests that are slow to run. These tests are not run during [`tox` checks](./verifying_changes.md), and are only run when a release is being prepared.
+This marker is used to mark tests that are slow to run. These tests are not run during [CI checks](./verifying_changes.md), and are only run when a release is being prepared.
 
 ### `@pytest.mark.pre_alloc_mutable`
 
