@@ -36,6 +36,7 @@ from ..base_fork import (
 )
 from ..gas_costs import GasCosts
 from . import eips
+from .eips.amsterdam import AmsterdamEIPs
 from .helpers import ceiling_division
 
 CONTRACTS_DIR = Path(realpath(__file__)).parent / "contracts"
@@ -642,6 +643,9 @@ class Frontier(
             base_cost = gas_costs.GAS_WARM_ACCESS
         else:
             base_cost = gas_costs.GAS_COLD_ACCOUNT_ACCESS
+
+        if metadata["inner_call_cost"]:
+            return base_cost + metadata["inner_call_cost"]
 
         return base_cost
 
@@ -1544,7 +1548,7 @@ class BPO5(
 
 
 class Amsterdam(
-    eips.EIP7928,
+    AmsterdamEIPs,
     BPO2,
     deployed=False,
 ):

@@ -89,12 +89,17 @@ lock-check:
 lint-actions:
     uv run actionlint -pyflakes pyflakes -shellcheck "shellcheck -S warning"
 
+# --- Consensus Tests ---
+
 # Generate HTML coverage report from last just fill run
 [group('consensus tests')]
 coverage:
     uv run coverage html -d "{{ output_dir }}/fill/coverage-html"
 
-# --- Fill Tests ---
+# Generate EIP test checklists from eip_checklist markers                                                                         
+[group('consensus tests')] 
+checklist *args:
+    uv run checklist --output tmp/checklist "$@"
 
 # Fill the consensus tests using EELS (with Python)
 [group('consensus tests')]
@@ -119,6 +124,8 @@ fill *args:
         "$@" \
         tests
 
+# --- Integration Tests ---
+
 # Fill the base coverage consensus tests using EELS with PyPy
 [group('integration tests')]
 fill-pypy *args:
@@ -142,8 +149,6 @@ fill-pypy *args:
         --ignore=tests/ported_static \
         "$@" \
         tests
-
-# --- Integration Tests ---
 
 # Fill the base coverage consensus tests and run EELS against the fixtures
 [group('integration tests')]
@@ -238,7 +243,7 @@ bench-opcode *args:
         --fork Osaka \
         -m repricing \
         -n auto --maxprocesses 10 --dist=loadgroup \
-        -k "not test_alt_bn128 and not test_bls12_381 and not test_modexp" \
+        -k "not test_alt_bn128 and not test_bls12_381 and not test_modexp and not uncachable" \
         --output="{{ output_dir }}/bench-opcode/fixtures" \
         --basetemp="{{ output_dir }}/bench-opcode/tmp" \
         --log-to "{{ output_dir }}/bench-opcode/logs" \
@@ -257,7 +262,7 @@ bench-opcode-config *args:
         --fork Osaka \
         -m repricing \
         -n auto --maxprocesses 10 --dist=loadgroup \
-        -k "not test_alt_bn128 and not test_bls12_381 and not test_modexp" \
+        -k "not test_alt_bn128 and not test_bls12_381 and not test_modexp and not test_point_evaluation_uncachable" \
         --output="{{ output_dir }}/bench-opcode-config/fixtures" \
         --basetemp="{{ output_dir }}/bench-opcode-config/tmp" \
         --log-to "{{ output_dir }}/bench-opcode-config/logs" \
@@ -267,6 +272,9 @@ bench-opcode-config *args:
 
 # --- Docs ---
 
+export GEN_TEST_DOC_VERSION := "local"
+export DYLD_FALLBACK_LIBRARY_PATH := if os() == "macos" { "/opt/homebrew/lib" } else { "" }
+
 # Generate documentation for EELS using docc
 [group('docs')]
 docs-spec:
@@ -275,13 +283,23 @@ docs-spec:
 
 # Build HTML site documentation with mkdocs
 [group('docs')]
-docs:
-    GEN_TEST_DOC_VERSION="local" DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib" uv run mkdocs build --strict -d "{{ output_dir }}/docs/site"
+docs *args:
+    uv run mkdocs build --strict -d "{{ output_dir }}/docs/site" "$@"
 
 # Build HTML site documentation with mkdocs (skip test case reference)
 [group('docs')]
-docs-fast:
-    FAST_DOCS=True GEN_TEST_DOC_VERSION="local" DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib" uv run mkdocs build --strict -d "{{ output_dir }}/docs/site"
+docs-fast *args:
+    FAST_DOCS=True uv run mkdocs build --strict -d "{{ output_dir }}/docs/site" "$@"
+
+# Serve site documentation locally with mkdocs (live reload)
+[group('docs')]
+docs-serve *args:
+    uv run mkdocs serve "$@"
+
+# Serve site documentation locally with mkdocs (skip test case reference)
+[group('docs')]
+docs-serve-fast *args:
+    FAST_DOCS=True uv run mkdocs serve "$@"
 
 # Validate docs/CHANGELOG.md entries
 [group('docs')]
@@ -308,3 +326,39 @@ clean *args:
 [group('housekeeping')]
 clean-all *args:
     uv run eest clean --all "$@"
+
+# Print the command to install shell completions for just recipes
+[group('housekeeping')]
+shell-completions:
+    #!/usr/bin/env bash
+    case "$(basename "$SHELL")" in
+        bash)
+            echo "Run the following commands to install just completions for bash:"
+            echo ""
+            echo "  mkdir -p ~/.local/share/bash-completion/completions"
+            echo "  just --completions bash > ~/.local/share/bash-completion/completions/just"
+            ;;
+        zsh)
+            echo "Run the following commands to install just completions for zsh:"
+            echo ""
+            echo "  mkdir -p ~/.zsh/completions"
+            echo "  just --completions zsh > ~/.zsh/completions/_just"
+            echo ""
+            echo "Then add to your .zshrc:"
+            echo ""
+            echo "  fpath=(~/.zsh/completions \$fpath)"
+            echo "  autoload -U compinit"
+            echo "  compinit"
+            ;;
+        fish)
+            echo "Run the following commands to install just completions for fish:"
+            echo ""
+            echo "  mkdir -p ~/.config/fish/completions"
+            echo "  just --completions fish > ~/.config/fish/completions/just.fish"
+            ;;
+        *)
+            echo "See the link below for instructions for your shell."
+            ;;
+    esac
+    echo ""
+    echo "For more details, see https://just.systems/man/en/shell-completion-scripts.html"
