@@ -34,15 +34,15 @@ on:
         type: string
         description: >-
           If provided, this tag will be used for all clients, overriding individual tags/branches in client_repos and client_images
-        default: "bal-devnet-3"
+        default: ""
       client_repos:
         type: string
         default: |
           {
-            "geth": "gnosischain/go-ethereum@v1.16.8-gc",
+            "geth": "gnosischain/go-ethereum@release-1.17.1-gc",
             "reth": "gnosischain/reth_gnosis@master",
-            "nethermind": "NethermindEth/nethermind@master",
-            "erigon": "erigontech/erigon@main"
+            "nethermind": "NethermindEth/nethermind@bal-devnet-3",
+            "erigon": "erigontech/erigon@bal-devnet-3"
           }
         description: 'JSON object containing client versions in format {"client": "repo@tag", ...}'
       client_images:
@@ -51,8 +51,8 @@ on:
           {
             "geth": "ghcr.io/gnosischain/geth:latest",
             "reth": "ghcr.io/gnosischain/reth_gnosis:latest",
-            "nethermind": "nethermind/nethermind:1.36.1",
-            "erigon": "erigontech/erigon:latest"
+            "nethermind": "nethermind/nethermind:bal-devnet-3",
+            "erigon": "erigontech/erigon:bal-devnet-3"
           }
         description: 'JSON object containing client docker images in format {"client": "registry:tag", ...}'
 
@@ -110,18 +110,18 @@ jobs:
           echo "fixtures_url=$FIXTURES_URL" >> "$GITHUB_OUTPUT"
           echo "Using fixtures from: $FIXTURES_URL"
 
-          # Get latest devnets/bal/N branch from EELS (highest number)
-          BRANCH=$(gh api repos/gnosischain/execution-specs/branches --paginate -q '.[].name' | grep -E '^devnets/bal/[0-9]+$' | sort -t/ -k3 -n | tail -1)
+          # Get devnets/bal from EELS
+          BRANCH="devnets/bal"
           echo "eels_branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "Using EELS branch: $BRANCH"
 
-      - uses: gnosischain/hive-github-action/helpers/client-config@9f65ec1bd266757a681c38d38b7fc9e341b08f0a
+      - uses: gnosischain/hive-github-action/helpers/client-config@315b005b3f9d6582796d5917ddbf0bee3dc6fbfa
         name: "Client config"
         id: client_config
         with:
           client_repos: ${{ inputs.client_repos }}
           client_images: ${{ inputs.client_images }}
-          common_client_tag: ${{ inputs.common_client_tag || 'bal-devnet-3' }}
+          common_client_tag: ${{ inputs.common_client_tag }}
           client_source: ${{ inputs.client_source || 'git' }}
           hive_version: ${{ inputs.hive_version || 'gnosischain/hive@master' }}
           goproxy: ${{ env.GOPROXY }}
@@ -150,18 +150,15 @@ jobs:
       matrix:
         client: >-
           ${{ fromJSON(format('[{0}]', inputs.client || '
-            "go-ethereum",
-            "nethermind",
-            "nimbus-el",
-            "erigon",
-            "besu",
-            "reth",
-            "ethrex"
+            "go-ethereum-gnosis",
+            "reth-gnosis",
+            "nethermind-gnosis",
+            "erigon-gnosis"
           '))}}
-        # TODO: add back "ethereum/eels/consume-rlp" when clients have bal-devnet-3 branch
         simulator: >-
           ${{ fromJSON(format('[{0}]', inputs.simulator || '
-            "gnosis/eels/consume-engine"
+            "gnosis/eels/consume-engine",
+            "gnosis/eels/consume-rlp"
           '))}}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
