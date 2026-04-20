@@ -120,7 +120,7 @@ jobs:
       client_config: ${{ steps.client_config.outputs.client_config }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
-      - uses: gnosischain/hive-github-action/helpers/client-config@9f65ec1bd266757a681c38d38b7fc9e341b08f0a
+      - uses: gnosischain/hive-github-action/helpers/client-config@315b005b3f9d6582796d5917ddbf0bee3dc6fbfa
         name: "Client config"
         id: client_config
         with:
