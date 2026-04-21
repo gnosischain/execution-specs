@@ -17,13 +17,27 @@ from typing import List, Tuple
 from ethereum_types.numeric import U64, U256, Uint
 
 from ethereum.forks.bpo5.blocks import Header as PreviousHeader
-from ethereum.trace import GasAndRefund, evm_trace
+from ethereum.trace import GasAndRefund, StateGasAndRefund, evm_trace
 from ethereum.utils.numeric import ceil32, taylor_exponential
 
 from ..blocks import Header
 from ..transactions import BlobTransaction, Transaction
 from . import Evm
 from .exceptions import OutOfGasError
+
+# EIP-8037 state gas accounting constants
+TARGET_STATE_GROWTH_PER_YEAR = Uint(100 * 1024**3)
+BLOCKS_PER_YEAR = Uint(2_628_000)
+COST_PER_STATE_BYTE_SIGNIFICANT_BITS = Uint(5)
+COST_PER_STATE_BYTE_OFFSET = Uint(9578)
+
+STATE_BYTES_PER_NEW_ACCOUNT = Uint(112)
+STATE_BYTES_PER_STORAGE_SET = Uint(32)
+STATE_BYTES_PER_AUTH_BASE = Uint(23)
+
+PER_AUTH_BASE_COST = Uint(7500)
+
+REGULAR_GAS_CREATE = Uint(9000)
 
 
 # These values may be patched at runtime by a future gas repricing utility
@@ -230,6 +244,37 @@ class MessageCallGas:
     sub_call: Uint
 
 
+def state_gas_per_byte(gas_limit: Uint) -> Uint:
+    """
+    Calculate the state gas cost per byte based on the block gas limit.
+
+    At a gas limit of 100,000,000 this returns 1174.
+
+    Parameters
+    ----------
+    gas_limit :
+        The block gas limit.
+
+    Returns
+    -------
+    state_gas_per_byte : `Uint`
+        The state gas cost per byte.
+
+    """
+    numerator = gas_limit * BLOCKS_PER_YEAR
+    denominator = Uint(2) * TARGET_STATE_GROWTH_PER_YEAR
+    raw = (numerator + denominator - Uint(1)) // denominator
+    shifted = raw + COST_PER_STATE_BYTE_OFFSET
+    shift = max(
+        shifted.bit_length() - COST_PER_STATE_BYTE_SIGNIFICANT_BITS,
+        Uint(0),
+    )
+    quantized = (shifted >> shift) << shift
+    if quantized > COST_PER_STATE_BYTE_OFFSET:
+        return quantized - COST_PER_STATE_BYTE_OFFSET
+    return Uint(1)
+
+
 def check_gas(evm: Evm, amount: Uint) -> None:
     """
     Checks if `amount` gas is available without charging it.
@@ -249,22 +294,50 @@ def check_gas(evm: Evm, amount: Uint) -> None:
 
 def charge_gas(evm: Evm, amount: Uint) -> None:
     """
-    Subtracts `amount` from `evm.gas_left`.
+    Subtracts `amount` from `evm.gas_left` (regular gas) and records usage.
 
     Parameters
     ----------
     evm :
         The current EVM.
     amount :
-        The amount of gas the current operation requires.
+        The amount of regular gas the current operation requires.
 
     """
     evm_trace(evm, GasAndRefund(int(amount)))
 
     if evm.gas_left < amount:
         raise OutOfGasError
+    evm.gas_left -= amount
+
+    evm.regular_gas_used += amount
+
+
+def charge_state_gas(evm: Evm, amount: Uint) -> None:
+    """
+    Subtracts `amount` from the state gas reservoir, then from
+    `evm.gas_left` when the reservoir is empty. Records state gas usage.
+
+    Parameters
+    ----------
+    evm :
+        The current EVM.
+    amount :
+        The amount of state gas the current operation requires.
+
+    """
+    evm_trace(evm, StateGasAndRefund(int(amount)))
+
+    if evm.state_gas_left >= amount:
+        evm.state_gas_left -= amount
+    elif evm.state_gas_left + evm.gas_left >= amount:
+        remainder = amount - evm.state_gas_left
+        evm.state_gas_left = Uint(0)
+        evm.gas_left -= remainder
     else:
-        evm.gas_left -= amount
+        raise OutOfGasError
+
+    evm.state_gas_used += amount
 
 
 def calculate_memory_gas_cost(size_in_bytes: Uint) -> Uint:
