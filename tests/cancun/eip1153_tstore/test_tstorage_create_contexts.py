@@ -292,17 +292,22 @@ def test_tstore_rollback_on_failed_create(
     creation succeeds.
     """
     # Initcode:
-    #   return_size = 0x600a - TLOAD(1)
-    #   TSTORE(1, 0x6000)
+    #   return_size = over_limit - TLOAD(1)
+    #   TSTORE(1, max_code_size)
     #   RETURN(offset=0, size=return_size)
     #
-    # TLOAD(1)==0:     return_size = 0x600a > max code size -> fail
-    # TLOAD(1)==0x6000: return_size = 0x0a <= max code size -> succeed
+    # TLOAD(1)==0:                return_size > max code size -> fail
+    # TLOAD(1)==max_code_size:    return_size <= max code size -> succeed
+    #
+    # Sizes scale with fork.max_code_size() so pre-7954 forks get the
+    # original 0x600A / 0x6000 and Amsterdam+ gets 0x800A / 0x8000.
+    max_code_size = fork.max_code_size()
+    over_limit = max_code_size + 10
     initcode = (
         Op.TLOAD(1)
-        + Op.PUSH2(0x600A)
+        + Op.PUSH2(over_limit)
         + Op.SUB
-        + Op.TSTORE(1, 0x6000)
+        + Op.TSTORE(1, max_code_size)
         + Op.PUSH1(0)
         + Op.RETURN
     )
