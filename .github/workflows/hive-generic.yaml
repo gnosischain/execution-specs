@@ -82,7 +82,7 @@ env:
   GCS_PATH: generic
   GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging/generic
   INSTALL_RCLONE_VERSION: v1.68.2
-  EELS_BUILD_ARG_FIXTURES: https://github.com/gnosischain/execution-spec-tests/releases/download/v0.1.0/fixtures_mainnet.tar.gz
+  EELS_BUILD_ARG_FIXTURES: https://github.com/gnosischain/execution-spec-tests/releases/download/mainnet@v0.1.0/fixtures_mainnet.tar.gz
   EELS_BUILD_ARG_BRANCH: forks/amsterdam
   # Flags used for all simulators
   GLOBAL_EXTRA_FLAGS: >-
