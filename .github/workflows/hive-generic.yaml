@@ -15,12 +15,13 @@ on:
         description: If "true", run each client in a separate matrix job. If "false", run all clients together in a single job.
       simulator:
         type: string
-        # Disabled for now: devp2p, gnosis/consensus, gnosis/graphql, gnosis/rpc-compat
+        # Disabled for now: devp2p, gnosis/consensus, gnosis/graphql
         default: >-
           [
             "gnosis/eels/consume-engine",
             "gnosis/eels/consume-rlp",
-            "gnosis/engine"
+            "gnosis/engine",
+            "gnosis/rpc-compat"
           ]
         description: JSON array of simulators to test .e.g gnosis/rpc-compat, gnosis/eels/consume-engine, gnosis/eels/consume-rlp
       hive_version:
@@ -99,9 +100,9 @@ env:
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
     --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
     --sim.loglevel=3
-  # # Flags used for the gnosis/rpc-compat simulator
-  # RPC_COMPAT_FLAGS: >-
-  #   --sim.loglevel=3
+  # Flags used for the gnosis/rpc-compat simulator
+  RPC_COMPAT_FLAGS: >-
+    --sim.loglevel=3
   # # Flags used for the gnosis/consensus simulator
   # CONSENSUS_FLAGS: >-
   #   --sim.loglevel=3
@@ -160,6 +161,8 @@ jobs:
             ${{ env.GLOBAL_EXTRA_FLAGS }}
             ${{ matrix.simulator == 'gnosis/eels/consume-engine' && env.EELS_ENGINE_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-rlp' && env.EELS_RLP_FLAGS || '' }}
+            ${{ matrix.simulator == 'gnosis/engine' && env.ENGINE_FLAGS || '' }}
+            ${{ matrix.simulator == 'gnosis/rpc-compat' && env.RPC_COMPAT_FLAGS || '' }}
             ${{ inputs.extra_flags }}
           gcs_upload: true
           gcs_bucket: ${{ env.GCS_BUCKET }}
