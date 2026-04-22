@@ -162,7 +162,7 @@ jobs:
           '))}}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: gnosischain/hive-github-action@master
+      - uses: gnosischain/hive-github-action@315b005b3f9d6582796d5917ddbf0bee3dc6fbfa
         with:
           hive_repository: ${{ needs.prepare.outputs.hive_repo }}
           hive_version: ${{ needs.prepare.outputs.hive_tag }}
