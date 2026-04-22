@@ -23,7 +23,7 @@ on:
             "gnosis/engine",
             "gnosis/rpc-compat"
           ]
-        description: JSON array of simulators to test .e.g gnosis/rpc-compat, gnosis/eels/consume-engine, gnosis/eels/consume-rlp
+        description: JSON array of simulators to test e.g. gnosis/rpc-compat, gnosis/eels/consume-engine, gnosis/eels/consume-rlp
       hive_version:
         type: string
         default: gnosischain/hive@master
@@ -149,7 +149,6 @@ jobs:
         simulator: ${{ fromJSON(inputs.simulator)}}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
-
       - uses: gnosischain/hive-github-action@master
         with:
           hive_repository: ${{ needs.prepare.outputs.hive_repo }}

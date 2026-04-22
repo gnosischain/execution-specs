@@ -15,7 +15,7 @@ on:
           "gnosis/eels/consume-rlp"
         description: >-
           Comma-separated list of simulators to test
-          .e.g gnosis/eels/consume-engine, gnosis/eels/consume-rlp
+          e.g. gnosis/eels/consume-engine, gnosis/eels/consume-rlp
       hive_version:
         type: string
         default: gnosischain/hive@master
@@ -162,7 +162,6 @@ jobs:
           '))}}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      
       - uses: gnosischain/hive-github-action@master
         with:
           hive_repository: ${{ needs.prepare.outputs.hive_repo }}
