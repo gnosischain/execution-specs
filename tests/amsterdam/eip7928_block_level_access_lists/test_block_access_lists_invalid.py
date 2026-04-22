@@ -60,6 +60,10 @@ from execution_testing.test_types.block_access_list.modifiers import (
 )
 
 from .spec import ref_spec_7928
+from .test_block_access_lists_eip4788 import (
+    SYSTEM_ADDRESS,
+    beacon_root_system_call_expectations,
+)
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_7928.git_path
 REFERENCE_SPEC_VERSION = ref_spec_7928.version
@@ -769,6 +773,43 @@ def test_bal_invalid_missing_withdrawal_account_empty_block(
                         ),
                     }
                 ).modify(remove_accounts(charlie)),
+            )
+        ],
+    )
+
+
+@pytest.mark.valid_from("Amsterdam")
+@pytest.mark.exception_test
+def test_bal_invalid_surplus_system_address_from_system_call(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+) -> None:
+    """
+    Test that clients reject a BAL that includes SYSTEM_ADDRESS solely because
+    it was the synthetic caller of a pre-execution system operation.
+    """
+    block_timestamp = 12
+    beacon_root = Hash(0xABCDEF)
+
+    blockchain_test(
+        pre=pre,
+        post={},
+        blocks=[
+            Block(
+                txs=[],
+                parent_beacon_block_root=beacon_root,
+                timestamp=block_timestamp,
+                exception=BlockException.INVALID_BLOCK_ACCESS_LIST,
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations=beacon_root_system_call_expectations(
+                        block_timestamp,
+                        beacon_root,
+                    )
+                ).modify(
+                    append_account(
+                        BalAccountChange(address=SYSTEM_ADDRESS),
+                    )
+                ),
             )
         ],
     )
