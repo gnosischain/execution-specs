@@ -1124,6 +1124,9 @@ def process_block_rewards(
     if len(out.return_data) == 0:
         return
 
+    if len(out.return_data) == 0:
+        return
+
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
     for addr, amount in zip(addresses, amounts, strict=True):
         address = hex_to_address(addr)
