@@ -59,7 +59,7 @@ jobs:
           repo_name: solidity
           remote_name: solc-static-linux
           binary_name: solc
-          expected_sha256: 5294614a0d3ccfae8e7d3236e7f4e7c2e5e4a5b6c7d8e9f0a1b2c3d4e5f6a7b
+          expected_sha256: fb03a29a517452b9f12bcf459ef37d0a543765bb3bbc911e70a87d6a37c30d5f
 
       - uses: ./.github/actions/build-fixtures
         with:
