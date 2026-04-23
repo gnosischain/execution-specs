@@ -147,6 +147,16 @@ jobs:
           }}
         simulator: ${{ fromJSON(inputs.simulator)}}
     steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+      
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
       - uses: gnosischain/hive-github-action@315b005b3f9d6582796d5917ddbf0bee3dc6fbfa
         with:
