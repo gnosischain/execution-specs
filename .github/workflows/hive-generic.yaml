@@ -86,7 +86,7 @@ env:
   # Flags used for all simulators
   GLOBAL_EXTRA_FLAGS: >-
     --client.checktimelimit=180s
-    --sim.parallelism=4
+    --sim.parallelism=2
     --docker.auth
     --docker.buildoutput
   # Flags used for the gnosis/eels/consume-engine simulator
