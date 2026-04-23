@@ -43,7 +43,7 @@ on:
         default: |
           {
             "repos": {
-              "geth": "gnosischain/go-ethereum@release-1.17.1-gc",
+              "geth": "gnosischain/go-ethereum@release-1.17.2-gc",
               "reth": "gnosischain/reth_gnosis@master",
               "nethermind": "NethermindEth/nethermind@master",
               "erigon": "erigontech/erigon@main"
