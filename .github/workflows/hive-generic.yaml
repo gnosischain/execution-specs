@@ -20,7 +20,7 @@ on:
           [
             "gnosis/eels/consume-engine",
             "gnosis/eels/consume-rlp",
-            "gnosis/engine",
+            "gnosis/engine"
           ]
         description: JSON array of simulators to test e.g. gnosis/rpc-compat, gnosis/eels/consume-engine, gnosis/eels/consume-rlp
       hive_version:
