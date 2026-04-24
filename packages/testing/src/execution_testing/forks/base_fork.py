@@ -2,6 +2,7 @@
 
 import re
 from abc import ABCMeta, abstractmethod
+from enum import Enum, auto
 from typing import (
     TYPE_CHECKING,
     Callable,
@@ -60,7 +61,12 @@ class TransactionDataFloorCostCalculator(Protocol):
     Calculate the transaction floor cost due to its calldata for a given fork.
     """
 
-    def __call__(self, *, data: BytesConvertible) -> int:
+    def __call__(
+        self,
+        *,
+        data: BytesConvertible,
+        access_list: List[AccessList] | None = None,
+    ) -> int:
         """Return transaction gas cost of calldata given its contents."""
         pass
 
@@ -166,6 +172,13 @@ class ExcessBlobGasCalculator(Protocol):
         gas used.
         """
         pass
+
+
+class RefundTypes(Enum):
+    """Enum used to describe all refund types a fork can have."""
+
+    STORAGE_CLEAR = auto()
+    AUTHORIZATION_EXISTING_AUTHORITY = auto()
 
 
 class BaseForkMeta(ABCMeta):
@@ -451,6 +464,12 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         """
         pass
 
+    @classmethod
+    @abstractmethod
+    def header_slot_number_required(cls) -> bool:
+        """Return true if the header must contain slot number (EIP-7843)."""
+        pass
+
     # Gas related abstract methods
 
     @classmethod
@@ -471,6 +490,51 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         - Constants (int): Direct gas cost values from gas_costs()
         - Callables: Functions that take the opcode instance with metadata and
                      return gas cost
+        """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def opcode_state_map(
+        cls,
+    ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
+        """
+        Return a mapping of opcodes to their state gas costs.
+
+        Each entry is either:
+        - Constants (int): Multiplier of the cost_per_state_byte
+        - Callables: Functions that take the opcode instance with metadata and
+                     return the full state gas cost
+        """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def opcode_refund_map(
+        cls,
+    ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
+        """
+        Return a mapping of opcodes to their gas refunds.
+
+        Each entry is either:
+        - Constants (int): Direct gas refund values
+        - Callables: Functions that take the opcode instance with metadata and
+                     return gas refund
+        """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def opcode_state_refund_map(
+        cls,
+    ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
+        """
+        Return a mapping of opcodes to their state refunds.
+
+        Each entry is either:
+        - Constants (int): Multiplier of the cost_per_state_byte
+        - Callables: Functions that take the opcode instance with metadata and
+                     return the state refund
         """
         pass
 
@@ -601,6 +665,14 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         """
         pass
 
+    @classmethod
+    @abstractmethod
+    def cost_per_state_byte(cls) -> int:
+        """
+        Calculate the state gas cost per byte based on `cls._env_gas_limit`.
+        """
+        pass
+
     # Fee helpers
     @classmethod
     @abstractmethod
@@ -642,6 +714,16 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         for the fork.
         """
         pass
+
+    @classmethod
+    def transaction_intrinsic_state_gas(
+        cls,
+        *,
+        contract_creation: bool = False,  # noqa: ARG003
+        authorization_count: int = 0,  # noqa: ARG003
+    ) -> int:
+        """Return intrinsic state gas (zero pre-Amsterdam)."""
+        return 0
 
     @classmethod
     @abstractmethod
@@ -780,6 +862,24 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
 
     @classmethod
     @abstractmethod
+    def sstore_state_gas(cls) -> int:
+        """Return state gas for a zero-to-nonzero SSTORE."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def code_deposit_state_gas(cls, *, code_size: int) -> int:
+        """Return state gas for code deposit of the given size."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def create_state_gas(cls, *, code_size: int = 0) -> int:
+        """Return total state gas for CREATE."""
+        pass
+
+    @classmethod
+    @abstractmethod
     def block_rlp_size_limit(cls) -> int | None:
         """
         Return the maximum RLP size of a block in bytes, or None if no limit is
@@ -896,6 +996,14 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         """
         pass
 
+    @classmethod
+    @abstractmethod
+    def engine_payload_attribute_slot_number(cls) -> bool:
+        """
+        Return true if the payload attributes include the slot number.
+        """
+        pass
+
     # Engine API method versions
     @classmethod
     def engine_new_payload_version(cls) -> Optional[int]:
@@ -1000,6 +1108,15 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
     @abstractmethod
     def max_request_type(cls) -> int:
         """Return max request type supported by the fork."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def refund_types(cls) -> List[RefundTypes]:
+        """
+        Return the list of refund types that are possible given current
+        fork logic.
+        """
         pass
 
     # Meta information about the fork

@@ -10,10 +10,13 @@ from execution_testing import (
     Fork,
     Header,
     Requests,
-    TransitionFork,
 )
 
-from .helpers import WithdrawalRequest, WithdrawalRequestInteractionBase
+from .helpers import (
+    WithdrawalRequest,
+    WithdrawalRequestContract,
+    WithdrawalRequestInteractionBase,
+)
 from .spec import Spec
 
 
@@ -86,7 +89,7 @@ def timestamp() -> int:
 
 @pytest.fixture
 def blocks(
-    fork: Fork | TransitionFork,
+    fork: Fork,
     update_pre: None,  # Fixture is used for its side effects
     blocks_withdrawal_requests: List[List[WithdrawalRequestInteractionBase]],
     included_requests: List[List[WithdrawalRequest]],
@@ -100,11 +103,21 @@ def blocks(
         included_requests,
         fillvalue=[],
     ):
-        header_verify: Header | None = None
-        if fork.fork_at(
+        block_fork = fork.fork_at(
             block_number=len(blocks) + 1,
             timestamp=timestamp,
-        ).header_requests_required():
+        )
+        if block_fork.is_eip_enabled(8037):
+            gas_costs = block_fork.gas_costs()
+            for r in block_requests:
+                if isinstance(r, WithdrawalRequestContract):
+                    # Each withdrawal request writes 3 new storage slots
+                    # in the system contract queue (source, pubkey, amount).
+                    r.tx_gas_limit += (
+                        len(r.requests) * 3 * gas_costs.STORAGE_SET
+                    )
+        header_verify: Header | None = None
+        if block_fork.header_requests_required():
             header_verify = Header(
                 requests_hash=Requests(
                     *block_included_requests,
@@ -114,7 +127,7 @@ def blocks(
             assert not block_included_requests
         blocks.append(
             Block(
-                txs=sum((r.transactions() for r in block_requests), []),
+                txs=sum((r.transactions(fork) for r in block_requests), []),
                 header_verify=header_verify,
                 timestamp=timestamp,
             )

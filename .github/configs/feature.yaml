@@ -15,6 +15,6 @@ benchmark_fast:
 
 bal:
   evm-type: eels
-  fill-params: --fork=Amsterdam
+  fill-params: --until=Amsterdam
   feature_only: true
 

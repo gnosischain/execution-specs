@@ -28,6 +28,7 @@ def update_pre(pre: Alloc, requests: List[DepositInteractionBase]) -> None:
 
 @pytest.fixture
 def txs(
+    fork: Fork,
     requests: List[DepositInteractionBase],
     update_pre: None,  # Fixture is used for its side effects
 ) -> List[Transaction]:
@@ -35,7 +36,23 @@ def txs(
     txs = []
     for r in requests:
         txs += r.transactions()
-    return txs
+    # EIP-7976 (enabled with EIP-8037 on Amsterdam) raises calldata
+    # floor cost, pushing the intrinsic above the hardcoded
+    # tx_gas_limit of the large-calldata OOG fixtures. Lift each
+    # tx's gas_limit to the new intrinsic only when it falls below;
+    # the tx still OOGs on its first execution opcode, preserving
+    # the fixture's no-deposits-applied outcome.
+    if not (fork.is_eip_enabled(7976) and fork.is_eip_enabled(8037)):
+        return txs
+    current_calc = fork.transaction_intrinsic_cost_calculator()
+    bumped: List[Transaction] = []
+    for tx in txs:
+        current_intrinsic = current_calc(calldata=tx.data)
+        if tx.gas_limit < current_intrinsic:
+            bumped.append(tx.copy(gas_limit=current_intrinsic))
+        else:
+            bumped.append(tx)
+    return bumped
 
 
 @pytest.fixture

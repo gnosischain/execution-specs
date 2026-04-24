@@ -16,7 +16,7 @@ from execution_testing import (
     StateTestFiller,
     Transaction,
 )
-from execution_testing.forks import Fork
+from execution_testing.forks import Fork, Prague
 from execution_testing.specs.static_state.expect_section import (
     resolve_expect_post,
 )
@@ -897,7 +897,24 @@ def test_revert_precompiled_touch_exact_oog_paris(
         Hash(0x4000000000000000000000000000000000000000) + Hash(0x7),
         Hash(0x4000000000000000000000000000000000000000) + Hash(0x8),
     ]
-    tx_gas = [22500, 120000, 69000]
+    # The original ported test uses gas_limit tuned for an exact-OOG
+    # boundary on the CALLCODE-to-precompile path. EIP-7976 bumps the
+    # calldata floor cost per token from 10 to 16 (Amsterdam, with
+    # 8037), which would push the floor above the tightest budget.
+    # Shift gas_limit by the intrinsic delta so the same execution
+    # budget is preserved on every fork.
+    current_intrinsic = fork.transaction_intrinsic_cost_calculator()(
+        calldata=tx_data[d]
+    )
+    baseline_intrinsic = Prague.transaction_intrinsic_cost_calculator()(
+        calldata=tx_data[d]
+    )
+    intrinsic_delta = current_intrinsic - baseline_intrinsic
+    tx_gas = [
+        22500 + intrinsic_delta,
+        120000 + intrinsic_delta,
+        69000 + intrinsic_delta,
+    ]
 
     tx = Transaction(
         sender=sender,

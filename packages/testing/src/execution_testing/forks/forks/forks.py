@@ -31,6 +31,7 @@ from ..base_fork import (
     CalldataGasCalculator,
     ExcessBlobGasCalculator,
     MemoryExpansionGasCalculator,
+    RefundTypes,
     TransactionDataFloorCostCalculator,
     TransactionIntrinsicCostCalculator,
 )
@@ -566,6 +567,33 @@ class Frontier(
         return fn
 
     @classmethod
+    def opcode_state_map(
+        cls,
+    ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
+        """
+        Return a mapping of opcodes to their state gas costs.
+
+        Each entry is either:
+        - Constants (int): Multiplier of the cost_per_state_byte
+        - Callables: Functions that take the opcode instance with metadata and
+                     return the full state gas cost.
+        """
+        # At Frontier, state costs do not apply.
+        return {}
+
+    @classmethod
+    def opcode_state_calculator(cls) -> OpcodeGasCalculator:
+        """
+        Return callable that calculates the state gas of a single opcode.
+        """
+
+        def fn(opcode: OpcodeBase) -> int:
+            del opcode
+            return 0
+
+        return fn
+
+    @classmethod
     def opcode_refund_map(
         cls,
     ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
@@ -606,6 +634,33 @@ class Frontier(
 
             # Otherwise it's a constant
             return refund_or_calculator
+
+        return fn
+
+    @classmethod
+    def opcode_state_refund_map(
+        cls,
+    ) -> Dict[OpcodeBase, int | Callable[[OpcodeBase], int]]:
+        """
+        Return a mapping of opcodes to their state refunds.
+
+        Each entry is either:
+        - Constants (int): Multiplier of the cost_per_state_byte
+        - Callables: Functions that take the opcode instance with metadata and
+                     return the state refund
+        """
+        # At Frontier, state refunds do not apply.
+        return {}
+
+    @classmethod
+    def opcode_state_refund_calculator(cls) -> OpcodeGasCalculator:
+        """
+        Return callable that calculates the state refund of a single opcode.
+        """
+
+        def fn(opcode: OpcodeBase) -> int:
+            del opcode
+            return 0
 
         return fn
 
@@ -807,6 +862,13 @@ class Frontier(
         )
 
     @classmethod
+    def cost_per_state_byte(cls) -> int:
+        """
+        Calculate the state gas cost per byte based on `cls._env_gas_limit`.
+        """
+        return 0
+
+    @classmethod
     def base_fee_max_change_denominator(cls) -> int:
         """Return the base fee max change denominator at a given fork."""
         raise NotImplementedError(
@@ -826,8 +888,12 @@ class Frontier(
     ) -> TransactionDataFloorCostCalculator:
         """At frontier, the transaction data floor cost is a constant zero."""
 
-        def fn(*, data: BytesConvertible) -> int:
-            del data
+        def fn(
+            *,
+            data: BytesConvertible,
+            access_list: List[AccessList] | None = None,
+        ) -> int:
+            del data, access_list
             return 0
 
         return fn
@@ -940,6 +1006,11 @@ class Frontier(
         return False
 
     @classmethod
+    def header_slot_number_required(cls) -> bool:
+        """At genesis, header must not contain slot number (EIP-7843)."""
+        return False
+
+    @classmethod
     def engine_new_payload_blob_hashes(cls) -> bool:
         """At genesis, payloads do not have blob hashes."""
         return False
@@ -980,6 +1051,13 @@ class Frontier(
         return False
 
     @classmethod
+    def engine_payload_attribute_slot_number(cls) -> bool:
+        """
+        At genesis, payload attributes do not include the slot number.
+        """
+        return False
+
+    @classmethod
     def get_reward(cls) -> int:
         """
         At Genesis the expected reward amount in wei is
@@ -1006,6 +1084,23 @@ class Frontier(
     def transaction_gas_limit_cap(cls) -> int | None:
         """At Genesis, no transaction gas limit cap is imposed."""
         return None
+
+    @classmethod
+    def sstore_state_gas(cls) -> int:
+        """Return the state gas for a zero-to-nonzero SSTORE."""
+        return 0
+
+    @classmethod
+    def code_deposit_state_gas(cls, *, code_size: int) -> int:
+        """Return the state gas for code deposit of the given size."""
+        del code_size
+        return 0
+
+    @classmethod
+    def create_state_gas(cls, *, code_size: int = 0) -> int:
+        """Return total state gas for CREATE (new account + code deposit)."""
+        del code_size
+        return 0
 
     @classmethod
     def block_rlp_size_limit(cls) -> int | None:
@@ -1222,6 +1317,13 @@ class Frontier(
     def max_request_type(cls) -> int:
         """At genesis, no request type is supported, signaled by -1."""
         return -1
+
+    @classmethod
+    def refund_types(cls) -> List[RefundTypes]:
+        """
+        At genesis, storage clearing refund is introduced.
+        """
+        return [RefundTypes.STORAGE_CLEAR]
 
     @classmethod
     def pre_allocation(cls) -> Mapping:
