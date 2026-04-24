@@ -19,8 +19,7 @@ on:
         default: >-
           [
             "gnosis/eels/consume-engine",
-            "gnosis/eels/consume-rlp",
-            "gnosis/engine"
+            "gnosis/eels/consume-rlp"
           ]
         description: JSON array of simulators to test e.g. gnosis/rpc-compat, gnosis/eels/consume-engine, gnosis/eels/consume-rlp
       hive_version:
@@ -169,7 +168,6 @@ jobs:
             ${{ env.GLOBAL_EXTRA_FLAGS }}
             ${{ matrix.simulator == 'gnosis/eels/consume-engine' && env.EELS_ENGINE_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-rlp' && env.EELS_RLP_FLAGS || '' }}
-            ${{ matrix.simulator == 'gnosis/engine' && env.ENGINE_FLAGS || '' }}
             ${{ inputs.extra_flags }}
           gcs_upload: true
           gcs_bucket: ${{ env.GCS_BUCKET }}
