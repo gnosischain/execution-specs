@@ -5,7 +5,7 @@ on:
       client:
         type: string
         default: '["go-ethereum-gnosis","reth-gnosis","nethermind-gnosis","erigon-gnosis"]'
-        description: JSON array of clients to test .e.g go-ethereum-gnosis, reth-gnosis, nethermind-gnosis, erigon-gnosis
+        description: JSON array of clients to test e.g. go-ethereum-gnosis, reth-gnosis, nethermind-gnosis, erigon-gnosis
       client_matrix:
         type: choice
         options:
@@ -85,9 +85,11 @@ env:
   # Flags used for all simulators
   GLOBAL_EXTRA_FLAGS: >-
     --client.checktimelimit=180s
-    --sim.parallelism=1
-    --docker.auth
+    --sim.parallelism=4
     --docker.buildoutput
+  # Docker-specific flags (only used when client_source is 'docker')
+  DOCKER_AUTH_FLAGS: >-
+    --docker.auth
   # Flags used for the gnosis/eels/consume-engine simulator
   EELS_ENGINE_FLAGS: >-
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
@@ -117,6 +119,7 @@ jobs:
       hive_tag: ${{ steps.client_config.outputs.hive_tag }}
       # client_config contains the YAML client config for Hive
       client_config: ${{ steps.client_config.outputs.client_config }}
+      client_source: ${{ inputs.client_source || 'git' }}
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
       - uses: gnosischain/hive-github-action/helpers/client-config@315b005b3f9d6582796d5917ddbf0bee3dc6fbfa
@@ -138,7 +141,6 @@ jobs:
         ${{ github.head_ref || inputs.concurrency_group }}-${{ matrix.client }}-${{ matrix.simulator }}
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         client: >-
           ${{
@@ -147,16 +149,6 @@ jobs:
           }}
         simulator: ${{ fromJSON(inputs.simulator) }}
     steps:
-      - name: Relocate Docker to /mnt
-        run: |
-          echo "=== Disk before ===" && df -h
-          sudo systemctl stop docker
-          sudo mkdir -p /mnt/docker
-          echo '{"data-root": "/mnt/docker"}' | sudo tee /etc/docker/daemon.json
-          sudo systemctl start docker
-          echo "=== Docker Root ===" && docker info | grep "Docker Root Dir"
-          echo "=== Disk after ===" && df -h
-
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
       - uses: gnosischain/hive-github-action@315b005b3f9d6582796d5917ddbf0bee3dc6fbfa
         with:
@@ -167,6 +159,7 @@ jobs:
           client_config: ${{ needs.prepare.outputs.client_config }}
           extra_flags: >-
             ${{ env.GLOBAL_EXTRA_FLAGS }}
+            ${{ needs.prepare.outputs.client_source == 'docker' && env.DOCKER_AUTH_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-engine' && env.EELS_ENGINE_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-rlp' && env.EELS_RLP_FLAGS || '' }}
             ${{ inputs.extra_flags }}
