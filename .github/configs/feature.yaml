@@ -13,6 +13,31 @@ benchmark_fast:
   fill-params: --fork=Osaka --gas-benchmark-values 100 ./tests/benchmark/compute
   feature_only: true
 
+merge:
+  evm-type: eels
+  fill-params: --fork=Paris
+  feature_only: true
+
+shapella:
+  evm-type: eels
+  fill-params: --fork=Shanghai
+  feature_only: true
+
+dencun:
+  evm-type: eels
+  fill-params: --fork=Cancun
+  feature_only: true
+
+pectra:
+  evm-type: eels
+  fill-params: --fork=Prague
+  feature_only: true
+
+fusaka:
+  evm-type: eels
+  fill-params: --fork=Osaka
+  feature_only: true
+
 bal:
   evm-type: eels
   fill-params: --fork=Amsterdam
