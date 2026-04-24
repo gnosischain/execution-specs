@@ -1,7 +1,6 @@
-name: Hive - BAL
+name: Hive - Dencun
+
 on:
-  schedule:
-    - cron: '0 0 * * *'  # Run every day at 00:00 UTC
   workflow_dispatch:
     inputs:
       client:
@@ -15,7 +14,7 @@ on:
           "gnosis/eels/consume-rlp"
         description: >-
           Comma-separated list of simulators to test
-          .e.g gnosis/eels/consume-engine, gnosis/eels/consume-rlp
+          e.g. gnosis/eels/consume-engine, gnosis/eels/consume-rlp
       hive_version:
         type: string
         default: gnosischain/hive@master
@@ -56,9 +55,11 @@ env:
   GOPROXY: "${{ vars.GOPROXY }}"
   # Hive action environment variables
   GCS_BUCKET: gnosis-hive-ui-staging
-  GCS_PATH: bal
-  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging/bal
+  GCS_PATH: dencun
+  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging/dencun
   INSTALL_RCLONE_VERSION: v1.68.2
+  EELS_BUILD_ARG_FIXTURES: https://github.com/gnosischain/execution-spec-tests/releases/download/dencun@v0.1.0/fixtures_dencun.tar.gz
+  EELS_BUILD_ARG_BRANCH: forks/amsterdam
   # Flags used for all simulators
   GLOBAL_EXTRA_FLAGS: >-
     --client.checktimelimit=300s
@@ -71,16 +72,12 @@ env:
     --sim.parallelism=6
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
     --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
-    --sim.limit='.*(8024|7708|7778|7843|7928|7954|8037).*'
-    --sim.limit.exact=false
     --sim.loglevel=3
   # Flags used for the gnosis/eels/consume-rlp simulator
   EELS_RLP_FLAGS: >-
     --sim.parallelism=6
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
     --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
-    --sim.limit='.*(8024|7708|7778|7843|7928|7954|8037).*'
-    --sim.limit.exact=false
     --sim.loglevel=3
 
 jobs:
@@ -91,32 +88,13 @@ jobs:
       hive_tag: ${{ steps.client_config.outputs.hive_tag }}
       client_config: ${{ steps.client_config.outputs.client_config }}
       client_source: ${{ inputs.client_source || 'git' }}
-      fixtures_url: ${{ steps.latest.outputs.fixtures_url }}
-      eels_branch: ${{ steps.latest.outputs.eels_branch }}
     steps:
-      - name: Get latest bal fixtures and branch
-        id: latest
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Get latest bal fixtures release from EEST
-          TAG=$(gh release list --repo gnosischain/execution-spec-tests --json tagName --limit 100 | jq -r '[.[] | select(.tagName | startswith("bal"))][0].tagName')
-          FIXTURES_URL="https://github.com/gnosischain/execution-spec-tests/releases/download/${TAG}/fixtures_bal.tar.gz"
-          echo "fixtures_url=$FIXTURES_URL" >> "$GITHUB_OUTPUT"
-          echo "Using fixtures from: $FIXTURES_URL"
-
-          # Get devnets/bal from EELS
-          BRANCH="devnets/bal"
-          echo "eels_branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "Using EELS branch: $BRANCH"
-
       - uses: gnosischain/hive-github-action/helpers/client-config@315b005b3f9d6582796d5917ddbf0bee3dc6fbfa
-        name: "Client config"
+        name: 'Client config'
         id: client_config
         with:
           client_repos: ${{ inputs.client_repos }}
           client_images: ${{ inputs.client_images }}
-          common_client_tag: ${{ inputs.common_client_tag }}
           client_source: ${{ inputs.client_source || 'git' }}
           hive_version: ${{ inputs.hive_version || 'gnosischain/hive@master' }}
           goproxy: ${{ env.GOPROXY }}
@@ -124,22 +102,10 @@ jobs:
   test:
     timeout-minutes: 2160
     needs: prepare
-    env:
-      # BAL-specific environment variables
-      HIVE_PARALLEL_TX_PROCESSING_DISABLED: "true"
-      HIVE_AMSTERDAM_TIMESTAMP: "1759250952"
-      # Dynamic EELS build args from prepare job
-      EELS_BUILD_ARG_FIXTURES: ${{ needs.prepare.outputs.fixtures_url }}
-      EELS_BUILD_ARG_BRANCH: ${{ needs.prepare.outputs.eels_branch }}
-    runs-on: >-
-      ${{
-        matrix.simulator == 'gnosis/rpc-compat' && 'ubuntu-latest' ||
-        contains(matrix.simulator, 'gnosis/eels/') && 'self-hosted-ghr-size-ccx33-x64' ||
-        'ubuntu-latest'
-      }}
+    runs-on: ubuntu-latest
     concurrency:
       group: >-
-        ${{ github.head_ref || inputs }}-${{ matrix.client }}-${{ matrix.simulator }}-quick
+        ${{ github.head_ref || inputs }}-${{ matrix.client }}-${{ matrix.simulator }}
     strategy:
       fail-fast: false
       matrix:
@@ -156,8 +122,8 @@ jobs:
             "gnosis/eels/consume-rlp"
           '))}}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: gnosischain/hive-github-action@master
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: gnosischain/hive-github-action@1d88652e508626aaefa085d830ea05f422384300
         with:
           hive_repository: ${{ needs.prepare.outputs.hive_repo }}
           hive_version: ${{ needs.prepare.outputs.hive_tag }}
