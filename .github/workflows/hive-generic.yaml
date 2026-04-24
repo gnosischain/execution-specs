@@ -138,6 +138,7 @@ jobs:
         ${{ github.head_ref || inputs.concurrency_group }}-${{ matrix.client }}-${{ matrix.simulator }}
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         client: >-
           ${{
@@ -146,33 +147,15 @@ jobs:
           }}
         simulator: ${{ fromJSON(inputs.simulator) }}
     steps:
-      - name: Relocate Docker to /mnt & free root disk
+      - name: Relocate Docker to /mnt
         run: |
-          echo "=== Disk before ==="
-          df -h
-
-          # Free root partition
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-                      /usr/local/share/boost /usr/lib/jvm \
-                      /usr/share/swift /usr/local/.ghcup
-          sudo apt-get clean -y
-          sudo apt-get autoremove -y
-
-          echo "=== Disk after cleanup ==="
-          df -h
-
-          # Stop Docker, move data root to /mnt (~70GB available)
+          echo "=== Disk before ===" && df -h
           sudo systemctl stop docker
           sudo mkdir -p /mnt/docker
           echo '{"data-root": "/mnt/docker"}' | sudo tee /etc/docker/daemon.json
           sudo systemctl start docker
-          sudo systemctl is-active docker
-
-          echo "=== Docker root dir ==="
-          docker info | grep "Docker Root Dir"
-
-          echo "=== Disk after Docker relocation ==="
-          df -h
+          echo "=== Docker Root ===" && docker info | grep "Docker Root Dir"
+          echo "=== Disk after ===" && df -h
 
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
       - uses: gnosischain/hive-github-action@315b005b3f9d6582796d5917ddbf0bee3dc6fbfa
