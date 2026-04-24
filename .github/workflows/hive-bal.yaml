@@ -22,7 +22,7 @@ on:
         description: GitHub repository and tag for hive (repo@tag)
       client_source:
         type: choice
-        default: docker
+        default: git
         description: >-
           How client images should be sourced.
           'git' will use the github repo and tag (See client_repos).
@@ -30,19 +30,14 @@ on:
         options:
           - docker
           - git
-      common_client_tag:
-        type: string
-        description: >-
-          If provided, this tag will be used for all clients, overriding individual tags/branches in client_repos and client_images
-        default: ""
       client_repos:
         type: string
         default: |
           {
-            "geth": "gnosischain/go-ethereum@release-1.17.1-gc",
+            "geth": "gnosischain/go-ethereum@release-1.17.2-gc",
             "reth": "gnosischain/reth_gnosis@master",
-            "nethermind": "NethermindEth/nethermind@bal-devnet-3",
-            "erigon": "erigontech/erigon@bal-devnet-3"
+            "nethermind": "NethermindEth/nethermind@bal-devnet-4",
+            "erigon": "erigontech/erigon@bal-devnet-4"
           }
         description: 'JSON object containing client versions in format {"client": "repo@tag", ...}'
       client_images:
@@ -51,8 +46,8 @@ on:
           {
             "geth": "ghcr.io/gnosischain/geth:latest",
             "reth": "ghcr.io/gnosischain/reth_gnosis:latest",
-            "nethermind": "nethermind/nethermind:bal-devnet-3",
-            "erigon": "erigontech/erigon:bal-devnet-3"
+            "nethermind": "nethermind/nethermind:latest",
+            "erigon": "erigontech/erigon:latest"
           }
         description: 'JSON object containing client docker images in format {"client": "registry:tag", ...}'
 
