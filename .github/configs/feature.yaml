@@ -15,31 +15,31 @@ benchmark_fast:
 
 merge:
   evm-type: eels
-  fill-params: --fork=Paris
+  fill-params: --fork=Paris tests/paris
   feature_only: true
 
 shapella:
   evm-type: eels
-  fill-params: --fork=Shanghai
+  fill-params: --fork=Shanghai tests/shanghai
   feature_only: true
 
 dencun:
   evm-type: eels
-  fill-params: --fork=Cancun
+  fill-params: --fork=Cancun tests/cancun
   feature_only: true
 
 pectra:
   evm-type: eels
-  fill-params: --fork=Prague
+  fill-params: --fork=Prague tests/prague
   feature_only: true
 
 fusaka:
   evm-type: eels
-  fill-params: --fork=Osaka
+  fill-params: --fork=Osaka tests/osaka
   feature_only: true
 
 bal:
   evm-type: eels
-  fill-params: --fork=Amsterdam
+  fill-params: --fork=Amsterdam tests/amsterdam
   feature_only: true
 
