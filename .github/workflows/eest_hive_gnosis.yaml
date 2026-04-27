@@ -6,7 +6,7 @@ on:
       fork:
         description: "Fork passed to --fork"
         required: true
-        default: "Osaka"
+        default: "Amsterdam"
       client:
         description: "Client passed to --client"
         required: true
@@ -14,7 +14,7 @@ on:
       test_dir:
         description: "Test directory to execute"
         required: true
-        default: "osaka"
+        default: "amsterdam"
   
 jobs:
   test:

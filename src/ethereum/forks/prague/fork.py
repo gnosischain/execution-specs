@@ -1005,7 +1005,7 @@ def process_transaction(
             fee_collector_balance_after,
         )
 
-    # transfer blob fee to fee collector address
+    # transfer blob fee to blob fee collector address
     blob_fee_collector_balance_after = get_account(
         block_env.state, BLOB_FEE_COLLECTOR
     ).balance + U256(blob_gas_fee)
@@ -1092,6 +1092,9 @@ def process_block_rewards(
 
     account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
     if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    if len(out.return_data) == 0:
         return
 
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)

@@ -2377,7 +2377,7 @@ def test_bal_all_transaction_types(
         gas_limit=100_000,
         max_fee_per_gas=50,
         max_priority_fee_per_gas=5,
-        max_fee_per_blob_gas=10,
+        max_fee_per_blob_gas=10**10,
         blob_versioned_hashes=blob_hashes,
         data=Hash(0x04),
     )

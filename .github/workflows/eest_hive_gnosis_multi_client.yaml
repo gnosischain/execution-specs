@@ -6,11 +6,11 @@ on:
       fork:
         description: "Fork passed to --fork"
         required: true
-        default: "Osaka"
+        default: "Amsterdam"
       test_dir:
         description: "Test directory to execute"
         required: true
-        default: "osaka"
+        default: "amsterdam"
   
 jobs:
   fill:
