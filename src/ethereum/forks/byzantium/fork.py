@@ -477,7 +477,7 @@ def process_system_transaction(
         index_in_block=Uint(0),
         tx_hash=None,
     )
-    
+
     system_tx_message = Message(
         block_env=block_env,
         tx_env=tx_env,
@@ -494,7 +494,7 @@ def process_system_transaction(
         is_static=False,
         parent_evm=None,
     )
-    
+
     return process_message_call(system_tx_message)
 
 
@@ -526,7 +526,7 @@ def process_unchecked_system_transaction(
         block_env.state,
         get_account(block_env.state, target_address).code_hash,
     )
-    
+
     return process_system_transaction(
         block_env, target_address, system_contract_code, data
     )

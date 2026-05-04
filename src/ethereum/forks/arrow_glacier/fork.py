@@ -647,7 +647,7 @@ def process_unchecked_system_transaction(
         block_env.state,
         get_account(block_env.state, target_address).code_hash,
     )
-    
+
     return process_system_transaction(
         block_env, target_address, system_contract_code, data
     )
