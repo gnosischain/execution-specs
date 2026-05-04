@@ -15,6 +15,7 @@ from execution_testing import (
     Block,
     BlockchainTestFiller,
     Environment,
+    Fork,
     Transaction,
 )
 
@@ -35,6 +36,7 @@ def test_base_fee_sent_to_fee_collector(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
     env: Environment,
+    fork: Fork,
 ) -> None:
     """
     Test that the base fee is sent to FEE_COLLECTOR_ADDRESS rather than
@@ -56,7 +58,12 @@ def test_base_fee_sent_to_fee_collector(
         max_priority_fee_per_gas=0,
     )
 
-    expected_fee = gas_limit * BASE_FEE_PER_GAS
+    base_fee_per_gas = fork.base_fee_per_gas_calculator()(
+        parent_base_fee_per_gas=BASE_FEE_PER_GAS,
+        parent_gas_used=0,
+        parent_gas_limit=env.gas_limit,
+    )
+    expected_fee = gas_limit * base_fee_per_gas
 
     blockchain_test(
         pre=pre,
@@ -72,6 +79,7 @@ def test_fee_collector_accumulates_across_txs(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
     env: Environment,
+    fork: Fork,
 ) -> None:
     """
     Test that FEE_COLLECTOR_ADDRESS accumulates fees across multiple
@@ -94,7 +102,12 @@ def test_fee_collector_accumulates_across_txs(
         for i in range(3)
     ]
 
-    expected_fee = gas_limit * BASE_FEE_PER_GAS * len(txs)
+    base_fee_per_gas = fork.base_fee_per_gas_calculator()(
+        parent_base_fee_per_gas=BASE_FEE_PER_GAS,
+        parent_gas_used=0,
+        parent_gas_limit=env.gas_limit,
+    )
+    expected_fee = gas_limit * base_fee_per_gas * len(txs)
 
     blockchain_test(
         pre=pre,
