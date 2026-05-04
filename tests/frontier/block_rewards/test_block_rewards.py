@@ -5,7 +5,9 @@ The block rewards contract is called via a system transaction at the
 start of every block. If the contract reverts or runs out of gas, the
 block MUST be considered invalid.
 
-Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+Specs:
+- Pre-merge: https://github.com/gnosischain/specs/blob/master/execution/posdao.md
+- Post-merge: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
 """
 
 import pytest
@@ -21,7 +23,7 @@ from execution_testing import (
 from execution_testing.exceptions import BlockException
 
 pytestmark = [
-    pytest.mark.valid_from("Paris"),
+    pytest.mark.valid_from("Frontier"),
     pytest.mark.pre_alloc_mutable,
 ]
 
