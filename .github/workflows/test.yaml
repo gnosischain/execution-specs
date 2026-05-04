@@ -83,7 +83,7 @@ jobs:
       matrix:
         include:
           - label: pre-cancun
-            from_fork: Paris
+            from_fork: Frontier
             until_fork: Shanghai
           - label: cancun
             from_fork: Cancun
