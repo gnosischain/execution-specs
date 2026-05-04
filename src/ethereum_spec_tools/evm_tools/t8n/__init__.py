@@ -517,7 +517,10 @@ class T8N(Load):
                 self.fork.BlockAccessIndex(Uint(num_txs) + Uint(1))
             )
 
-        if not self.fork.proof_of_stake:
+        if (
+            not self.fork.proof_of_stake
+            and not self.fork.has_process_block_rewards
+        ):
             if self.options.state_reward is None:
                 self.pay_block_rewards(self.fork.BLOCK_REWARD, block_env)
             elif self.options.state_reward != -1:
