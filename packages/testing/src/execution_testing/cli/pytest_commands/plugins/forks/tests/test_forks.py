@@ -7,8 +7,6 @@ from execution_testing.client_clis.clis.execution_specs import (
 )
 from execution_testing.fixtures import LabeledFixtureFormat
 from execution_testing.forks import (
-    BPO1,
-    BPO2,
     Amsterdam,
     ArrowGlacier,
     Fork,
@@ -17,8 +15,8 @@ from execution_testing.forks import (
     get_forks,
 )
 from execution_testing.forks.forks.transition import (
-    BPO2ToAmsterdamAtTime15k,
-    OsakaToBPO1AtTime15k,
+    OsakaToAmsterdamAtTime15k,
+    PragueToOsakaAtTime15k,
 )
 from execution_testing.specs import StateTest
 
@@ -294,9 +292,9 @@ def test_transition_fork_until_excludes_target(
         "pytest-fill.ini",
         "-v",
         "--from",
-        "OsakaToBPO1AtTime15k",
+        "PragueToOsakaAtTime15k",
         "--until",
-        "BPO2ToAmsterdamAtTime15k",
+        "OsakaToAmsterdamAtTime15k",
     )
     stdout = "\n".join(result.stdout.lines)
     # The header line lists the selected fork set; parse it.
@@ -313,7 +311,6 @@ def test_transition_fork_until_excludes_target(
     # Strip ANSI codes from the last element.
     fork_names[-1] = fork_names[-1].split("\x1b")[0]
     assert Amsterdam.name() not in fork_names
-    assert BPO1.name() in fork_names
-    assert BPO2.name() in fork_names
-    assert BPO2ToAmsterdamAtTime15k.name() in fork_names
-    assert OsakaToBPO1AtTime15k.name() in fork_names
+    assert "Osaka" in fork_names
+    assert OsakaToAmsterdamAtTime15k.name() in fork_names
+    assert PragueToOsakaAtTime15k.name() in fork_names

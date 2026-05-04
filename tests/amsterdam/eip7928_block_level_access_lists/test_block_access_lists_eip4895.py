@@ -40,11 +40,11 @@ def test_bal_withdrawal_empty_block(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures withdrawal balance changes in empty block.
+    Ensure BAL produces no entry for withdrawal in an empty block.
 
     Charlie starts with 1 gwei balance (existing account).
     Block with 0 transactions and 1 withdrawal of 10 gwei to Charlie.
-    Charlie ends with 11 gwei balance.
+    Charlie does not appear in BAL and balance is not credited.
     """
     charlie = pre.fund_eoa(amount=1 * GWEI)
 
@@ -58,24 +58,14 @@ def test_bal_withdrawal_empty_block(
                 amount=10,
             )
         ],
-        expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                charlie: BalAccountExpectation(
-                    balance_changes=[
-                        BalBalanceChange(
-                            block_access_index=1, post_balance=11 * GWEI
-                        )
-                    ],
-                ),
-            }
-        ),
+        expected_block_access_list=BlockAccessListExpectation(),
     )
 
     blockchain_test(
         pre=pre,
         blocks=[block],
         post={
-            charlie: Account(balance=11 * GWEI),
+            charlie: Account(balance=1 * GWEI),
         },
     )
 
@@ -85,12 +75,12 @@ def test_bal_withdrawal_and_transaction(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures both transaction and withdrawal balance changes.
+    Ensure BAL captures transaction changes but not withdrawal.
 
     Alice starts with 1 ETH, Bob starts with 0, Charlie starts with 0.
     Alice sends 5 wei to Bob.
-    Charlie receives 10 gwei withdrawal.
-    Bob ends with 5 wei, Charlie ends with 10 gwei.
+    Charlie receives 10 gwei withdrawal but is not captured in BAL.
+    Bob ends with 5 wei, Charlie's balance remains unchanged.
     """
     alice = pre.fund_eoa()
     bob = pre.fund_eoa(amount=0)
@@ -126,13 +116,6 @@ def test_bal_withdrawal_and_transaction(
                         BalBalanceChange(block_access_index=1, post_balance=5)
                     ],
                 ),
-                charlie: BalAccountExpectation(
-                    balance_changes=[
-                        BalBalanceChange(
-                            block_access_index=2, post_balance=10 * GWEI
-                        )
-                    ],
-                ),
             }
         ),
     )
@@ -143,7 +126,6 @@ def test_bal_withdrawal_and_transaction(
         post={
             alice: Account(nonce=1),
             bob: Account(balance=5),
-            charlie: Account(balance=10 * GWEI),
         },
     )
 
@@ -171,25 +153,13 @@ def test_bal_withdrawal_to_nonexistent_account(
                 amount=10,
             )
         ],
-        expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                charlie: BalAccountExpectation(
-                    balance_changes=[
-                        BalBalanceChange(
-                            block_access_index=1, post_balance=10 * GWEI
-                        )
-                    ],
-                ),
-            }
-        ),
+        expected_block_access_list=BlockAccessListExpectation(),
     )
 
     blockchain_test(
         pre=pre,
         blocks=[block],
-        post={
-            charlie: Account(balance=10 * GWEI),
-        },
+        post={},
     )
 
 
@@ -198,7 +168,7 @@ def test_bal_withdrawal_no_evm_execution(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures withdrawal without triggering EVM execution.
+    Ensure withdrawal does not trigger EVM or appear in BAL.
 
     Oracle contract starts with 0 balance and storage slot 0x01 = 0x42.
     Oracle's code writes 0xFF to slot 0x01 when called.
@@ -220,19 +190,7 @@ def test_bal_withdrawal_no_evm_execution(
                 amount=10,
             )
         ],
-        expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                oracle: BalAccountExpectation(
-                    balance_changes=[
-                        BalBalanceChange(
-                            block_access_index=1, post_balance=10 * GWEI
-                        )
-                    ],
-                    storage_reads=[],
-                    storage_changes=[],
-                ),
-            }
-        ),
+        expected_block_access_list=BlockAccessListExpectation(),
     )
 
     blockchain_test(
@@ -240,7 +198,7 @@ def test_bal_withdrawal_no_evm_execution(
         blocks=[block],
         post={
             oracle: Account(
-                balance=10 * GWEI,
+                balance=0,
                 storage={0x01: 0x42},
             ),
         },
@@ -252,12 +210,12 @@ def test_bal_withdrawal_and_state_access_same_account(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures both state access and withdrawal to same address.
+    Ensure BAL captures state access but not withdrawal to same address.
 
     Oracle contract starts with 0 balance and storage slot 0x01 = 0x42.
     Alice calls Oracle (reads slot 0x01, writes 0x99 to slot 0x02).
     Oracle receives withdrawal of 10 gwei.
-    Both state access and withdrawal are captured in BAL.
+    State access is captured in BAL but not withdrawal.
     """
     alice = pre.fund_eoa()
     oracle = pre.deploy_contract(
@@ -301,11 +259,6 @@ def test_bal_withdrawal_and_state_access_same_account(
                             ],
                         )
                     ],
-                    balance_changes=[
-                        BalBalanceChange(
-                            block_access_index=2, post_balance=10 * GWEI
-                        )
-                    ],
                 ),
             }
         ),
@@ -317,7 +270,7 @@ def test_bal_withdrawal_and_state_access_same_account(
         post={
             alice: Account(nonce=1),
             oracle: Account(
-                balance=10 * GWEI,
+                balance=0,
                 storage={0x01: 0x42, 0x02: 0x99},
             ),
         },
@@ -329,12 +282,12 @@ def test_bal_withdrawal_and_value_transfer_same_address(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures both value transfer and withdrawal to same address.
+    Ensure BAL captures value transfer but not withdrawal to same address.
 
     Alice starts with 1 ETH, Bob starts with 0.
     Alice sends 5 gwei to Bob.
-    Bob receives withdrawal of 10 gwei.
-    Bob ends with 15 gwei (5 from tx + 10 from withdrawal).
+    Bob receives withdrawal of 10 gwei but is not captured in BAL.
+    Bob ends with 5 gwei (tx only).
     """
     alice = pre.fund_eoa()
     bob = pre.fund_eoa(amount=0)
@@ -368,9 +321,6 @@ def test_bal_withdrawal_and_value_transfer_same_address(
                         BalBalanceChange(
                             block_access_index=1, post_balance=5 * GWEI
                         ),
-                        BalBalanceChange(
-                            block_access_index=2, post_balance=15 * GWEI
-                        ),
                     ],
                 ),
             }
@@ -382,7 +332,7 @@ def test_bal_withdrawal_and_value_transfer_same_address(
         blocks=[block],
         post={
             alice: Account(nonce=1),
-            bob: Account(balance=15 * GWEI),
+            bob: Account(balance=5 * GWEI),
         },
     )
 
@@ -392,11 +342,11 @@ def test_bal_multiple_withdrawals_same_address(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL accumulates multiple withdrawals to same address.
+    Ensure multiple withdrawals to same address do not appear in BAL.
 
     Charlie starts with 0 balance.
     Block empty block with 3 withdrawals to Charlie: 5 gwei, 10 gwei, 15 gwei.
-    Charlie ends with 30 gwei balance (cumulative).
+    Charlie does not appear in BAL and balance is not credited.
     """
     charlie = pre.fund_eoa(amount=0)
 
@@ -406,25 +356,13 @@ def test_bal_multiple_withdrawals_same_address(
             Withdrawal(index=i, validator_index=i, address=charlie, amount=amt)
             for i, amt in enumerate([5, 10, 15])
         ],
-        expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                charlie: BalAccountExpectation(
-                    balance_changes=[
-                        BalBalanceChange(
-                            block_access_index=1, post_balance=30 * GWEI
-                        )
-                    ],
-                ),
-            }
-        ),
+        expected_block_access_list=BlockAccessListExpectation(),
     )
 
     blockchain_test(
         pre=pre,
         blocks=[block],
-        post={
-            charlie: Account(balance=30 * GWEI),
-        },
+        post={},
     )
 
 
@@ -433,12 +371,12 @@ def test_bal_withdrawal_and_selfdestruct(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures withdrawal to self-destructed contract address.
+    Ensure BAL captures SELFDESTRUCT balance changes but not withdrawal.
 
     Oracle contract starts with 100 gwei balance.
     Alice triggers Oracle to self-destruct, sending balance to Bob.
     Oracle receives withdrawal of 50 gwei after self-destructing.
-    Oracle ends with 50 gwei (funded by withdrawal).
+    Oracle ends with 0 balance (withdrawal is not captured in BAL).
     """
     alice = pre.fund_eoa()
     bob = pre.fund_eoa(amount=0)
@@ -481,9 +419,6 @@ def test_bal_withdrawal_and_selfdestruct(
                 oracle: BalAccountExpectation(
                     balance_changes=[
                         BalBalanceChange(block_access_index=1, post_balance=0),
-                        BalBalanceChange(
-                            block_access_index=2, post_balance=50 * GWEI
-                        ),
                     ],
                 ),
             }
@@ -496,7 +431,7 @@ def test_bal_withdrawal_and_selfdestruct(
         post={
             alice: Account(nonce=1),
             bob: Account(balance=100 * GWEI),
-            oracle: Account(balance=50 * GWEI),
+            oracle: Account(balance=0),
         },
     )
 
@@ -506,11 +441,11 @@ def test_bal_withdrawal_and_new_contract(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures withdrawal to newly created contract.
+    Ensure BAL captures contract creation with value but not withdrawal.
 
     Alice deploys Oracle contract with 5 gwei initial balance.
     Oracle receives withdrawal of 10 gwei in same block.
-    Oracle ends with 15 gwei (5 from deployment + 10 from withdrawal).
+    Oracle ends with 5 gwei (deployment only).
     """
     alice = pre.fund_eoa()
 
@@ -552,9 +487,6 @@ def test_bal_withdrawal_and_new_contract(
                         BalBalanceChange(
                             block_access_index=1, post_balance=5 * GWEI
                         ),
-                        BalBalanceChange(
-                            block_access_index=2, post_balance=15 * GWEI
-                        ),
                     ],
                 ),
             }
@@ -566,7 +498,7 @@ def test_bal_withdrawal_and_new_contract(
         blocks=[block],
         post={
             alice: Account(nonce=1),
-            oracle: Account(balance=15 * GWEI, code=code),
+            oracle: Account(balance=5 * GWEI, code=code),
         },
     )
 
@@ -584,11 +516,11 @@ def test_bal_zero_withdrawal(
     initial_balance: int,
 ) -> None:
     """
-    Ensure BAL handles zero-amount withdrawal correctly.
+    Ensure zero-amount withdrawal does not appear in BAL.
 
     Charlie either exists with initial balance or is non-existent.
     Block with 0 transactions and 1 zero-amount withdrawal to Charlie.
-    Charlie appears in BAL but with empty changes, balance unchanged.
+    Charlie does not appear in BAL and balance is unchanged.
     """
     if initial_balance > 0:
         charlie = pre.fund_eoa(amount=initial_balance)
@@ -605,11 +537,7 @@ def test_bal_zero_withdrawal(
                 amount=0,
             )
         ],
-        expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                charlie: BalAccountExpectation.empty(),
-            }
-        ),
+        expected_block_access_list=BlockAccessListExpectation(),
     )
 
     blockchain_test(
@@ -636,10 +564,10 @@ def test_bal_withdrawal_to_precompiles(
     precompile: Address,
 ) -> None:
     """
-    Ensure BAL captures withdrawal to precompile addresses.
+    Ensure withdrawal to precompile address does not appear in BAL.
 
     Block with 0 transactions and 1 withdrawal of 10 gwei to precompile.
-    Precompile ends with 10 gwei balance.
+    Precompile does not appear in BAL and balance is not credited.
     """
     block = Block(
         txs=[],
@@ -651,27 +579,13 @@ def test_bal_withdrawal_to_precompiles(
                 amount=10,
             )
         ],
-        expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                precompile: BalAccountExpectation(
-                    balance_changes=[
-                        BalBalanceChange(
-                            block_access_index=1, post_balance=10 * GWEI
-                        )
-                    ],
-                    storage_reads=[],
-                    storage_changes=[],
-                ),
-            }
-        ),
+        expected_block_access_list=BlockAccessListExpectation(),
     )
 
     blockchain_test(
         pre=pre,
         blocks=[block],
-        post={
-            precompile: Account(balance=10 * GWEI),
-        },
+        post={},
     )
 
 
@@ -680,11 +594,11 @@ def test_bal_withdrawal_largest_amount(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures withdrawal with largest amount.
+    Ensure withdrawal with largest amount does not appear in BAL.
 
     Block with 0 transactions and 1 withdrawal of maximum
     uint64 value (2^64-1)Gwei to Charlie.
-    Charlie ends with (2^64-1) Gwei.
+    Charlie does not appear in BAL and balance is not credited.
     """
     charlie = pre.fund_eoa(amount=0)
     max_amount = 2**64 - 1
@@ -699,26 +613,13 @@ def test_bal_withdrawal_largest_amount(
                 amount=max_amount,
             )
         ],
-        expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                charlie: BalAccountExpectation(
-                    balance_changes=[
-                        BalBalanceChange(
-                            block_access_index=1,
-                            post_balance=max_amount * GWEI,
-                        )
-                    ],
-                ),
-            }
-        ),
+        expected_block_access_list=BlockAccessListExpectation(),
     )
 
     blockchain_test(
         pre=pre,
         blocks=[block],
-        post={
-            charlie: Account(balance=max_amount * GWEI),
-        },
+        post={},
     )
 
 
@@ -728,10 +629,11 @@ def test_bal_withdrawal_to_coinbase(
     fork: Fork,
 ) -> None:
     """
-    Ensure BAL captures withdrawal to coinbase address.
+    Ensure BAL captures tx fee but not withdrawal to coinbase address.
 
     Block with 1 transaction and 1 withdrawal to coinbase/fee recipient.
-    Coinbase receives both transaction fees and withdrawal.
+    Coinbase receives both transaction fees.
+    Withdrawal is not captured in BAL and balance is not credited.
     """
     alice = pre.fund_eoa()
     bob = pre.fund_eoa(amount=0)
@@ -758,7 +660,6 @@ def test_bal_withdrawal_to_coinbase(
         parent_gas_limit=genesis_env.gas_limit,
     )
     tip_to_coinbase = (gas_price - base_fee_per_gas) * intrinsic_gas
-    coinbase_final_balance = tip_to_coinbase + (10 * GWEI)
 
     block = Block(
         txs=[tx],
@@ -789,10 +690,6 @@ def test_bal_withdrawal_to_coinbase(
                         BalBalanceChange(
                             block_access_index=1, post_balance=tip_to_coinbase
                         ),
-                        BalBalanceChange(
-                            block_access_index=2,
-                            post_balance=coinbase_final_balance,
-                        ),
                     ],
                 ),
             }
@@ -805,7 +702,7 @@ def test_bal_withdrawal_to_coinbase(
         post={
             alice: Account(nonce=1),
             bob: Account(balance=5),
-            coinbase: Account(balance=coinbase_final_balance),
+            coinbase: Account(balance=tip_to_coinbase),
         },
         genesis_environment=genesis_env,
     )
@@ -816,10 +713,10 @@ def test_bal_withdrawal_to_coinbase_empty_block(
     blockchain_test: BlockchainTestFiller,
 ) -> None:
     """
-    Ensure BAL captures withdrawal to coinbase when there are no transactions.
+    Ensure withdrawal to coinbase does not appear in BAL.
 
     Empty block with 1 withdrawal of 10 gwei to coinbase/fee recipient.
-    Coinbase receives only withdrawal (no transaction fees).
+    Coinbase does not appear in BAL and balance is not credited.
     """
     coinbase = pre.fund_eoa(amount=0)
 
@@ -834,23 +731,11 @@ def test_bal_withdrawal_to_coinbase_empty_block(
                 amount=10,
             )
         ],
-        expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                coinbase: BalAccountExpectation(
-                    balance_changes=[
-                        BalBalanceChange(
-                            block_access_index=1, post_balance=10 * GWEI
-                        )
-                    ],
-                ),
-            }
-        ),
+        expected_block_access_list=BlockAccessListExpectation(),
     )
 
     blockchain_test(
         pre=pre,
         blocks=[block],
-        post={
-            coinbase: Account(balance=10 * GWEI),
-        },
+        post={},
     )

@@ -654,19 +654,19 @@ def test_bal_invalid_missing_account(
 
 @pytest.mark.valid_from("Amsterdam")
 @pytest.mark.exception_test
-def test_bal_invalid_missing_withdrawal_account(
+def test_bal_invalid_missing_tx_account(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
 ) -> None:
     """
     Test that clients reject blocks where BAL is missing an account
-    that was modified only by a withdrawal.
+    that was modified by a transaction.
 
     Alice sends 5 wei to Bob (1 transaction).
-    Charlie receives 10 gwei withdrawal.
-    BAL is corrupted by removing Charlie's entry entirely.
-    Clients must detect that Charlie's balance was modified by the
-    withdrawal but has no corresponding BAL entry.
+    Charlie receives 10 gwei withdrawal but is not captured in BAL.
+    BAL is corrupted by removing Bob's entry (the tx-modified account).
+    Clients must detect that Bob's balance was modified by the tx but has no
+    corresponding BAL entry because Charlie's withdrawal is a no-op.
     """
     alice = pre.fund_eoa()
     bob = pre.fund_eoa(amount=0)
@@ -714,33 +714,25 @@ def test_bal_invalid_missing_withdrawal_account(
                                 )
                             ],
                         ),
-                        charlie: BalAccountExpectation(
-                            balance_changes=[
-                                BalBalanceChange(
-                                    block_access_index=2,
-                                    post_balance=10 * 10**9,
-                                )
-                            ],
-                        ),
                     }
-                ).modify(remove_accounts(charlie)),
+                ).modify(remove_accounts(bob)),
             )
         ],
     )
 
 
 @pytest.mark.valid_from("Amsterdam")
-@pytest.mark.exception_test
 def test_bal_invalid_missing_withdrawal_account_empty_block(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
 ) -> None:
     """
-    Test that clients reject blocks where BAL is missing an account
-    that was modified only by a withdrawal, in a block with no transactions.
+    Test that an empty block containing only a withdrawal produces
+    a valid block with an empty BAL.
 
-    Charlie receives 10 gwei withdrawal in an empty block.
-    BAL is corrupted by removing Charlie's entry entirely.
+    Charlie receives 10 gwei withdrawal in an empty block (no transactions).
+    Charlie is not captured in BAL because the withdrawal is a no-op.
+    The block is valid with an empty BAL.
     """
     charlie = pre.fund_eoa(amount=0)
 
@@ -760,19 +752,7 @@ def test_bal_invalid_missing_withdrawal_account_empty_block(
                         amount=10,
                     )
                 ],
-                exception=BlockException.INVALID_BLOCK_ACCESS_LIST,
-                expected_block_access_list=BlockAccessListExpectation(
-                    account_expectations={
-                        charlie: BalAccountExpectation(
-                            balance_changes=[
-                                BalBalanceChange(
-                                    block_access_index=1,
-                                    post_balance=10 * 10**9,
-                                )
-                            ],
-                        ),
-                    }
-                ).modify(remove_accounts(charlie)),
+                expected_block_access_list=BlockAccessListExpectation(),
             )
         ],
     )

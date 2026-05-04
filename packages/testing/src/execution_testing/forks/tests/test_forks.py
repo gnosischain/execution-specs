@@ -28,12 +28,10 @@ from ..forks.forks import (
 )
 from ..forks.transition import (
     BerlinToLondonAt5,
-    BPO1ToBPO2AtTime15k,
-    BPO2ToAmsterdamAtTime15k,
     BPO2ToBPO3AtTime15k,
     BPO3ToBPO4AtTime15k,
     CancunToPragueAtTime15k,
-    OsakaToBPO1AtTime15k,
+    OsakaToAmsterdamAtTime15k,
     ParisToShanghaiAtTime15k,
     PragueToOsakaAtTime15k,
     ShanghaiToCancunAtTime15k,
@@ -590,8 +588,7 @@ def test_bpo_fork() -> None:  # noqa: D103
     assert BPO2.bpo_fork() is True
     assert BPO3.bpo_fork() is True
     assert BPO4.bpo_fork() is True
-    assert OsakaToBPO1AtTime15k.fork_at().bpo_fork() is False
-    assert BPO1ToBPO2AtTime15k.fork_at().bpo_fork() is True
+    assert OsakaToAmsterdamAtTime15k.fork_at().bpo_fork() is False
     assert BPO2ToBPO3AtTime15k.fork_at().bpo_fork() is True
     assert BPO3ToBPO4AtTime15k.fork_at().bpo_fork() is True
 
@@ -627,22 +624,21 @@ class TestSelectedForkSetWithTransitionBoundaries:
         """Test range with transition forks as both boundaries."""
         result = get_selected_fork_set(
             single_fork=set(),
-            forks_from={OsakaToBPO1AtTime15k},  # type: ignore[arg-type]
-            forks_until={BPO2ToAmsterdamAtTime15k},  # type: ignore[arg-type]
+            forks_from={PragueToOsakaAtTime15k},  # type: ignore[arg-type]
+            forks_until={OsakaToAmsterdamAtTime15k},  # type: ignore[arg-type]
         )
-        assert self._normal_forks(result) == {BPO1, BPO2}
+        assert self._normal_forks(result) == {Osaka}
         assert self._transition_forks(result) == {
-            OsakaToBPO1AtTime15k,
-            BPO1ToBPO2AtTime15k,
-            BPO2ToAmsterdamAtTime15k,
+            PragueToOsakaAtTime15k,
+            OsakaToAmsterdamAtTime15k,
         }
 
     def test_transition_until_excludes_target(self) -> None:
         """Transition fork `--until` must not include `transitions_to()`."""
         result = get_selected_fork_set(
             single_fork=set(),
-            forks_from={OsakaToBPO1AtTime15k},  # type: ignore[arg-type]
-            forks_until={BPO2ToAmsterdamAtTime15k},  # type: ignore[arg-type]
+            forks_from={PragueToOsakaAtTime15k},  # type: ignore[arg-type]
+            forks_until={OsakaToAmsterdamAtTime15k},  # type: ignore[arg-type]
         )
         assert Amsterdam not in result
 
@@ -675,13 +671,12 @@ class TestSelectedForkSetWithTransitionBoundaries:
         """Test transition `--from` with normal `--until`."""
         result = get_selected_fork_set(
             single_fork=set(),
-            forks_from={OsakaToBPO1AtTime15k},  # type: ignore[arg-type]
-            forks_until={BPO2},
+            forks_from={PragueToOsakaAtTime15k},  # type: ignore[arg-type]
+            forks_until={Osaka},
         )
-        assert self._normal_forks(result) == {BPO1, BPO2}
-        assert OsakaToBPO1AtTime15k in result
-        assert BPO1ToBPO2AtTime15k in result
-        assert BPO2ToAmsterdamAtTime15k not in result
+        assert self._normal_forks(result) == {Osaka}
+        assert PragueToOsakaAtTime15k in result
+        assert OsakaToAmsterdamAtTime15k not in result
 
 
 def test_blob_constants() -> None:  # noqa: D103

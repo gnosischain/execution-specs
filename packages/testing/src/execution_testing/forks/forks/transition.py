@@ -2,7 +2,6 @@
 
 from ..transition_base_fork import TransitionBaseClass, transition_fork
 from .forks import (
-    BPO1,
     BPO2,
     BPO3,
     BPO4,
@@ -53,27 +52,9 @@ class PragueToOsakaAtTime15k(TransitionBaseClass):
     pass
 
 
-@transition_fork(to_fork=BPO1, from_fork=Osaka, at_timestamp=15_000)
-class OsakaToBPO1AtTime15k(TransitionBaseClass):
-    """Osaka to BPO1 transition at Timestamp 15k."""
-
-    pass
-
-
-@transition_fork(to_fork=BPO2, from_fork=BPO1, at_timestamp=15_000)
-class BPO1ToBPO2AtTime15k(TransitionBaseClass):
-    """BPO1 to BPO2 transition at Timestamp 15k."""
-
-    pass
-
-
-@transition_fork(to_fork=Amsterdam, from_fork=BPO2, at_timestamp=15_000)
-class BPO2ToAmsterdamAtTime15k(TransitionBaseClass):
-    """BPO2 to Amsterdam transition at Timestamp 15k."""
-
-    # TODO: We may need to adjust which BPO Amsterdam inherits from as the
-    #  related Amsterdam specs change over time, and before Amsterdam is
-    #  live on mainnet.
+@transition_fork(to_fork=Amsterdam, from_fork=Osaka, at_timestamp=15_000)
+class OsakaToAmsterdamAtTime15k(TransitionBaseClass):
+    """Osaka to Amsterdam transition at Timestamp 15k."""
 
     pass
 
