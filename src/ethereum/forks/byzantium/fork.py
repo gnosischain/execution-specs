@@ -14,7 +14,9 @@ Entry point for the Ethereum specification.
 from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple
 
+from eth_abi import decode
 from ethereum_rlp import rlp
+from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
 
 from ethereum.crypto.hash import Hash32, keccak256
@@ -39,6 +41,7 @@ from .state import (
     destroy_account,
     destroy_touched_empty_accounts,
     get_account,
+    get_code,
     increment_nonce,
     set_account_balance,
     state_root,
@@ -50,15 +53,22 @@ from .transactions import (
     validate_transaction,
 )
 from .trie import root, trie_set
+from .utils.hexadecimal import hex_to_address
 from .utils.message import prepare_message
+from .vm import Message
 from .vm.gas import GasCosts
-from .vm.interpreter import process_message_call
+from .vm.interpreter import MessageCallOutput, process_message_call
 
 BLOCK_REWARD = U256(3 * 10**18)
 MINIMUM_DIFFICULTY = Uint(131072)
 MAX_OMMER_DEPTH = Uint(6)
 BOMB_DELAY_BLOCKS = 3000000
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
+SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0x2000000000000000000000000000000000000001"
+)
 
 
 @dataclass
@@ -430,6 +440,134 @@ def make_receipt(
     return receipt
 
 
+def process_system_transaction(
+    block_env: vm.BlockEnvironment,
+    target_address: Address,
+    system_contract_code: Bytes,
+    data: Bytes,
+) -> MessageCallOutput:
+    """
+    Process a system transaction with the given code.
+
+    Prefer calling `process_checked_system_transaction` or
+    `process_unchecked_system_transaction` depending on whether missing code or
+    an execution error should cause the block to be rejected.
+
+    Parameters
+    ----------
+    block_env :
+        The block scoped environment.
+    target_address :
+        Address of the contract to call.
+    system_contract_code :
+        Code of the contract to call.
+    data :
+        Data to pass to the contract.
+
+    Returns
+    -------
+    system_tx_output : `MessageCallOutput`
+        Output of processing the system transaction.
+
+    """
+    tx_env = vm.TransactionEnvironment(
+        origin=SYSTEM_ADDRESS,
+        gas_price=Uint(0),
+        gas=SYSTEM_TRANSACTION_GAS,
+        index_in_block=Uint(0),
+        tx_hash=None,
+    )
+    
+    system_tx_message = Message(
+        block_env=block_env,
+        tx_env=tx_env,
+        caller=SYSTEM_ADDRESS,
+        target=target_address,
+        current_target=target_address,
+        gas=SYSTEM_TRANSACTION_GAS,
+        value=U256(0),
+        data=data,
+        code=system_contract_code,
+        depth=Uint(0),
+        code_address=target_address,
+        should_transfer_value=False,
+        is_static=False,
+        parent_evm=None,
+    )
+    
+    return process_message_call(system_tx_message)
+
+
+def process_unchecked_system_transaction(
+    block_env: vm.BlockEnvironment,
+    target_address: Address,
+    data: Bytes,
+) -> MessageCallOutput:
+    """
+    Process a system transaction without checking if the contract contains
+    code or if the transaction fails.
+
+    Parameters
+    ----------
+    block_env :
+        The block scoped environment.
+    target_address :
+        Address of the contract to call.
+    data :
+        Data to pass to the contract.
+
+    Returns
+    -------
+    system_tx_output : `MessageCallOutput`
+        Output of processing the system transaction.
+
+    """
+    system_contract_code = get_code(
+        block_env.state,
+        get_account(block_env.state, target_address).code_hash,
+    )
+    
+    return process_system_transaction(
+        block_env, target_address, system_contract_code, data
+    )
+
+
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Call BlockRewardAuRaBase contract reward function.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    """
+    # reward(address[],uint16[]) with empty lists
+    data = bytes.fromhex(
+        "f91c2898"
+        "0000000000000000000000000000000000000000000000000000000000000040"
+        "0000000000000000000000000000000000000000000000000000000000000060"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000"
+    )
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        data=data,
+    )
+    if out.error:
+        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
+
+    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    for addr, amount in zip(addresses, amounts, strict=True):
+        address = hex_to_address(addr)
+        balance = get_account(block_env.state, address).balance + U256(amount)
+        set_account_balance(block_env.state, address, balance)
+
+
 def apply_body(
     block_env: vm.BlockEnvironment,
     transactions: Tuple[Transaction, ...],
@@ -462,6 +600,8 @@ def apply_body(
 
     """
     block_output = vm.BlockOutput()
+
+    process_block_rewards(block_env)
 
     for i, tx in enumerate(transactions):
         process_transaction(block_env, block_output, tx, Uint(i))
