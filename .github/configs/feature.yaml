@@ -18,7 +18,3 @@ bal:
   fill-params: --fork=Amsterdam
   feature_only: true
 
-gnosis:
-  evm-type: eels
-  fill-params: --until=Osaka --generate-all-formats --chain-id=10200
-
