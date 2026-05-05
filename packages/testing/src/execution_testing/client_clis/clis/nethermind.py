@@ -436,10 +436,13 @@ class NethermindExceptionMapper(ExceptionMapper):
             r"calculated hash 0x[0-9a-f]+"
         ),
         BlockException.SYSTEM_CONTRACT_EMPTY: (
-            r"(Withdrawals|Consolidations)Empty: Contract is not deployed\."
+            r"(BlockRewards|Withdrawals|Consolidations)Empty: "
+            r"Contract is not deployed\."
         ),
         BlockException.SYSTEM_CONTRACT_CALL_FAILED: (
-            r"(Withdrawals|Consolidations)Failed: Contract execution failed\."
+            r"(BlockRewards|Withdrawals|Consolidations)Failed: "
+            r"Contract execution failed\.|"
+            r"execution reverted|invalid opcode: INVALID"
         ),
         # BAL Exceptions — specific exceptions have unique patterns, but
         # INVALID_BLOCK_ACCESS_LIST and INCORRECT_BLOCK_FORMAT intentionally

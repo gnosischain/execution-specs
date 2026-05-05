@@ -131,7 +131,6 @@ def test_store_withdrawal_values_in_contract(
 
 
 @pytest.mark.exception_test
-@pytest.mark.blockchain_test_engine_only
 @pytest.mark.pre_alloc_mutable
 def test_withdrawal_system_call_with_revert(
     blockchain_test: BlockchainTestFiller,
@@ -166,16 +165,14 @@ def test_withdrawal_system_call_with_revert(
 
 
 @pytest.mark.exception_test
-@pytest.mark.blockchain_test_engine_only
 @pytest.mark.pre_alloc_mutable
-def test_withdrawal_system_call_out_of_gas(
+def test_withdrawal_system_call_invalid_opcode(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
 ) -> None:
     """
-    Test behavior when deposit contract runs out of gas.
+    Test behavior when deposit contract hits the INVALID opcode.
     """
-    # Deploy contract that uses INVALID opcode
     pre[DEPOSIT_CONTRACT] = Account(
         code=Op.INVALID,
         nonce=1,
