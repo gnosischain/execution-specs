@@ -41,7 +41,6 @@ from .fork_types import EMPTY_CODE_HASH, Address
 from .state import (
     State,
     account_exists_and_is_empty,
-    create_ether,
     destroy_account,
     destroy_touched_empty_accounts,
     get_account,
@@ -68,7 +67,6 @@ from .vm import Message
 from .vm.gas import GasCosts
 from .vm.interpreter import MessageCallOutput, process_message_call
 
-BLOCK_REWARD = U256(2 * 10**18)
 BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
 MINIMUM_DIFFICULTY = Uint(131072)
@@ -201,7 +199,6 @@ def state_transition(chain: BlockChain, block: Block) -> None:
     block_output = apply_body(
         block_env=block_env,
         transactions=block.transactions,
-        ommers=block.ommers,
     )
     block_state_root = state_root(block_env.state)
     transactions_root = root(block_output.transactions_trie)
@@ -662,14 +659,21 @@ def process_block_rewards(
     Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
     Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
-    # reward(address[],uint16[]) with empty lists
-    data = bytes.fromhex(
-        "f91c2898"
-        "0000000000000000000000000000000000000000000000000000000000000040"
-        "0000000000000000000000000000000000000000000000000000000000000060"
-        "0000000000000000000000000000000000000000000000000000000000000000"
-        "0000000000000000000000000000000000000000000000000000000000000000"
+    # reward(address[],uint16[]) with benefactors=[coinbase], kind=[0]
+    coinbase_padded = b"\x00" * 12 + bytes(block_env.coinbase)
+    data = (
+        bytes.fromhex("f91c2898")
+        + (64).to_bytes(32, "big")    # offset of address[] arg
+        + (128).to_bytes(32, "big")   # offset of uint16[] arg
+        + (1).to_bytes(32, "big")     # length of address[] = 1
+        + coinbase_padded              # address[0] = coinbase
+        + (1).to_bytes(32, "big")     # length of uint16[] = 1
+        + (0).to_bytes(32, "big")     # kind[0] = 0 (RewardAuthor)
     )
+    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
@@ -677,10 +681,6 @@ def process_block_rewards(
     )
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
-
-    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
-    if account.code_hash == EMPTY_CODE_HASH:
-        return
 
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
     for addr, amount in zip(addresses, amounts, strict=True):
@@ -692,7 +692,6 @@ def process_block_rewards(
 def apply_body(
     block_env: vm.BlockEnvironment,
     transactions: Tuple[LegacyTransaction | Bytes, ...],
-    ommers: Tuple[Header, ...],
 ) -> vm.BlockOutput:
     """
     Executes a block.
@@ -710,9 +709,6 @@ def apply_body(
         The block scoped environment.
     transactions :
         Transactions included in the block.
-    ommers :
-        Headers of ancestor blocks which are not direct parents (formerly
-        uncles.)
 
     Returns
     -------
@@ -726,8 +722,6 @@ def apply_body(
 
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
-
-    pay_rewards(block_env.state, block_env.number, block_env.coinbase, ommers)
 
     return block_output
 
@@ -807,48 +801,6 @@ def validate_ommers(
         if ommer.parent_hash == block_header.parent_hash:
             raise InvalidBlock
 
-
-def pay_rewards(
-    state: State,
-    block_number: Uint,
-    coinbase: Address,
-    ommers: Tuple[Header, ...],
-) -> None:
-    """
-    Pay rewards to the block miner as well as the ommers miners.
-
-    The miner of the canonical block is rewarded with the predetermined
-    block reward, ``BLOCK_REWARD``, plus a variable award based off of the
-    number of ommer blocks that were mined around the same time, and included
-    in the canonical block's header. An ommer block is a block that wasn't
-    added to the canonical blockchain because it wasn't validated as fast as
-    the accepted block but was mined at the same time. Although not all blocks
-    that are mined are added to the canonical chain, miners are still paid a
-    reward for their efforts. This reward is called an ommer reward and is
-    calculated based on the number associated with the ommer block that they
-    mined.
-
-    Parameters
-    ----------
-    state :
-        Current account state.
-    block_number :
-        Position of the block within the chain.
-    coinbase :
-        Address of account which receives block reward and transaction fees.
-    ommers :
-        List of ommers mentioned in the current block.
-
-    """
-    ommer_count = U256(len(ommers))
-    miner_reward = BLOCK_REWARD + (ommer_count * (BLOCK_REWARD // U256(32)))
-    create_ether(state, coinbase, miner_reward)
-
-    for ommer in ommers:
-        # Ommer age with respect to the current block.
-        ommer_age = U256(block_number - ommer.number)
-        ommer_miner_reward = ((U256(8) - ommer_age) * BLOCK_REWARD) // U256(8)
-        create_ether(state, ommer.coinbase, ommer_miner_reward)
 
 
 def process_transaction(
