@@ -5,9 +5,7 @@ The block rewards contract is called via a system transaction at the
 start of every block. If the contract reverts or runs out of gas, the
 block MUST be considered invalid.
 
-Specs:
-- Pre-merge: https://github.com/gnosischain/specs/blob/master/execution/posdao.md
-- Post-merge: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
 """
 
 import pytest
