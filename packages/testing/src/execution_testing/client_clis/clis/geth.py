@@ -168,6 +168,9 @@ class GethExceptionMapper(ExceptionMapper):
             r"block access list exceeds gas limit"
         ),
         BlockException.GAS_USED_OVERFLOW: (r"gas limit reached"),
+        BlockException.SYSTEM_CONTRACT_CALL_FAILED: (
+            r"execution reverted|invalid opcode: INVALID"
+        ),
         TransactionException.INTRINSIC_GAS_TOO_LOW: (
             r"insufficient gas for floor data gas cost"
         ),

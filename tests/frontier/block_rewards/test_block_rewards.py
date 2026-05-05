@@ -52,6 +52,31 @@ def get_minimal_rewards_contract_code() -> Bytecode:
     )
 
 
+def get_distributing_rewards_contract_code(
+    recipient: int, amount: int
+) -> Bytecode:
+    """
+    Return bytecode that returns ([recipient], [amount]) for reward().
+
+    ABI-encodes (address[], uint256[]) with one element each:
+      0x00: offset of address[] = 0x40
+      0x20: offset of uint256[] = 0x80
+      0x40: length of address[] = 1
+      0x60: address[0] (left-padded to 32 bytes)
+      0x80: length of uint256[] = 1
+      0xa0: uint256[0]
+    """
+    return (
+        Op.MSTORE(0x00, 0x40)
+        + Op.MSTORE(0x20, 0x80)
+        + Op.MSTORE(0x40, 0x01)
+        + Op.MSTORE(0x60, recipient)
+        + Op.MSTORE(0x80, 0x01)
+        + Op.MSTORE(0xA0, amount)
+        + Op.RETURN(0, 0xC0)
+    )
+
+
 def test_block_rewards_system_call_succeeds(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -150,7 +175,6 @@ def test_block_rewards_system_call_with_no_contract(
 
 
 @pytest.mark.exception_test
-@pytest.mark.blockchain_test_engine_only
 def test_block_rewards_system_call_with_revert(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -173,7 +197,6 @@ def test_block_rewards_system_call_with_revert(
 
 
 @pytest.mark.exception_test
-@pytest.mark.blockchain_test_engine_only
 def test_block_rewards_system_call_invalid_opcode(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -194,3 +217,63 @@ def test_block_rewards_system_call_invalid_opcode(
     ]
 
     blockchain_test(pre=pre, post={}, blocks=blocks)
+
+
+REWARD_RECIPIENT = Address(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)
+REWARD_AMOUNT = 10**18
+
+
+def test_block_rewards_accumulates_on_existing_balance(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+) -> None:
+    """
+    Test that block rewards add to an already-funded recipient's balance.
+
+    REWARD_RECIPIENT starts with REWARD_AMOUNT; the contract returns the same
+    amount again, so the final balance must be 2 * REWARD_AMOUNT.
+    """
+    pre[REWARD_RECIPIENT] = Account(balance=REWARD_AMOUNT)
+    pre[BLOCK_REWARDS_CONTRACT] = Account(
+        code=get_distributing_rewards_contract_code(
+            int(REWARD_RECIPIENT), REWARD_AMOUNT
+        ),
+        nonce=1,
+        balance=0,
+    )
+
+    blockchain_test(
+        pre=pre,
+        post={
+            REWARD_RECIPIENT: Account(balance=2 * REWARD_AMOUNT),
+        },
+        blocks=[Block()],
+    )
+
+
+def test_block_rewards_distributes_to_recipients(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+) -> None:
+    """
+    Test that balances returned by the block rewards contract are credited.
+
+    The contract returns ([REWARD_RECIPIENT], [REWARD_AMOUNT]); the
+    recipient's balance must increase by that amount after the block.
+    """
+    pre[BLOCK_REWARDS_CONTRACT] = Account(
+        code=get_distributing_rewards_contract_code(
+            int(REWARD_RECIPIENT), REWARD_AMOUNT
+        ),
+        nonce=1,
+        balance=0,
+    )
+
+    blockchain_test(
+        pre=pre,
+        post={
+            REWARD_RECIPIENT: Account(balance=REWARD_AMOUNT),
+        },
+        blocks=[Block()],
+    )
+
