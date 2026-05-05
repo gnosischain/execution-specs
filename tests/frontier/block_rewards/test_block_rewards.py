@@ -274,4 +274,3 @@ def test_block_rewards_distributes_to_recipients(
         },
         blocks=[Block()],
     )
-
