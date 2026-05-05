@@ -234,7 +234,7 @@ def test_block_rewards_accumulates_on_existing_balance(
     pre[REWARD_RECIPIENT] = Account(balance=REWARD_AMOUNT)
     pre[BLOCK_REWARDS_CONTRACT] = Account(
         code=get_distributing_rewards_contract_code(
-            int(REWARD_RECIPIENT), REWARD_AMOUNT
+            int.from_bytes(REWARD_RECIPIENT, "big"), REWARD_AMOUNT
         ),
         nonce=1,
         balance=0,
@@ -261,7 +261,7 @@ def test_block_rewards_distributes_to_recipients(
     """
     pre[BLOCK_REWARDS_CONTRACT] = Account(
         code=get_distributing_rewards_contract_code(
-            int(REWARD_RECIPIENT), REWARD_AMOUNT
+            int.from_bytes(REWARD_RECIPIENT, "big"), REWARD_AMOUNT
         ),
         nonce=1,
         balance=0,
