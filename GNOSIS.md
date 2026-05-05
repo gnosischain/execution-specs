@@ -67,7 +67,7 @@ MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 
 Called at the start of every block before user transactions. Calls `BLOCK_REWARDS_CONTRACT_ADDRESS` with selector `f91c2898` (`reward(address[],uint16[])`). Decodes the return as `(address[], uint256[])` and increases each address's balance by the corresponding amount.
 
-Implementation: `fork.py:process_block_rewards` in Paris through Osaka.
+Implementation: `fork.py:process_block_rewards` in Frontier through Osaka.
 
 ## Withdrawals (`process_withdrawals`)
 
