@@ -53,11 +53,11 @@ FIXTURES_FOLDER = CURRENT_FOLDER / "fixtures"
 def fixture_hash(fork: Fork) -> bytes:
     """Set the fixture hash based on the fork."""
     if fork == Berlin:
-        return bytes.fromhex("d205aba726")
+        return bytes.fromhex("607abea67c")
     elif fork == London:
-        return bytes.fromhex("87abe71ab8")
+        return bytes.fromhex("b8053545a6")
     elif fork == Cancun:
-        return bytes.fromhex("ba219589b5")
+        return bytes.fromhex("1737ebb312")
     raise ValueError(f"Unexpected fork: {fork}")
 
 
