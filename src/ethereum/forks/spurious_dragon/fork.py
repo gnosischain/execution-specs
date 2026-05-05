@@ -536,12 +536,12 @@ def process_block_rewards(
     coinbase_padded = b"\x00" * 12 + bytes(block_env.coinbase)
     data = (
         bytes.fromhex("f91c2898")
-        + (64).to_bytes(32, "big")    # offset of address[] arg
-        + (128).to_bytes(32, "big")   # offset of uint16[] arg
-        + (1).to_bytes(32, "big")     # length of address[] = 1
-        + coinbase_padded              # address[0] = coinbase
-        + (1).to_bytes(32, "big")     # length of uint16[] = 1
-        + (0).to_bytes(32, "big")     # kind[0] = 0 (RewardAuthor)
+        + (64).to_bytes(32, "big")  # offset of address[] arg
+        + (128).to_bytes(32, "big")  # offset of uint16[] arg
+        + (1).to_bytes(32, "big")  # length of address[] = 1
+        + coinbase_padded  # address[0] = coinbase
+        + (1).to_bytes(32, "big")  # length of uint16[] = 1
+        + (0).to_bytes(32, "big")  # kind[0] = 0 (RewardAuthor)
     )
     account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
     if account.code_hash == EMPTY_CODE_HASH:
@@ -673,7 +673,6 @@ def validate_ommers(
             raise InvalidBlock
         if ommer.parent_hash == block_header.parent_hash:
             raise InvalidBlock
-
 
 
 def process_transaction(
