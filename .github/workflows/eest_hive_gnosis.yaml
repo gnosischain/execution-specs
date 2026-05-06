@@ -79,8 +79,12 @@ jobs:
         env:
           HIVE_SIMULATOR: http://127.0.0.1:3000
         run: |
-          FORK_LOWER=$(echo "${{ github.event.inputs.fork }}" | tr '[:upper:]' '[:lower:]')
-          uv run consume engine -v --input "fixtures/blockchain_tests_engine/for_$FORK_LOWER"
+          if [ -d "fixtures/blockchain_tests_engine" ]; then
+            uv run consume engine -v --input fixtures/blockchain_tests_engine/
+          fi
+          if [ -d "fixtures/blockchain_tests" ]; then
+            uv run consume rlp -v --input fixtures/blockchain_tests/
+          fi
 
       - name: Upload Hive logs
         if: always()

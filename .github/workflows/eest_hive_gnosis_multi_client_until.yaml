@@ -1,22 +1,22 @@
-name: EEST → Hive (Multi-Client)
+name: EEST → Hive (Multi-Client, --until)
 
 on:
   workflow_dispatch:
     inputs:
-      fork:
-        description: "Fork passed to --fork"
+      until_fork:
+        description: "Fork used to build fill-params: --until=<fork> --generate-all-formats"
         required: true
         default: "Osaka"
       test_dir:
-        description: "Test directory to execute"
-        required: true
-        default: "osaka"
-  
+        description: "Optional test directory under tests/ (e.g. osaka). Leave empty to fill all tests."
+        required: false
+        default: ""
+
 jobs:
   fill:
-    name: Generate Fixtures
+    name: Generate Fixtures (--until)
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout the repository
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v5.0.0
@@ -25,7 +25,7 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-      
+
       - name: Bootstrap Python and install deps
         run: |
           uv python install 3.11
@@ -33,11 +33,11 @@ jobs:
           uv sync --all-extras
           uv pip install solc-select
           uv run solc-select use 0.8.24 --always-install
-      
+
       - name: Run fill to generate fixtures
         run: |
-          uv run fill tests/${{ github.event.inputs.test_dir }} --fork ${{ github.event.inputs.fork }} --clean -v -x
-      
+          uv run fill "tests/${{ github.event.inputs.test_dir }}" --until=${{ github.event.inputs.until_fork }} --generate-all-formats --clean -v -x
+
       - name: Upload generated fixtures
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -81,7 +81,7 @@ jobs:
           cd hive
           go install ./...
           cd ..
-      
+
       - name: Start Hive in background
         run: |
           cd hive
@@ -91,7 +91,7 @@ jobs:
             --sim.loglevel=5 \
             --docker.output \
             --docker.pull > hive.log 2>&1 &
-      
+
       - name: Install wait-on utility
         run: npm install -g wait-on
 
@@ -104,7 +104,7 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-      
+
       - name: Bootstrap Python and install deps
         run: |
           uv python install 3.11
@@ -117,6 +117,9 @@ jobs:
         run: |
           if [ -d "fixtures/blockchain_tests_engine" ]; then
             uv run consume engine -v --input fixtures/blockchain_tests_engine/
+          fi
+          if [ -d "fixtures/blockchain_tests_engine_x" ]; then
+            uv run consume enginex -v --input fixtures/blockchain_tests_engine_x/
           fi
           if [ -d "fixtures/blockchain_tests" ]; then
             uv run consume rlp -v --input fixtures/blockchain_tests/
