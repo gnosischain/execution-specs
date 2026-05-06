@@ -14,6 +14,7 @@ Entry point for the Ethereum specification.
 from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple
 
+from eth_abi import decode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
@@ -41,10 +42,10 @@ from .fork_types import EMPTY_CODE_HASH, Address
 from .state import (
     State,
     account_exists_and_is_empty,
-    create_ether,
     destroy_account,
     destroy_touched_empty_accounts,
     get_account,
+    get_code,
     increment_nonce,
     set_account_balance,
     state_root,
@@ -61,11 +62,12 @@ from .transactions import (
     validate_transaction,
 )
 from .trie import root, trie_set
+from .utils.hexadecimal import hex_to_address
 from .utils.message import prepare_message
+from .vm import Message
 from .vm.gas import GasCosts
-from .vm.interpreter import process_message_call
+from .vm.interpreter import MessageCallOutput, process_message_call
 
-BLOCK_REWARD = U256(2 * 10**18)
 BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
 MINIMUM_DIFFICULTY = Uint(131072)
@@ -73,6 +75,14 @@ INITIAL_BASE_FEE = Uint(1000000000)
 MAX_OMMER_DEPTH = Uint(6)
 BOMB_DELAY_BLOCKS = 9700000
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
+SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0x2000000000000000000000000000000000000001"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0x1559000000000000000000000000000000000000"
+)
 
 
 @dataclass
@@ -191,7 +201,6 @@ def state_transition(chain: BlockChain, block: Block) -> None:
     block_output = apply_body(
         block_env=block_env,
         transactions=block.transactions,
-        ommers=block.ommers,
     )
     block_state_root = state_root(block_env.state)
     transactions_root = root(block_output.transactions_trie)
@@ -554,10 +563,144 @@ def make_receipt(
     return encode_receipt(tx, receipt)
 
 
+def process_system_transaction(
+    block_env: vm.BlockEnvironment,
+    target_address: Address,
+    system_contract_code: Bytes,
+    data: Bytes,
+) -> MessageCallOutput:
+    """
+    Process a system transaction with the given code.
+
+    Prefer calling `process_checked_system_transaction` or
+    `process_unchecked_system_transaction` depending on whether missing code or
+    an execution error should cause the block to be rejected.
+
+    Parameters
+    ----------
+    block_env :
+        The block scoped environment.
+    target_address :
+        Address of the contract to call.
+    system_contract_code :
+        Code of the contract to call.
+    data :
+        Data to pass to the contract.
+
+    Returns
+    -------
+    system_tx_output : `MessageCallOutput`
+        Output of processing the system transaction.
+
+    """
+    tx_env = vm.TransactionEnvironment(
+        origin=SYSTEM_ADDRESS,
+        gas_price=Uint(0),
+        gas=SYSTEM_TRANSACTION_GAS,
+        access_list_addresses=set(),
+        access_list_storage_keys=set(),
+        index_in_block=None,
+        tx_hash=None,
+    )
+
+    system_tx_message = Message(
+        block_env=block_env,
+        tx_env=tx_env,
+        caller=SYSTEM_ADDRESS,
+        target=target_address,
+        current_target=target_address,
+        gas=SYSTEM_TRANSACTION_GAS,
+        value=U256(0),
+        data=data,
+        code=system_contract_code,
+        depth=Uint(0),
+        code_address=target_address,
+        should_transfer_value=False,
+        is_static=False,
+        accessed_addresses=set(),
+        accessed_storage_keys=set(),
+        parent_evm=None,
+    )
+
+    return process_message_call(system_tx_message)
+
+
+def process_unchecked_system_transaction(
+    block_env: vm.BlockEnvironment,
+    target_address: Address,
+    data: Bytes,
+) -> MessageCallOutput:
+    """
+    Process a system transaction without checking if the contract contains
+    code or if the transaction fails.
+
+    Parameters
+    ----------
+    block_env :
+        The block scoped environment.
+    target_address :
+        Address of the contract to call.
+    data :
+        Data to pass to the contract.
+
+    Returns
+    -------
+    system_tx_output : `MessageCallOutput`
+        Output of processing the system transaction.
+
+    """
+    system_contract_code = get_code(
+        block_env.state,
+        get_account(block_env.state, target_address).code_hash,
+    )
+
+    return process_system_transaction(
+        block_env, target_address, system_contract_code, data
+    )
+
+
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Call BlockRewardAuRaBase contract reward function.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    """
+    # reward(address[],uint16[]) with benefactors=[coinbase], kind=[0]
+    coinbase_padded = b"\x00" * 12 + bytes(block_env.coinbase)
+    data = (
+        bytes.fromhex("f91c2898")
+        + (64).to_bytes(32, "big")  # offset of address[] arg
+        + (128).to_bytes(32, "big")  # offset of uint16[] arg
+        + (1).to_bytes(32, "big")  # length of address[] = 1
+        + coinbase_padded  # address[0] = coinbase
+        + (1).to_bytes(32, "big")  # length of uint16[] = 1
+        + (0).to_bytes(32, "big")  # kind[0] = 0 (RewardAuthor)
+    )
+    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        data=data,
+    )
+    if out.error:
+        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
+
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    for addr, amount in zip(addresses, amounts, strict=True):
+        address = hex_to_address(addr)
+        balance = get_account(block_env.state, address).balance + U256(amount)
+        set_account_balance(block_env.state, address, balance)
+
+
 def apply_body(
     block_env: vm.BlockEnvironment,
     transactions: Tuple[LegacyTransaction | Bytes, ...],
-    ommers: Tuple[Header, ...],
 ) -> vm.BlockOutput:
     """
     Executes a block.
@@ -575,9 +718,6 @@ def apply_body(
         The block scoped environment.
     transactions :
         Transactions included in the block.
-    ommers :
-        Headers of ancestor blocks which are not direct parents (formerly
-        uncles.)
 
     Returns
     -------
@@ -587,10 +727,10 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
+    process_block_rewards(block_env)
+
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
-
-    pay_rewards(block_env.state, block_env.number, block_env.coinbase, ommers)
 
     return block_output
 
@@ -669,49 +809,6 @@ def validate_ommers(
             raise InvalidBlock
         if ommer.parent_hash == block_header.parent_hash:
             raise InvalidBlock
-
-
-def pay_rewards(
-    state: State,
-    block_number: Uint,
-    coinbase: Address,
-    ommers: Tuple[Header, ...],
-) -> None:
-    """
-    Pay rewards to the block miner as well as the ommers miners.
-
-    The miner of the canonical block is rewarded with the predetermined
-    block reward, ``BLOCK_REWARD``, plus a variable award based off of the
-    number of ommer blocks that were mined around the same time, and included
-    in the canonical block's header. An ommer block is a block that wasn't
-    added to the canonical blockchain because it wasn't validated as fast as
-    the accepted block but was mined at the same time. Although not all blocks
-    that are mined are added to the canonical chain, miners are still paid a
-    reward for their efforts. This reward is called an ommer reward and is
-    calculated based on the number associated with the ommer block that they
-    mined.
-
-    Parameters
-    ----------
-    state :
-        Current account state.
-    block_number :
-        Position of the block within the chain.
-    coinbase :
-        Address of account which receives block reward and transaction fees.
-    ommers :
-        List of ommers mentioned in the current block.
-
-    """
-    ommer_count = U256(len(ommers))
-    miner_reward = BLOCK_REWARD + (ommer_count * (BLOCK_REWARD // U256(32)))
-    create_ether(state, coinbase, miner_reward)
-
-    for ommer in ommers:
-        # Ommer age with respect to the current block.
-        ommer_age = U256(block_number - ommer.number)
-        ommer_miner_reward = ((U256(8) - ommer_age) * BLOCK_REWARD) // U256(8)
-        create_ether(state, ommer.coinbase, ommer_miner_reward)
 
 
 def process_transaction(
@@ -827,6 +924,17 @@ def process_transaction(
         )
     elif account_exists_and_is_empty(block_env.state, block_env.coinbase):
         destroy_account(block_env.state, block_env.coinbase)
+
+    # transfer base fee to fee collector address
+    fee_collector_balance_after = get_account(
+        block_env.state, FEE_COLLECTOR_ADDRESS
+    ).balance + U256(tx_gas_used_after_refund * block_env.base_fee_per_gas)
+    if fee_collector_balance_after != 0:
+        set_account_balance(
+            block_env.state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance_after,
+        )
 
     for address in tx_output.accounts_to_delete:
         destroy_account(block_env.state, address)

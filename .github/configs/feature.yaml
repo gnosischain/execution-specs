@@ -1,7 +1,7 @@
-# Unless filling for special features, all features should fill for previous forks (starting from Paris) too
+# Unless filling for special features, all features should fill for previous forks (starting from Frontier) too
 mainnet:
   evm-type: eels
-  fill-params: --from=Paris --until=Osaka --generate-all-formats
+  fill-params: --until=Osaka --generate-all-formats
 
 benchmark:
   evm-type: benchmark

@@ -11,7 +11,7 @@ root := justfile_directory()
 output_dir := root / ".just"
 xdist_workers := env("PYTEST_XDIST_AUTO_NUM_WORKERS", "6")
 evm_bin := env("EVM_BIN", "evm")
-latest_fork := "Amsterdam"
+latest_fork := "Osaka"
 
 # --- Static Analysis ---
 
@@ -144,7 +144,6 @@ fill-pypy *args:
         --basetemp="{{ output_dir }}/fill-pypy/tmp" \
         --log-to "{{ output_dir }}/fill-pypy/logs" \
         --clean \
-        --from Paris \
         --until "{{ latest_fork }}" \
         --ignore=tests/ported_static \
         "$@" \
@@ -156,7 +155,6 @@ json-loader *args:
     @mkdir -p "{{ output_dir }}/json-loader/tmp"
     uv run fill \
         -m "eels_base_coverage and not derived_test" \
-        --from Paris \
         --until "{{ latest_fork }}" \
         -n {{ xdist_workers }} --dist=loadgroup \
         --skip-index \
@@ -165,7 +163,7 @@ json-loader *args:
         --output="tests/json_loader/fixtures" \
         --cov-config=pyproject.toml \
         --cov=ethereum \
-        --cov-fail-under=82
+        --cov-fail-under=85
     uv run pytest \
         -m "not slow" \
         -n auto --maxprocesses 6 --dist=loadfile \

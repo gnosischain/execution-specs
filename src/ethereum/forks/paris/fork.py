@@ -565,6 +565,46 @@ def process_unchecked_system_transaction(
     )
 
 
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Call BlockRewardAuRaBase contract reward function.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    """
+    # reward(address[],uint16[]) with benefactors=[coinbase], kind=[0]
+    coinbase_padded = b"\x00" * 12 + bytes(block_env.coinbase)
+    data = (
+        bytes.fromhex("f91c2898")
+        + (64).to_bytes(32, "big")  # offset of address[] arg
+        + (128).to_bytes(32, "big")  # offset of uint16[] arg
+        + (1).to_bytes(32, "big")  # length of address[] = 1
+        + coinbase_padded  # address[0] = coinbase
+        + (1).to_bytes(32, "big")  # length of uint16[] = 1
+        + (0).to_bytes(32, "big")  # kind[0] = 0 (RewardAuthor)
+    )
+
+    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        data=data,
+    )
+    if out.error:
+        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
+
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    for addr, amount in zip(addresses, amounts, strict=True):
+        address = hex_to_address(addr)
+        balance = get_account(block_env.state, address).balance + U256(amount)
+        set_account_balance(block_env.state, address, balance)
+
+
 def apply_body(
     block_env: vm.BlockEnvironment,
     transactions: Tuple[LegacyTransaction | Bytes, ...],
@@ -743,43 +783,6 @@ def process_transaction(
     )
 
     block_output.block_logs += tx_output.logs
-
-
-def process_block_rewards(
-    block_env: vm.BlockEnvironment,
-) -> None:
-    """
-    Call BlockRewardAuRaBase contract reward function.
-
-    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
-    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
-    """
-    # reward(address[],uint16[]) with empty lists
-    data = bytes.fromhex(
-        "f91c2898"
-        "0000000000000000000000000000000000000000000000000000000000000040"
-        "0000000000000000000000000000000000000000000000000000000000000060"
-        "0000000000000000000000000000000000000000000000000000000000000000"
-        "0000000000000000000000000000000000000000000000000000000000000000"
-    )
-
-    out = process_unchecked_system_transaction(
-        block_env=block_env,
-        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
-        data=data,
-    )
-    if out.error:
-        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
-
-    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
-    if account.code_hash == EMPTY_CODE_HASH:
-        return
-
-    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
-    for addr, amount in zip(addresses, amounts, strict=True):
-        address = hex_to_address(addr)
-        balance = get_account(block_env.state, address).balance + U256(amount)
-        set_account_balance(block_env.state, address, balance)
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
