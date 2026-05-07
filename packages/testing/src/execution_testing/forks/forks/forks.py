@@ -89,8 +89,8 @@ class Frontier(
 
     @classmethod
     def header_zero_difficulty_required(cls) -> bool:
-        """At genesis, header must not have difficulty zero."""
-        return False
+        """Gnosis uses AuRa, so genesis difficulty is always zero."""
+        return True
 
     @classmethod
     def header_withdrawals_required(cls) -> bool:
