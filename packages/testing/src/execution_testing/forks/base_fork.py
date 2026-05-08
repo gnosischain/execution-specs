@@ -382,6 +382,11 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         pass
 
     @classmethod
+    def header_aura_encoding(cls) -> bool:
+        """Return true if the header uses AuRa seal encoding in RLP."""
+        return False
+
+    @classmethod
     @abstractmethod
     def header_withdrawals_required(cls) -> bool:
         """Return true if the header must contain withdrawals."""

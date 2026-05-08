@@ -89,7 +89,18 @@ class Frontier(
 
     @classmethod
     def header_zero_difficulty_required(cls) -> bool:
-        """Gnosis uses AuRa, so genesis difficulty is always zero."""
+        """
+        Pre-merge Gnosis fixtures use a non-zero difficulty so that AuRa
+        clients don't misclassify blocks as post-merge payloads when 
+        difficulty is zero.
+
+        EIP-3675 (Paris) overrides this to force zero difficulty post-merge.
+        """
+        return False
+
+    @classmethod
+    def header_aura_encoding(cls) -> bool:
+        """Gnosis uses AuRa seal encoding in the block header RLP."""
         return True
 
     @classmethod
@@ -1458,7 +1469,10 @@ class Paris(
 ):
     """Paris (Merge) fork."""
 
-    pass
+    @classmethod
+    def header_aura_encoding(cls) -> bool:
+        """Post-merge blocks use standard Ethereum header encoding."""
+        return False
 
 
 class Shanghai(

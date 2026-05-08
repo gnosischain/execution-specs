@@ -252,15 +252,23 @@ class FixtureHeader(CamelModel):
     @cached_property
     def rlp_encode_list(self) -> List:
         """Compute the RLP of the header."""
-        header_list = []
+        aura = self.fork is not None and self.fork.header_aura_encoding()
+        header_list: List[bytes | Uint] = []
         for field in self.__class__.model_fields:
             if field == "fork":
                 continue
             value = getattr(self, field)
             if value is not None:
-                header_list.append(
-                    value if isinstance(value, bytes) else Uint(value)
-                )
+                if aura and field == "prev_randao":
+                    # AuRa: step=0 encodes as empty bytes, not 32-byte hash
+                    header_list.append(b"")
+                elif aura and field == "nonce":
+                    # AuRa: signature is 65 zero bytes, not 8-byte nonce
+                    header_list.append(bytes(65))
+                else:
+                    header_list.append(
+                        value if isinstance(value, bytes) else Uint(value)
+                    )
         return header_list
 
     @cached_property
@@ -622,10 +630,18 @@ class FixtureBlockBase(CamelModel):
         if self.withdrawals is not None:
             block.append([w.to_serializable_list() for w in self.withdrawals])
 
-        return FixtureBlock(
+        fixture_block = FixtureBlock(
             **self.model_dump(),
             rlp=eth_rlp.encode(block),
         )
+
+        if self.header.fork is not None:
+            header = fixture_block.header
+            object.__setattr__(header, "fork", self.header.fork)
+            for _prop in ("rlp_encode_list", "rlp", "block_hash"):
+                header.__dict__.pop(_prop, None)
+
+        return fixture_block
 
 
 class FixtureBlock(FixtureBlockBase):
