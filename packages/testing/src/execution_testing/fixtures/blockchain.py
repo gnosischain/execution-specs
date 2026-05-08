@@ -704,6 +704,20 @@ class BlockchainFixtureCommon(BaseFixture):
                     data["config"]["chainid"] = "0x01"
         return data
 
+    @model_validator(mode="after")
+    def propagate_fork_to_genesis(self) -> Self:
+        """
+        `FixtureHeader.fork` is excluded from serialization, so loading a
+        fixture from JSON leaves `genesis.fork` unset. Restore it from the
+        top-level fork so that `genesis.block_hash` recomputes with the
+        correct (e.g. AuRa) header encoding.
+        """
+        if self.genesis.fork is None:
+            object.__setattr__(self.genesis, "fork", self.fork)
+            for _prop in ("rlp_encode_list", "rlp", "block_hash"):
+                self.genesis.__dict__.pop(_prop, None)
+        return self
+
     def get_fork(self) -> Fork | TransitionFork | None:
         """Return fork of the fixture as a string."""
         return self.fork

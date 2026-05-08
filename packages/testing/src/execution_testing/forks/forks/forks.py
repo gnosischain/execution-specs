@@ -91,7 +91,7 @@ class Frontier(
     def header_zero_difficulty_required(cls) -> bool:
         """
         Pre-merge Gnosis fixtures use a non-zero difficulty so that AuRa
-        clients don't misclassify blocks as post-merge payloads when 
+        clients don't misclassify blocks as post-merge payloads when
         difficulty is zero.
 
         EIP-3675 (Paris) overrides this to force zero difficulty post-merge.
