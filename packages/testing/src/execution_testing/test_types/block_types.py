@@ -18,6 +18,7 @@ from execution_testing.base_types import (
     Hash,
     HexNumber,
     NumberBoundTypeVar,
+    TestAddress,
     ZeroPaddedHexNumber,
 )
 from execution_testing.forks import Fork
@@ -199,6 +200,10 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
             and self.parent_beacon_block_root is None
         ):
             updated_values["parent_beacon_block_root"] = 0
+
+        # AuRa: coinbase must match the validator whose key signs the seal.
+        if fork.header_aura_encoding() and int(self.number) != 0:
+            updated_values["fee_recipient"] = TestAddress
 
         return self.copy(**updated_values)
 

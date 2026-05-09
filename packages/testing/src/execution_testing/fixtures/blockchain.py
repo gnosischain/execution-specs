@@ -19,6 +19,7 @@ from typing import (
 
 import ethereum_rlp as eth_rlp
 import pytest
+from coincurve.keys import PrivateKey
 from ethereum_types.numeric import Uint
 from pydantic import (
     AliasChoices,
@@ -41,6 +42,7 @@ from execution_testing.base_types import (
     HeaderNonce,
     HexNumber,
     Number,
+    TestPrivateKey,
     ZeroPaddedHexNumber,
     unwrap_annotation,
 )
@@ -260,16 +262,36 @@ class FixtureHeader(CamelModel):
             value = getattr(self, field)
             if value is not None:
                 if aura and field == "prev_randao":
-                    # AuRa: step=0 encodes as empty bytes, not 32-byte hash
-                    header_list.append(b"")
+                    # AuRa step = block number; each block must have a unique step.
+                    header_list.append(Uint(int(self.number)))
                 elif aura and field == "nonce":
-                    # AuRa: signature is 65 zero bytes, not 8-byte nonce
-                    header_list.append(bytes(65))
+                    # AuRa signature slot: zeros for genesis, ECDSA seal otherwise.
+                    if int(self.number) == 0:
+                        header_list.append(bytes(65))
+                    else:
+                        header_list.append(self._aura_signature)
                 else:
                     header_list.append(
                         value if isinstance(value, bytes) else Uint(value)
                     )
         return header_list
+
+    @cached_property
+    def _aura_signature(self) -> bytes:
+        """Sign header (sans seal slots) with TestPrivateKey; returns r||s||v."""
+        sealing_list: List[bytes | Uint] = []
+        for field in self.__class__.model_fields:
+            if field in ("fork", "prev_randao", "nonce"):
+                continue
+            value = getattr(self, field)
+            if value is None:
+                continue
+            sealing_list.append(
+                value if isinstance(value, bytes) else Uint(value)
+            )
+        sealing_hash = Bytes(eth_rlp.encode(sealing_list)).keccak256()
+        privkey = PrivateKey(TestPrivateKey.to_bytes(32, "big"))
+        return privkey.sign_recoverable(bytes(sealing_hash), hasher=None)
 
     @cached_property
     def rlp(self) -> Bytes:
