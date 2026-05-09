@@ -12,9 +12,6 @@ from execution_testing.forks import (
     TransitionFork,
 )
 
-# Sentinel TTD for pre-merge tests on Gnosis clients.
-PRE_MERGE_SENTINEL_TTD = 2**63 - 1
-
 
 def ruleset_format(fork: Fork | TransitionFork) -> Dict[str, int]:
     """Format the ruleset for backwards compatibility."""
@@ -25,10 +22,6 @@ def ruleset_format(fork: Fork | TransitionFork) -> Dict[str, int]:
         default_values["HIVE_FORK_DAO_BLOCK"] = 2000
     if fork > London:
         default_values["HIVE_TERMINAL_TOTAL_DIFFICULTY"] = 0
-    else:
-        default_values["HIVE_TERMINAL_TOTAL_DIFFICULTY"] = (
-            PRE_MERGE_SENTINEL_TTD
-        )
     entries = default_values | fork.ruleset()
     if fork in [Amsterdam, BPO2ToAmsterdamAtTime15k]:
         entries.pop("HIVE_AMSTERDAM_BLOB_BASE_FEE_UPDATE_FRACTION")

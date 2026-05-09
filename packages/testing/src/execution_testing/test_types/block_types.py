@@ -201,7 +201,7 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
         ):
             updated_values["parent_beacon_block_root"] = 0
 
-        # AuRa: coinbase = sealing validator; difficulty = U128.Max - step + parent_step.
+        # AuRa: validator as coinbase; difficulty matches step transition.
         if fork.header_aura_encoding() and int(self.number) != 0:
             updated_values["fee_recipient"] = TestAddress
             updated_values["difficulty"] = (1 << 128) - 2

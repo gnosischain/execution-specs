@@ -262,10 +262,10 @@ class FixtureHeader(CamelModel):
             value = getattr(self, field)
             if value is not None:
                 if aura and field == "prev_randao":
-                    # AuRa step = block number; each block must have a unique step.
+                    # AuRa: step is block number (unique per block).
                     header_list.append(Uint(int(self.number)))
                 elif aura and field == "nonce":
-                    # AuRa signature slot: zeros for genesis, ECDSA seal otherwise.
+                    # AuRa seal: zeros at genesis, ECDSA elsewhere.
                     if int(self.number) == 0:
                         header_list.append(bytes(65))
                     else:
@@ -278,7 +278,9 @@ class FixtureHeader(CamelModel):
 
     @cached_property
     def _aura_signature(self) -> bytes:
-        """Sign header (sans seal slots) with TestPrivateKey; returns r||s||v."""
+        """
+        Return r||s||v seal over header fields excluding AuRa slots.
+        """
         sealing_list: List[bytes | Uint] = []
         for field in self.__class__.model_fields:
             if field in ("fork", "prev_randao", "nonce"):
