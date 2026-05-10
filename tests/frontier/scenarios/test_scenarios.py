@@ -236,7 +236,7 @@ def test_scenarios(
             # use gas hash
             number=len(blocks) + 1,
             gaslimit=tx_env.gas_limit,
-            coinbase=tx_env.fee_recipient,
+            coinbase=tx_env.set_fork_requirements(fork).fee_recipient,
         )
 
         def make_result(
