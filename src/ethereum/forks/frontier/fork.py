@@ -32,14 +32,13 @@ from ethereum.exceptions import (
 from . import vm
 from .blocks import Block, Header, Log, Receipt
 from .bloom import logs_bloom
-from .fork_types import EMPTY_ACCOUNT, EMPTY_CODE_HASH, Address
+from .fork_types import EMPTY_CODE_HASH, Address
 from .state import (
     State,
     destroy_account,
     get_account,
     get_code,
     increment_nonce,
-    set_account,
     set_account_balance,
     state_root,
 )
@@ -543,18 +542,6 @@ def process_block_rewards(
     )
     account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
     if account.code_hash == EMPTY_CODE_HASH:
-        # AuRa clients (Nethermind, OpenEthereum) issue the system CALL
-        # regardless of whether the target has code. At Frontier, a CALL to a
-        # codeless target still touches the account into existence (see
-        # `AddToBalanceAndCreateIfNotExists` in Nethermind's `FastCall`).
-        # Without this touch the state root diverges from the client's. EIP-158
-        # cleanup (Spurious Dragon onward) removes the empty record at the end
-        # of the block, so this is observable only on pre-EIP-158 forks.
-        set_account(
-            block_env.state,
-            BLOCK_REWARDS_CONTRACT_ADDRESS,
-            EMPTY_ACCOUNT,
-        )
         return
 
     out = process_unchecked_system_transaction(
