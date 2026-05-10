@@ -577,10 +577,18 @@ class BlockchainTest(BaseTest):
 
     def get_genesis_environment(self) -> Environment:
         """Get the genesis environment for pre-allocation groups."""
-        modified_values = self.genesis_environment.set_fork_requirements(
+        # Apply GENESIS_ENVIRONMENT_DEFAULTS first so set_fork_requirements
+        # sees number = 0 and correctly treats this as genesis.
+        # Otherwise, fork-based overrides incorrectly trigger due to the
+        # default number = 1, resulting in a non-zero genesis coinbase and
+        # a hash mismatch (real AuRa genesis uses miner = 0x0).
+        seeded_values = (
+            GENESIS_ENVIRONMENT_DEFAULTS
+            | self.genesis_environment.model_dump(exclude_unset=True)
+        )
+        return Environment(**seeded_values).set_fork_requirements(
             self.fork.transitions_from()
-        ).model_dump(exclude_unset=True)
-        return Environment(**(GENESIS_ENVIRONMENT_DEFAULTS | modified_values))
+        )
 
     def make_genesis(
         self, *, apply_pre_allocation_blockchain: bool
