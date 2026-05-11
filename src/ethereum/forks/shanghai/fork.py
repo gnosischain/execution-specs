@@ -45,6 +45,9 @@ from .exceptions import (
     PriorityFeeGreaterThanMaxFeeError,
 )
 from .state import (
+    EMPTY_ACCOUNT,
+    account_exists,
+    set_account,
     State,
     destroy_account,
     get_account,
@@ -595,6 +598,9 @@ def process_block_rewards(
     if account.code_hash == EMPTY_CODE_HASH:
         return
 
+    if not account_exists(block_env.state, SYSTEM_ADDRESS):
+        set_account(block_env.state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
@@ -817,6 +823,10 @@ def process_withdrawals(
 
     Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
+    deposit_contract = get_account(block_env.state, DEPOSIT_CONTRACT_ADDRESS)
+    if deposit_contract.code_hash == EMPTY_CODE_HASH:
+        return
+
     amounts = []
     addresses = []
     for w in withdrawals:
@@ -826,6 +836,9 @@ def process_withdrawals(
         ["uint256", "uint64[]", "address[]"],
         [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
     )
+    if not account_exists(block_env.state, SYSTEM_ADDRESS):
+        set_account(block_env.state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=DEPOSIT_CONTRACT_ADDRESS,

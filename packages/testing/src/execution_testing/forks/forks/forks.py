@@ -1365,20 +1365,12 @@ class ConstantinopleFix(
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:
         """
-        Pre-allocates block rewards contract and system address.
-
-        ConstantinopleFix is the first active Gnosis mainnet fork.
+        Pre-allocates the block rewards contract.
         """
         return {
             BLOCK_REWARDS_CONTRACT_ADDRESS: {
                 "nonce": 1,
                 "code": BLOCK_REWARDS_CONTRACT_BYTECODE,
-            },
-            SYSTEM_ADDRESS: {
-                "nonce": 0,
-                "balance": 0,
-                "code": b"",
-                "storage": {},
             },
         }
 

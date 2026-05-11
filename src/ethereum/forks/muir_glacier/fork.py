@@ -43,6 +43,7 @@ from .state import (
     get_code,
     increment_nonce,
     set_account_balance,
+    touch_account,
     state_root,
 )
 from .transactions import (
@@ -554,6 +555,8 @@ def process_block_rewards(
     account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
     if account.code_hash == EMPTY_CODE_HASH:
         return
+
+    touch_account(block_env.state, SYSTEM_ADDRESS)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,

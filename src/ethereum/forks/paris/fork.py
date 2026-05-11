@@ -44,6 +44,9 @@ from .exceptions import (
     PriorityFeeGreaterThanMaxFeeError,
 )
 from .state import (
+    EMPTY_ACCOUNT,
+    account_exists,
+    set_account,
     State,
     destroy_account,
     get_account,
@@ -585,6 +588,9 @@ def process_block_rewards(
     account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
     if account.code_hash == EMPTY_CODE_HASH:
         return
+
+    if not account_exists(block_env.state, SYSTEM_ADDRESS):
+        set_account(block_env.state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,

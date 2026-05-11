@@ -63,12 +63,13 @@ def test_system_address_persists_without_rewards_contract(
     pre: Alloc,
 ) -> None:
     """
-    SYSTEM_ADDRESS must remain in state even when the block rewards contract
-    has no code (system call is skipped).
+    SYSTEM_ADDRESS must not be deleted by EIP-161 when no system call fires.
 
-    This covers the case where no AuRa system call fires at all. SYSTEM_ADDRESS
-    was never "touched" in any form, yet it must survive because the deletion
-    path (destroy_touched_empty_accounts) only runs against touched accounts.
+    When the rewards contract has no code the system call is skipped entirely,
+    so SYSTEM_ADDRESS is never touched by any transaction. EIP-161 only cleans
+    up accounts that were touched; a pre-existing SYSTEM_ADDRESS must survive
+    untouched. SYSTEM_ADDRESS is explicitly placed in genesis here because
+    without a system call there is no mechanism to create it.
     """
     pre[BLOCK_REWARDS_CONTRACT] = Account(
         code=b"",
@@ -76,11 +77,16 @@ def test_system_address_persists_without_rewards_contract(
         balance=0,
     )
 
+    pre[SYSTEM_ADDRESS] = Account(
+        nonce=1,
+        balance=0,
+    )
+
     blockchain_test(
         pre=pre,
         blocks=[Block()],
         post={
-            SYSTEM_ADDRESS: Account(nonce=0, balance=0),
+            SYSTEM_ADDRESS: Account(nonce=1, balance=0),
         },
     )
 
