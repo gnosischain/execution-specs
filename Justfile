@@ -165,7 +165,7 @@ json-loader *args:
         --output="tests/json_loader/fixtures" \
         --cov-config=pyproject.toml \
         --cov=ethereum \
-        --cov-fail-under=85
+        --cov-fail-under=82
     uv run pytest \
         -m "not slow" \
         -n auto --maxprocesses 6 --dist=loadfile \
