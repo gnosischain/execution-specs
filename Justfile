@@ -144,6 +144,7 @@ fill-pypy *args:
         --basetemp="{{ output_dir }}/fill-pypy/tmp" \
         --log-to "{{ output_dir }}/fill-pypy/logs" \
         --clean \
+        --from ConstantinopleFix \
         --until "{{ latest_fork }}" \
         --ignore=tests/ported_static \
         "$@" \
@@ -155,6 +156,7 @@ json-loader *args:
     @mkdir -p "{{ output_dir }}/json-loader/tmp"
     uv run fill \
         -m "eels_base_coverage and not derived_test" \
+        --from ConstantinopleFix \
         --until "{{ latest_fork }}" \
         -n {{ xdist_workers }} --dist=loadgroup \
         --skip-index \

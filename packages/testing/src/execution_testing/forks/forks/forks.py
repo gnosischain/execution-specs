@@ -1249,24 +1249,9 @@ class Frontier(
         """
         Return whether the fork expects pre-allocation of accounts.
 
-        Frontier pre-allocates block rewards and deposit contracts.
+        Frontier does not require pre-allocated accounts
         """
-        return {
-            BLOCK_REWARDS_CONTRACT_ADDRESS: {
-                "nonce": 1,
-                "code": BLOCK_REWARDS_CONTRACT_BYTECODE,
-            },
-            DEPOSIT_CONTRACT_ADDRESS: {
-                "nonce": 1,
-                "code": DEPOSIT_CONTRACT_BYTECODE,
-            },
-            SYSTEM_ADDRESS: {
-                "nonce": 0,
-                "balance": 0,
-                "code": b"",
-                "storage": {},
-            },
-        }
+        return {}
 
     @classmethod
     def build_default_block_header(
@@ -1396,7 +1381,27 @@ class ConstantinopleFix(
 ):
     """Constantinople Fix fork."""
 
-    pass
+    @classmethod
+    def pre_allocation_blockchain(cls) -> Mapping:
+        """
+        ConstantinopleFix pre-allocates block rewards and deposit contracts.
+        """
+        return {
+            BLOCK_REWARDS_CONTRACT_ADDRESS: {
+                "nonce": 1,
+                "code": BLOCK_REWARDS_CONTRACT_BYTECODE,
+            },
+            DEPOSIT_CONTRACT_ADDRESS: {
+                "nonce": 1,
+                "code": DEPOSIT_CONTRACT_BYTECODE,
+            },
+            SYSTEM_ADDRESS: {
+                "nonce": 0,
+                "balance": 0,
+                "code": b"",
+                "storage": {},
+            },
+        }
 
 
 class Istanbul(
