@@ -21,13 +21,12 @@ Gnosis chain launched in 2018 with Constantinople already active. Frontier, Home
 
 The active Gnosis fork sequence starts at ConstantinopleFix:
 
-```
+```text
 ConstantinopleFix → Istanbul → Berlin → London →
 Paris (Merge) → Shanghai → Cancun → Prague → Osaka
 ```
 
 Pre-merge forks (ConstantinopleFix → London) use AuRa consensus. Paris and later use standard Ethereum PoS.
-
 
 ### Known divergences (pre-merge)
 
@@ -51,6 +50,7 @@ AuRa encoding is applied automatically by the fixture framework for any fork whe
 Implementation: `packages/testing/src/execution_testing/fixtures/blockchain.py` — `rlp_encode_list` property and `_aura_signature` cached property on `FixtureHeader`.
 
 The block environment also sets AuRa-specific values for pre-merge non-genesis blocks:
+
 - `fee_recipient` → `TestAddress`
 - `difficulty` → `(1 << 128) - 2`
 
@@ -67,6 +67,7 @@ Implementation: `packages/testing/src/execution_testing/test_types/block_types.p
 Pre-merge forks are excluded from `json-loader` because EELS validates headers using standard Ethereum rules (8-byte `Bytes8` nonce, PoW difficulty check) which are incompatible with AuRa headers.
 
 The `just fill` recipe (and `fill-pypy`) starts from `ConstantinopleFix` because:
+
 1. Gnosis chain launched at ConstantinopleFix — pre-ConstantinopleFix forks never existed on Gnosis mainnet.
 2. The system contract pre-allocations (BlockRewardAuRa, SYSTEM_ADDRESS) are defined on `ConstantinopleFix` in the test framework — the first fork that actually ran on Gnosis mainnet.
 
