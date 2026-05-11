@@ -1361,10 +1361,10 @@ class Constantinople(
     """Constantinople fork."""
 
     @classmethod
-    def header_aura_encoding(cls) -> bool:
-        """Gnosis uses AuRa seal encoding in the block header RLP."""
-        return True
-    
+    def header_zero_difficulty_required(cls) -> bool:
+        """Zero difficulty is not required."""
+        return False
+
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:
         """
@@ -1471,10 +1471,7 @@ class Paris(
 ):
     """Paris (Merge) fork."""
 
-    @classmethod
-    def header_aura_encoding(cls) -> bool:
-        """Post-merge blocks use standard Ethereum header encoding."""
-        return False
+    pass
 
 
 class Shanghai(
