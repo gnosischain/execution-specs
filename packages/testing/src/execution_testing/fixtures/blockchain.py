@@ -217,6 +217,15 @@ class FixtureHeader(CamelModel):
 
     fork: Fork | None = Field(None, exclude=True)
 
+    def set_fork(self, fork: Fork | None) -> None:
+        """
+        Set the runtime-only fork reference and clear cached properties that
+        depend on fork-specific header encoding.
+        """
+        object.__setattr__(self, "fork", fork)
+        for _prop in ("rlp_encode_list", "rlp", "block_hash"):
+            self.__dict__.pop(_prop, None)
+
     def model_post_init(self, __context: Any) -> None:
         """
         Model post init method used to check for required fields of a given
@@ -262,10 +271,10 @@ class FixtureHeader(CamelModel):
             value = getattr(self, field)
             if value is not None:
                 if aura and field == "prev_randao":
-                    # AuRa: step is block number (unique per block).
+                    # AuRa: step is block number (unique per block)
                     header_list.append(Uint(int(self.number)))
                 elif aura and field == "nonce":
-                    # AuRa seal: zeros at genesis, ECDSA elsewhere.
+                    # AuRa seal: zeros at genesis, ECDSA elsewhere
                     if int(self.number) == 0:
                         header_list.append(bytes(65))
                     else:
@@ -660,10 +669,7 @@ class FixtureBlockBase(CamelModel):
         )
 
         if self.header.fork is not None:
-            header = fixture_block.header
-            object.__setattr__(header, "fork", self.header.fork)
-            for _prop in ("rlp_encode_list", "rlp", "block_hash"):
-                header.__dict__.pop(_prop, None)
+            fixture_block.header.set_fork(self.header.fork)
 
         return fixture_block
 
@@ -737,9 +743,7 @@ class BlockchainFixtureCommon(BaseFixture):
         correct (e.g. AuRa) header encoding.
         """
         if self.genesis.fork is None:
-            object.__setattr__(self.genesis, "fork", self.fork)
-            for _prop in ("rlp_encode_list", "rlp", "block_hash"):
-                self.genesis.__dict__.pop(_prop, None)
+            self.genesis.set_fork(self.fork.transitions_from())
         return self
 
     def get_fork(self) -> Fork | TransitionFork | None:

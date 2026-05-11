@@ -14,4 +14,3 @@ def env() -> Environment:
 def post() -> Alloc:
     """Post state fixture."""
     return Alloc()
-

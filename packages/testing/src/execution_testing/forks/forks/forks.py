@@ -90,19 +90,8 @@ class Frontier(
 
     @classmethod
     def header_zero_difficulty_required(cls) -> bool:
-        """
-        Pre-merge Gnosis fixtures use a non-zero difficulty so that AuRa
-        clients don't misclassify blocks as post-merge payloads when
-        difficulty is zero.
-
-        EIP-3675 (Paris) overrides this to force zero difficulty post-merge.
-        """
+        """At genesis, header must not have difficulty zero."""
         return False
-
-    @classmethod
-    def header_aura_encoding(cls) -> bool:
-        """Gnosis uses AuRa seal encoding in the block header RLP."""
-        return True
 
     @classmethod
     def header_withdrawals_required(cls) -> bool:
@@ -1371,7 +1360,10 @@ class Constantinople(
 ):
     """Constantinople fork."""
 
-    pass
+    @classmethod
+    def header_aura_encoding(cls) -> bool:
+        """Gnosis uses AuRa seal encoding in the block header RLP."""
+        return True
 
 
 class ConstantinopleFix(

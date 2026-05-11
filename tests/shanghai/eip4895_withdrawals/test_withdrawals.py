@@ -173,6 +173,7 @@ def test_withdrawal_system_call_invalid_opcode(
     """
     Test behavior when deposit contract hits the INVALID opcode.
     """
+    # Deploy contract that uses INVALID opcode
     pre[DEPOSIT_CONTRACT] = Account(
         code=Op.INVALID,
         nonce=1,
