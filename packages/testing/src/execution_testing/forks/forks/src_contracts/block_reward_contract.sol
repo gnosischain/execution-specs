@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
-// Compiled with: solc --bin-runtime --optimize --optimize-runs 1 --evm-version byzantium
-// Target byzantium to avoid SHL/SHR/PUSH0 — contract is deployed on forks as early as Frontier.
+// Compiled with: solc --bin-runtime --optimize --optimize-runs 1 --evm-version constantinople
 
 /**
  * Minimum viable test implementation of the BlockRewardAuRa reward contract.
