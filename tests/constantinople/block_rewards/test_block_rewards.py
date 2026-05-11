@@ -21,7 +21,7 @@ from execution_testing import (
 from execution_testing.exceptions import BlockException
 
 pytestmark = [
-    pytest.mark.valid_from("Frontier"),
+    pytest.mark.valid_from("ConstantinopleFix"),
     pytest.mark.pre_alloc_mutable,
 ]
 
@@ -274,3 +274,4 @@ def test_block_rewards_distributes_to_recipients(
         },
         blocks=[Block()],
     )
+
