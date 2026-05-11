@@ -12,10 +12,63 @@ The authoritative specifications for Gnosis execution layer differences live in 
 - [network-upgrades/istanbul.md](https://github.com/gnosischain/specs/blob/master/network-upgrades/istanbul.md) — EIP-1283 re-enabled, EIP-2200 not included
 - [network-upgrades/berlin.md](https://github.com/gnosischain/specs/blob/master/network-upgrades/berlin.md) — identical to Ethereum mainnet
 
+## Fork history
+
+Gnosis chain launched in 2018 with Constantinople already active. Frontier, Homestead, and Byzantium predate Gnosis and were never activated on Gnosis mainnet. The following forks are marked `ignore=True` in the test framework (skipped during fill):
+
+- DAOFork, TangerineWhistle, SpuriousDragon — pre-Gnosis Ethereum-only forks
+- MuirGlacier, ArrowGlacier, GrayGlacier — difficulty-bomb-only forks, not activated on Gnosis
+
+The active Gnosis fork sequence starts at ConstantinopleFix:
+
+```
+ConstantinopleFix → Istanbul → Berlin → London →
+Paris (Merge) → Shanghai → Cancun → Prague → Osaka
+```
+
+Pre-merge forks (ConstantinopleFix → London) use AuRa consensus. Paris and later use standard Ethereum PoS.
+
+
 ### Known divergences (pre-merge)
 
 - **Istanbul**: Gnosis re-enabled EIP-1283 (not EIP-2200). The current `istanbul/fork.py` follows Ethereum mainnet semantics (EIP-2200). This does not affect the t8n block-level machinery but may cause SSTORE gas mismatches in tests targeting the exact Istanbul EIP-1283 behaviour.
 - **Constantinople**: EIP-1283 was activated, then de-activated in the Gnosis-specific ConstantinopleFix fork (block 2,508,800). This fork is not separately represented; Constantinople here follows standard Ethereum semantics.
+
+## AuRa consensus encoding (pre-merge)
+
+Pre-merge Gnosis blocks (Constantinople → London) use Authority Round (AuRa) consensus instead of Ethereum's PoW. AuRa-encoded fixture headers differ from standard Ethereum headers in three fields:
+
+| Header field | Standard Ethereum | AuRa (Gnosis pre-merge) |
+|---|---|---|
+| `nonce` | 8-byte PoW nonce (`Bytes8`) | 65-byte ECDSA seal (`r‖s‖v`) over the unsealed header |
+| `mixHash` / `prev_randao` | PoW mix hash | AuRa step (block number as `uint256`) |
+| `difficulty` | Calculated PoW difficulty | Fixed: `(1 << 128) - 2` |
+
+Genesis blocks use an all-zero 65-byte seal. Non-genesis seals are signed with the test validator key (`TestPrivateKey`). The unsealed header excludes `prev_randao` and `nonce` fields before hashing.
+
+AuRa encoding is applied automatically by the fixture framework for any fork where `header_zero_difficulty_required()` returns `False` (all pre-merge forks). `header_zero_difficulty_required()` is overridden to `True` starting with Paris (EIP-3675), so post-merge forks use standard encoding automatically.
+
+Implementation: `packages/testing/src/execution_testing/fixtures/blockchain.py` — `rlp_encode_list` property and `_aura_signature` cached property on `FixtureHeader`.
+
+The block environment also sets AuRa-specific values for pre-merge non-genesis blocks:
+- `fee_recipient` → `TestAddress`
+- `difficulty` → `(1 << 128) - 2`
+
+Implementation: `packages/testing/src/execution_testing/test_types/block_types.py` — `Environment.set_fork_requirements()`.
+
+## Fixture generation strategy
+
+| Recipe | `--from` | `--until` | Encoding | Purpose |
+|---|---|---|---|---|
+| `just fill` | `ConstantinopleFix` | `Osaka` (latest) | AuRa (pre-merge), standard (post-merge) | Gnosis Hive client tests |
+| `just fill-pypy` | `ConstantinopleFix` | `Osaka` (latest) | AuRa (pre-merge), standard (post-merge) | PyPy fill verification |
+| `just json-loader` | `Paris` | `Osaka` (latest) | Standard only | EELS Python spec validation |
+
+Pre-merge forks are excluded from `json-loader` because EELS validates headers using standard Ethereum rules (8-byte `Bytes8` nonce, PoW difficulty check) which are incompatible with AuRa headers.
+
+The `just fill` recipe (and `fill-pypy`) starts from `ConstantinopleFix` because:
+1. Gnosis chain launched at ConstantinopleFix — pre-ConstantinopleFix forks never existed on Gnosis mainnet.
+2. The system contract pre-allocations (BlockRewardAuRa, SYSTEM_ADDRESS) are defined on `ConstantinopleFix` in the test framework — the first fork that actually ran on Gnosis mainnet.
 
 ## System transactions
 
@@ -31,10 +84,6 @@ System transactions are special EVM calls made by `SYSTEM_ADDRESS` that bypass n
 ## Features by fork
 
 ### Pre-merge forks (Constantinople → London)
-
-Gnosis launched in 2018 with Constantinople already active. Frontier, Homestead, DAOFork,
-TangerineWhistle, SpuriousDragon, Byzantium, and the PoW difficulty-bomb forks (MuirGlacier,
-ArrowGlacier, GrayGlacier) are not valid Gnosis fork transitions and are marked `ignore=True`.
 
 | Feature | Con | ConstFix | Istn | Berlin | London |
 |---|---|---|---|---|---|
@@ -67,15 +116,28 @@ BLOB_FEE_COLLECTOR                = 0x1559000000000000000000000000000000000000
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 ```
 
+Gnosis-specific blob limits (Osaka+, override Ethereum mainnet values):
+
+```text
+BLOB_COUNT_LIMIT       = 2
+MAX_BLOB_GAS_PER_BLOCK = GasCosts.BLOB_SCHEDULE_MAX * GasCosts.PER_BLOB
+```
+
+Prague and Cancun also override `MAX_BLOB_GAS_PER_BLOCK = U64(262144)`.
+
 ## Block rewards (`process_block_rewards`)
 
 Called at the start of every block before user transactions. Calls `BLOCK_REWARDS_CONTRACT_ADDRESS` with selector `f91c2898` (`reward(address[],uint16[])`). Decodes the return as `(address[], uint256[])` and increases each address's balance by the corresponding amount.
 
-Implementation: `fork.py:process_block_rewards` in Constantinople through Osaka.
+If no contract is deployed at `BLOCK_REWARDS_CONTRACT_ADDRESS`, the call is silently skipped (allows tests with minimal pre-state).
+
+Implementation: `fork.py:process_block_rewards` in ConstantinopleFix through Osaka.
 
 ## Withdrawals (`process_withdrawals`)
 
 Called after all user transactions. Calls `DEPOSIT_CONTRACT_ADDRESS` with selector `79d0c0bc` (`executeSystemWithdrawals(uint256,uint64[],address[])`) passing `MAX_FAILED_WITHDRAWALS_TO_PROCESS`, withdrawal amounts (GWei), and withdrawal addresses.
+
+The deposit contract is pre-allocated from Shanghai onwards. If no contract is deployed at `DEPOSIT_CONTRACT_ADDRESS`, the call is skipped and the block remains valid.
 
 Implementation: `fork.py:process_withdrawals` in Shanghai through Osaka.
 
@@ -83,11 +145,10 @@ Implementation: `fork.py:process_withdrawals` in Shanghai through Osaka.
 
 After each user transaction, the base fee portion (`gas_used * base_fee_per_gas`) is sent to `FEE_COLLECTOR_ADDRESS` instead of being burned. This replaces Ethereum's EIP-1559 burn.
 
+Implementation: `fork.py:process_transaction` in London through Osaka.
+
 ## Blob fee collection (Prague+)
 
 After each user transaction with blobs, the blob gas fee is sent to `BLOB_FEE_COLLECTOR`.
 
-## Gnosis-specific limits (Osaka+)
-
-- `BLOB_COUNT_LIMIT = 2`
-- `MAX_BLOB_GAS_PER_BLOCK = 262144`
+Implementation: `fork.py:process_transaction` in Prague through Osaka.

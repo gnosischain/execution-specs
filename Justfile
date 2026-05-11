@@ -156,7 +156,7 @@ json-loader *args:
     @mkdir -p "{{ output_dir }}/json-loader/tmp"
     uv run fill \
         -m "eels_base_coverage and not derived_test" \
-        --from ConstantinopleFix \
+        --from Paris \
         --until "{{ latest_fork }}" \
         -n {{ xdist_workers }} --dist=loadgroup \
         --skip-index \

@@ -42,15 +42,9 @@ from .helpers import ceiling_division
 CONTRACTS_DIR = Path(realpath(__file__)).parent / "contracts"
 SYSTEM_ADDRESS = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
 BLOCK_REWARDS_CONTRACT_ADDRESS = 0x2000000000000000000000000000000000000001
-DEPOSIT_CONTRACT_ADDRESS = 0xBABE2BED00000000000000000000000000000003
-BLOCK_REWARDS_CONTRACT_BYTECODE_FILE = (
-    CONTRACTS_DIR / "block_reward_contract.bin"
-)
-DEPOSIT_CONTRACT_BYTECODE_FILE = CONTRACTS_DIR / "deposit_contract.bin"
 BLOCK_REWARDS_CONTRACT_BYTECODE = (
-    BLOCK_REWARDS_CONTRACT_BYTECODE_FILE.read_bytes()
-)
-DEPOSIT_CONTRACT_BYTECODE = DEPOSIT_CONTRACT_BYTECODE_FILE.read_bytes()
+    CONTRACTS_DIR / "block_reward_contract.bin"
+).read_bytes()
 
 
 # All forks must be listed here !!! in the order they were introduced !!!
@@ -1027,17 +1021,8 @@ class Frontier(
 
     @classmethod
     def system_contracts(cls) -> List[Address]:
-        """At Genesis, block rewards and deposit contract are present."""
-        return [
-            Address(
-                0x2000000000000000000000000000000000000001,
-                label="BLOCK_REWARDS_CONTRACT_ADDRESS",
-            ),
-            Address(
-                0xBABE2BED00000000000000000000000000000003,
-                label="DEPOSIT_CONTRACT_ADDRESS",
-            ),
-        ]
+        """At Genesis, no system contracts are present."""
+        return []
 
     @classmethod
     def deterministic_factory_predeploy_address(cls) -> Address | None:
@@ -1357,19 +1342,37 @@ class Constantinople(
 ):
     """Constantinople fork."""
 
+    pass
+
+
+class ConstantinopleFix(
+    Constantinople,
+    solc_name="constantinople",
+    ruleset_name="PETERSBURG",
+):
+    """Constantinople Fix fork — first active Gnosis mainnet fork."""
+
+    @classmethod
+    def system_contracts(cls) -> List[Address]:
+        """Block rewards contract is present from ConstantinopleFix onwards."""
+        return [
+            Address(
+                BLOCK_REWARDS_CONTRACT_ADDRESS,
+                label="BLOCK_REWARDS_CONTRACT_ADDRESS",
+            ),
+        ] + super().system_contracts()
+
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:
         """
-        ConstantinopleFix pre-allocates block rewards and deposit contracts.
+        Pre-allocates block rewards contract and system address.
+
+        ConstantinopleFix is the first active Gnosis mainnet fork.
         """
         return {
             BLOCK_REWARDS_CONTRACT_ADDRESS: {
                 "nonce": 1,
                 "code": BLOCK_REWARDS_CONTRACT_BYTECODE,
-            },
-            DEPOSIT_CONTRACT_ADDRESS: {
-                "nonce": 1,
-                "code": DEPOSIT_CONTRACT_BYTECODE,
             },
             SYSTEM_ADDRESS: {
                 "nonce": 0,
@@ -1378,16 +1381,6 @@ class Constantinople(
                 "storage": {},
             },
         }
-
-
-class ConstantinopleFix(
-    Constantinople,
-    solc_name="constantinople",
-    ruleset_name="PETERSBURG",
-):
-    """Constantinople Fix fork."""
-
-    pass
 
 
 class Istanbul(
