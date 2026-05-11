@@ -176,9 +176,6 @@ jobs:
           if [ -d "fixtures/blockchain_tests_engine" ]; then
             uv run consume engine -v --input fixtures/blockchain_tests_engine/
           fi
-          if [ -d "fixtures/blockchain_tests_engine_x" ]; then
-            uv run consume enginex -v --input fixtures/blockchain_tests_engine_x/
-          fi
           if [ -d "fixtures/blockchain_tests" ]; then
             uv run consume rlp -v --input fixtures/blockchain_tests/
           fi
