@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       fork:
-        description: "Fork used to build fill-params: --from=ConstantinopleFix --fork=<fork> --generate-all-formats"
+        description: "Fork passed to --fork"
         required: true
         default: "Osaka"
       test_dir:
@@ -36,7 +36,7 @@ jobs:
 
       - name: Run fill to generate fixtures
         run: |
-          uv run fill "tests/${{ github.event.inputs.test_dir }}" --from=ConstantinopleFix --fork ${{ github.event.inputs.fork }} --generate-all-formats --clean -v -x
+          uv run fill "tests/${{ github.event.inputs.test_dir }}" --fork ${{ github.event.inputs.fork }} --generate-all-formats --clean -v -x
       
       - name: Upload generated fixtures
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

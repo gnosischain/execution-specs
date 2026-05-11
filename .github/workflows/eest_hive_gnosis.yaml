@@ -74,7 +74,7 @@ jobs:
 
       - name: Run fill
         run: |
-          uv run fill "tests/${{ github.event.inputs.test_dir }}" --from=ConstantinopleFix --fork "${{ github.event.inputs.fork }}" --generate-all-formats --clean -v -x
+          uv run fill "tests/${{ github.event.inputs.test_dir }}" --fork "${{ github.event.inputs.fork }}" --generate-all-formats --clean -v -x
 
       - name: Run consume against ${{ github.event.inputs.client }}
         env:
