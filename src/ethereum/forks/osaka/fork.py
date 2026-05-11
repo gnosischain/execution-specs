@@ -62,14 +62,14 @@ from .requests import (
 )
 from .state import (
     EMPTY_ACCOUNT,
-    account_exists,
-    set_account,
     State,
     TransientStorage,
+    account_exists,
     destroy_account,
     get_account,
     get_code,
     increment_nonce,
+    set_account,
     set_account_balance,
     state_root,
 )

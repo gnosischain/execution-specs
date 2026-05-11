@@ -48,8 +48,8 @@ from .state import (
     get_code,
     increment_nonce,
     set_account_balance,
-    touch_account,
     state_root,
+    touch_account,
 )
 from .transactions import (
     AccessListTransaction,
