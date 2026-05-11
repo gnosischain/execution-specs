@@ -263,7 +263,10 @@ class FixtureHeader(CamelModel):
     @cached_property
     def rlp_encode_list(self) -> List:
         """Compute the RLP of the header."""
-        aura = self.fork is not None and self.fork.header_aura_encoding()
+        aura = (
+            self.fork is not None
+            and not self.fork.header_zero_difficulty_required()
+        )
         header_list: List[bytes | Uint] = []
         for field in self.__class__.model_fields:
             if field == "fork":
