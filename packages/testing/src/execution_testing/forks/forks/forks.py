@@ -1364,15 +1364,7 @@ class Constantinople(
     def header_aura_encoding(cls) -> bool:
         """Gnosis uses AuRa seal encoding in the block header RLP."""
         return True
-
-
-class ConstantinopleFix(
-    Constantinople,
-    solc_name="constantinople",
-    ruleset_name="PETERSBURG",
-):
-    """Constantinople Fix fork."""
-
+    
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:
         """
@@ -1394,6 +1386,16 @@ class ConstantinopleFix(
                 "storage": {},
             },
         }
+
+
+class ConstantinopleFix(
+    Constantinople,
+    solc_name="constantinople",
+    ruleset_name="PETERSBURG",
+):
+    """Constantinople Fix fork."""
+
+    pass
 
 
 class Istanbul(

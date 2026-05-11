@@ -736,12 +736,7 @@ class BlockchainFixtureCommon(BaseFixture):
 
     @model_validator(mode="after")
     def propagate_fork_to_genesis(self) -> Self:
-        """
-        `FixtureHeader.fork` is excluded from serialization, so loading a
-        fixture from JSON leaves `genesis.fork` unset. Restore it from the
-        top-level fork so that `genesis.block_hash` recomputes with the
-        correct (e.g. AuRa) header encoding.
-        """
+        """Restore genesis header's runtime fork context after JSON load."""
         if self.genesis.fork is None:
             self.genesis.set_fork(self.fork.transitions_from())
         return self
