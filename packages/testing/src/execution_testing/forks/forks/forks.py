@@ -1361,11 +1361,6 @@ class Constantinople(
     """Constantinople fork."""
 
     @classmethod
-    def header_zero_difficulty_required(cls) -> bool:
-        """Zero difficulty is not required."""
-        return False
-
-    @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:
         """
         ConstantinopleFix pre-allocates block rewards and deposit contracts.
