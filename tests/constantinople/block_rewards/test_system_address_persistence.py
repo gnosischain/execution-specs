@@ -207,7 +207,7 @@ def test_system_address_persists_validator_set_transition(
     """
     # Toggle slot 0 on each call: 0→1 (InitiateChange), 1→0 (FinalizeChange).
     # ISZERO flips 0↔1 without any conditional jumps.
-    FINALIZE_CHANGE_CONTRACT = (
+    finalize_change_contract = (
         Op.PUSH1(0)
         + Op.SLOAD
         + Op.ISZERO
@@ -217,7 +217,7 @@ def test_system_address_persists_validator_set_transition(
     )
 
     pre[BLOCK_REWARDS_CONTRACT] = Account(
-        code=FINALIZE_CHANGE_CONTRACT,
+        code=finalize_change_contract,
         nonce=1,
         balance=0,
     )
