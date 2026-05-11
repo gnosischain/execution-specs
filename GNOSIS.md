@@ -30,14 +30,18 @@ System transactions are special EVM calls made by `SYSTEM_ADDRESS` that bypass n
 
 ## Features by fork
 
-### Pre-merge forks (Frontier → London)
+### Pre-merge forks (Constantinople → London)
 
-| Feature | Frontier | Homestead | DAO | TW | SD | Byz | Con | Istn | Berlin | London |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Block rewards system call | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| Base fee collection to `FEE_COLLECTOR_ADDRESS` | — | — | — | — | — | — | — | — | — | Yes |
+Gnosis launched in 2018 with Constantinople already active. Frontier, Homestead, DAOFork,
+TangerineWhistle, SpuriousDragon, Byzantium, and the PoW difficulty-bomb forks (MuirGlacier,
+ArrowGlacier, GrayGlacier) are not valid Gnosis fork transitions and are marked `ignore=True`.
 
-> **TW** = TangerineWhistle, **SD** = SpuriousDragon, **Byz** = Byzantium, **Con** = Constantinople, **Istn** = Istanbul
+| Feature | Con | ConstFix | Istn | Berlin | London |
+|---|---|---|---|---|---|
+| Block rewards system call | Yes | Yes | Yes | Yes | Yes |
+| Base fee collection to `FEE_COLLECTOR_ADDRESS` | — | — | — | — | Yes |
+
+> **Con** = Constantinople, **ConstFix** = ConstantinopleFix (Petersburg), **Istn** = Istanbul
 >
 > Pre-merge block rewards replace Ethereum's PoW coinbase reward with a system call to `BLOCK_REWARDS_CONTRACT_ADDRESS`.
 > London's `FEE_COLLECTOR_ADDRESS` is `0x1559000000000000000000000000000000000000` (same as all post-merge forks).

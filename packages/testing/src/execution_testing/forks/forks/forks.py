@@ -57,6 +57,7 @@ DEPOSIT_CONTRACT_BYTECODE = DEPOSIT_CONTRACT_BYTECODE_FILE.read_bytes()
 class Frontier(
     BaseFork,
     solc_name="homestead",
+    ignore=True,
 ):
     """Frontier fork."""
 
@@ -1320,6 +1321,7 @@ class Homestead(
     eips.EIP7,
     eips.EIP2,
     Frontier,
+    ignore=True,
 ):
     """Homestead fork."""
 
@@ -1368,6 +1370,7 @@ class Byzantium(
     eips.EIP196,
     eips.EIP197,
     SpuriousDragon,
+    ignore=True,
 ):
     """Byzantium fork."""
 
