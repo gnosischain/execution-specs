@@ -59,7 +59,6 @@ from .state import (
     increment_nonce,
     set_account_balance,
     state_root,
-    touch_account,
 )
 from .transactions import (
     AccessListTransaction,
@@ -675,8 +674,6 @@ def process_block_rewards(
     if account.code_hash == EMPTY_CODE_HASH:
         return
 
-    touch_account(block_env.state, SYSTEM_ADDRESS)
-
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
@@ -928,7 +925,6 @@ def process_withdrawals(
         ["uint256", "uint64[]", "address[]"],
         [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
     )
-    touch_account(block_env.state, SYSTEM_ADDRESS)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,

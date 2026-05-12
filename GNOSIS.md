@@ -71,7 +71,7 @@ The `just fill` recipe (and `fill-pypy`) starts from `ConstantinopleFix` because
 1. Gnosis chain launched at ConstantinopleFix — pre-ConstantinopleFix forks never existed on Gnosis mainnet.
 2. The `BLOCK_REWARDS_CONTRACT` pre-allocation is defined on `ConstantinopleFix` in the test framework — the first fork that actually ran on Gnosis mainnet.
 
-Note: `SYSTEM_ADDRESS` is **not** pre-allocated in genesis. It is materialized on demand via `touch_account` immediately before each system EVM call. See [SYSTEM_ADDRESS lifecycle](#system_address-lifecycle) below for the rationale and the known Nethermind divergence.
+`SYSTEM_ADDRESS` is pre-allocated in genesis via `ConstantinopleFix.pre_allocation_blockchain()` (nonce=0, balance=0, code empty). See [SYSTEM_ADDRESS lifecycle](#system_address-lifecycle) for the full rationale.
 
 ## System transactions
 
@@ -86,21 +86,9 @@ System transactions are special EVM calls made by `SYSTEM_ADDRESS` that bypass n
 
 ## SYSTEM_ADDRESS lifecycle
 
-`SYSTEM_ADDRESS` (`0xfffffffffffffffffffffffffffffffffffffffe`) is the caller of all AuRa system transactions. It is not pre-allocated in genesis; instead, `touch_account(state, SYSTEM_ADDRESS)` is called immediately before every system EVM call that uses it as the sender, across all forks:
+`SYSTEM_ADDRESS` (`0xfffffffffffffffffffffffffffffffffffffffe`) is the caller of all AuRa system transactions.
 
-- **Pre-merge** (`ConstantinopleFix` → `London`): called in `process_block_rewards` (once per block).
-- **Post-merge** (`Paris` → `Osaka`): called in both `process_block_rewards` and `process_withdrawals` (once per site, once per block each).
-
-`touch_account` writes the empty account via `set_account` directly.
-
-### Known divergence: Nethermind
-
-Nethermind's AuRa path has two behaviors that cause it to produce a different trie from Geth, Erigon, and Reth:
-
-1. `SystemSpec.IsEip158Enabled = false` in the system-call path — forces `StateProvider` to write an empty `SYSTEM_ADDRESS` account on every system call ([StateProvider.cs#L560-L570](https://github.com/NethermindEth/nethermind/blob/master/src/Nethermind/Nethermind.State/StateProvider.cs#L560-L570)).
-2. `Eip158IgnoredAccount = Address.SystemUser` — exempts `SystemUser` from the EIP-158 sweep, so the empty leaf is never deleted ([StateProvider.cs#L768-L772](https://github.com/NethermindEth/nethermind/blob/master/src/Nethermind/Nethermind.State/StateProvider.cs#L768-L772)).
-
-The combined effect is that Nethermind always has an empty `0xff…fe` leaf in the trie after the first system call, whereas Geth/Erigon/Reth do not fabricate a state footprint for the caller. Fixtures generated from this spec therefore pass on Geth/Erigon/Reth and fail on Nethermind. This divergence was also flagged in the [Gnosis core devs call (Sep 2023)](https://www.gnosis.io/blog/gnosis-core-devs-call-notes-september-6-2023). Resolution is pending alignment with the Nethermind team on whether the AuRa exemption should be removed or codified in the Gnosis spec.
+**Pre-allocation (test fixtures):** `ConstantinopleFix.pre_allocation_blockchain()` includes `SYSTEM_ADDRESS` with nonce=0, balance=0, and empty code. Every blockchain test fixture from ConstantinopleFix onwards therefore has it in genesis before any block is executed. This ensures all four Gnosis clients (geth, Nethermind, Reth, Erigon) start from an agreed initial state.
 
 ## Features by fork
 
@@ -150,7 +138,7 @@ Prague and Cancun also override `MAX_BLOB_GAS_PER_BLOCK = U64(262144)`.
 
 Called at the start of every block before user transactions. Calls `BLOCK_REWARDS_CONTRACT_ADDRESS` with selector `f91c2898` (`reward(address[],uint16[])`). Decodes the return as `(address[], uint256[])` and increases each address's balance by the corresponding amount.
 
-If no contract is deployed at `BLOCK_REWARDS_CONTRACT_ADDRESS`, the call is silently skipped (allows tests with minimal pre-state). In this case `SYSTEM_ADDRESS` is also not materialized for that block — see [SYSTEM_ADDRESS lifecycle](#system_address-lifecycle).
+If no contract is deployed at `BLOCK_REWARDS_CONTRACT_ADDRESS`, the call is silently skipped (allows tests with minimal pre-state).
 
 Implementation: `fork.py:process_block_rewards` in ConstantinopleFix through Osaka.
 
