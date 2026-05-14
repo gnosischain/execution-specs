@@ -36,7 +36,7 @@ from ethereum.exceptions import (
     InvalidSenderError,
     NonceMismatchError,
 )
-from ethereum.state import EMPTY_CODE_HASH, Address
+from ethereum.state import EMPTY_ACCOUNT, EMPTY_CODE_HASH, Address
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
@@ -62,10 +62,12 @@ from .requests import (
 from .state import (
     State,
     TransientStorage,
+    account_exists,
     destroy_account,
     get_account,
     get_code,
     increment_nonce,
+    set_account,
     set_account_balance,
     state_root,
 )
@@ -768,6 +770,9 @@ def process_block_rewards(
     if account.code_hash == EMPTY_CODE_HASH:
         return
 
+    if not account_exists(block_env.state, SYSTEM_ADDRESS):
+        set_account(block_env.state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
@@ -1097,6 +1102,9 @@ def process_withdrawals(
         ["uint256", "uint64[]", "address[]"],
         [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
     )
+
+    if not account_exists(block_env.state, SYSTEM_ADDRESS):
+        set_account(block_env.state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,

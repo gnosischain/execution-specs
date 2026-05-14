@@ -1365,18 +1365,13 @@ class ConstantinopleFix(
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:
         """
-        Pre-allocates the block rewards contract and system address.
+        Pre-allocates the block rewards contract.
         """
         return {
             BLOCK_REWARDS_CONTRACT_ADDRESS: {
                 "nonce": 1,
                 "code": BLOCK_REWARDS_CONTRACT_BYTECODE,
-            },
-            SYSTEM_ADDRESS: {
-                "nonce": 0,
-                "balance": 0,
-                "code": b"",
-            },
+            }
         }
 
 
