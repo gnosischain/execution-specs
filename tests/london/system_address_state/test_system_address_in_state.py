@@ -7,11 +7,11 @@ Background
 geth PR #33741 "core/vm: disable the value transfer in syscall" removed the
 zero-value Context.Transfer that historically journaled SYSTEM_ADDRESS as
 dirty, causing it to survive ``Finalise`` (which skips the SystemAddress
-exclusion).  Without that transfer, a full sync from genesis never writes
+exclusion). Without that transfer, a full sync from genesis never writes
 SYSTEM_ADDRESS into the state trie.
 
 On Gnosis mainnet this first manifests at block 1301, the block after the
-AuRa safeContract multi-transition at block 1300.  The execution-spec
+AuRa safeContract multi-transition at block 1300. The execution-spec
 reference implementation always journals SYSTEM_ADDRESS through the
 system-call path; any client that diverges will produce a different trie
 root and fail to import block 1301.
@@ -20,10 +20,10 @@ What this test checks
 ---------------------
 1. After the *first* block (which triggers a system call via
    ``process_block_rewards``), SYSTEM_ADDRESS must exist in the post-state
-   with the same nonce/balance it had in genesis — zero-value but present.
+   as a zero-value account.
 
 2. A second block (simulating the transition) must still find SYSTEM_ADDRESS
-   in the trie and produce an identical root.  A client that silently
+   in the trie and produce an identical root. A client that silently
    dropped SYSTEM_ADDRESS after block 1 will diverge here.
 
 The test is intentionally minimal: no user transactions, no reward
@@ -83,7 +83,7 @@ def test_system_address_persists_after_system_call(
 
     A client implementing geth PR #33741 without the Gnosis-specific
     MakeAuraSyscall fix will omit the zero-value transfer, never journal
-    SYSTEM_ADDRESS, and drop it from the trie during Finalise.  The
+    SYSTEM_ADDRESS, and drop it from the trie during Finalise. The
     resulting stateRoot diverges from the canonical value starting with the
     first block that runs a system call, which on Gnosis mainnet is block 1.
     """
@@ -93,9 +93,9 @@ def test_system_address_persists_after_system_call(
         balance=0,
     )
 
-    # SYSTEM_ADDRESS is pre-allocated in genesis by the framework
-    # (ConstantinopleFix.pre_allocation_blockchain); we verify it is still
-    # there — unchanged — after a block executes the system call.
+    # SYSTEM_ADDRESS is not pre-allocated in genesis; touch_account inside
+    # process_block_rewards creates the leaf on the first system call.
+    # We verify it is present — zero-value — after block execution.
     blocks = [Block()]
 
     post = {
@@ -113,7 +113,7 @@ def test_system_address_persists_across_validator_set_transition(
     SYSTEM_ADDRESS must survive two consecutive system-call blocks.
 
     This models the Gnosis mainnet scenario around block 1300→1301:
-    - Block N   triggers the AuRa safeContract transition (system call).
+    - Block N triggers the AuRa safeContract transition (system call).
     - Block N+1 must find SYSTEM_ADDRESS in the trie and produce the
       canonical stateRoot.
 

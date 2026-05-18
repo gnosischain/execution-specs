@@ -263,6 +263,7 @@ class FixtureHeader(CamelModel):
     @cached_property
     def rlp_encode_list(self) -> List:
         """Compute the RLP of the header."""
+        # Gnosis only: non-zero difficulty signals an Aura-sealed block
         aura = (
             self.fork is not None
             and not self.fork.header_zero_difficulty_required()

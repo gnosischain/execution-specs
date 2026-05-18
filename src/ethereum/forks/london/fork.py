@@ -928,7 +928,9 @@ def process_transaction(
     elif account_exists_and_is_empty(block_env.state, block_env.coinbase):
         destroy_account(block_env.state, block_env.coinbase)
 
-    # transfer base fee to fee collector address
+    # Transfer base fee to fee collector address. FEE_COLLECTOR_ADDRESS is
+    # intentionally excluded from touched_accounts to prevent it from being
+    # destroyed by destroy_touched_empty_accounts.
     fee_collector_balance_after = get_account(
         block_env.state, FEE_COLLECTOR_ADDRESS
     ).balance + U256(tx_gas_used_after_refund * block_env.base_fee_per_gas)
