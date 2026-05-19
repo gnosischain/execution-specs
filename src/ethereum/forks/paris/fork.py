@@ -81,7 +81,6 @@ BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
-SYSTEM_TRANSACTION_GAS = Uint(30000000)
 DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
     "0xbabe2bed00000000000000000000000000000003"
 )
@@ -91,7 +90,7 @@ BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
 FEE_COLLECTOR_ADDRESS = hex_to_address(
     "0x1559000000000000000000000000000000000000"
 )
-MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
 
 
 @dataclass
@@ -216,7 +215,9 @@ def state_transition(chain: BlockChain, block: Block) -> None:
     )
     block_diff = extract_block_diff(block_state)
     block_state_root, _ = chain.state.compute_state_root_and_trie_changes(
-        block_diff.account_changes, block_diff.storage_changes
+        block_diff.account_changes,
+        block_diff.storage_changes,
+        block_diff.storage_clears,
     )
     transactions_root = root(block_output.transactions_trie)
     receipt_root = root(block_output.receipts_trie)

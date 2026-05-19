@@ -106,7 +106,6 @@ BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
-SYSTEM_TRANSACTION_GAS = Uint(30000000)
 DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
     "0xbabe2bed00000000000000000000000000000003"
 )
@@ -120,6 +119,7 @@ MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
 MAX_BLOB_GAS_PER_BLOCK = U64(262144)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
 BLOB_FEE_COLLECTOR = hex_to_address(
@@ -782,16 +782,6 @@ def apply_body(
 
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
-
-    # Gnosis: populate withdrawals trie here because
-    # process_withdrawals() is a system call that doesn't
-    # receive block_output (upstream does this internally).
-    for i, wd in enumerate(withdrawals):
-        trie_set(
-            block_output.withdrawals_trie,
-            rlp.encode(Uint(i)),
-            rlp.encode(wd),
-        )
 
     process_withdrawals(block_env, block_output, withdrawals)
 
