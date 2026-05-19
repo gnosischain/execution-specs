@@ -22,6 +22,7 @@ Run all docs related checks:
 just spellcheck
 just lint-md
 just docs
+just changelog
 ```
 
 ### Local Deployment and Test

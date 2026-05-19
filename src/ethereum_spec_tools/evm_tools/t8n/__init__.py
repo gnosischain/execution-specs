@@ -17,6 +17,7 @@ from typing_extensions import override
 from ethereum import trace
 from ethereum.exceptions import EthereumException, InvalidBlock
 from ethereum.fork_criteria import ByBlockNumber, ByTimestamp, Unscheduled
+from ethereum.merkle_patricia_trie import copy_trie
 from ethereum_spec_tools.forks import Hardfork, TemporaryHardfork
 
 from ..loaders.fixture_loader import Load
@@ -375,12 +376,9 @@ class T8N(Load):
             "chain_id": self.chain_id,
         }
 
-        if self.fork.has_block_state:
-            block_state = self.fork.BlockState(pre_state=self.alloc.state)
-            kw_arguments["state"] = block_state
-            self._block_state = block_state
-        else:
-            kw_arguments["state"] = self.alloc.state
+        block_state = self.fork.BlockState(pre_state=self.alloc.state)
+        kw_arguments["state"] = block_state
+        self._block_state = block_state
 
         block_environment = self.fork.BlockEnvironment
 
@@ -402,16 +400,17 @@ class T8N(Load):
             kw_arguments["block_access_list_builder"] = (
                 self.fork.BlockAccessListBuilder()
             )
+        if self.fork.has_slot_number:
+            kw_arguments["slot_number"] = self.env.slot_number
 
         return block_environment(**kw_arguments)
 
     def backup_state(self) -> None:
         """Back up the state in order to restore in case of an error."""
         state = self.alloc.state
-        main_trie = self.fork.copy_trie(state._main_trie)
+        main_trie = copy_trie(state._main_trie)
         storage_tries = {
-            k: self.fork.copy_trie(t)
-            for (k, t) in state._storage_tries.items()
+            k: copy_trie(t) for (k, t) in state._storage_tries.items()
         }
         self.alloc.state_backup = (
             main_trie,
@@ -432,9 +431,10 @@ class T8N(Load):
         miner_reward = block_reward + (
             ommer_count * (block_reward // U256(32))
         )
-        self.fork.create_ether(
-            block_env.state, block_env.coinbase, miner_reward
-        )
+
+        rewards_state = self.fork.TransactionState(parent=block_env.state)
+
+        self.fork.create_ether(rewards_state, block_env.coinbase, miner_reward)
 
         for ommer in self.env.ommers:
             # Ommer age with respect to the current block.
@@ -443,8 +443,10 @@ class T8N(Load):
                 (U256(8) - ommer_age) * block_reward
             ) // U256(8)
             self.fork.create_ether(
-                block_env.state, ommer.coinbase, ommer_miner_reward
+                rewards_state, ommer.coinbase, ommer_miner_reward
             )
+
+        self.fork.incorporate_tx_into_block(rewards_state)
 
     def run_state_test(self) -> Any:
         """
@@ -479,15 +481,15 @@ class T8N(Load):
                 data=block_env.block_hashes[-1],  # The parent hash
             )
 
+        if self.fork.has_process_block_rewards:
+            self.fork.process_block_rewards(block_env)
+
         if self.fork.has_beacon_roots_address:
             self.fork.process_unchecked_system_transaction(
                 block_env=block_env,
                 target_address=self.fork.BEACON_ROOTS_ADDRESS,
                 data=block_env.parent_beacon_block_root,
             )
-
-        if self.fork.has_process_block_rewards:
-            self.fork.process_block_rewards(block_env)
 
         for tx_index, (original_idx, tx) in enumerate(
             zip(
@@ -529,28 +531,9 @@ class T8N(Load):
                 )
 
         if self.fork.has_withdrawal:
-            if self.env.withdrawals is not None:
-                for i, w in enumerate(self.env.withdrawals):
-                    self.fork.trie_set(
-                        block_output.withdrawals_trie,
-                        rlp.encode(Uint(i)),
-                        rlp.encode(
-                            [
-                                Uint(w.index),
-                                Uint(w.validator_index),
-                                w.address,
-                                Uint(w.amount),
-                            ]
-                        ),
-                    )
-            if self.fork.has_process_block_rewards:
-                # Gnosis: 2-arg system call (no block_output)
-                self.fork.process_withdrawals(block_env, self.env.withdrawals)
-            else:
-                # Upstream: 3-arg signature includes block_output
-                self.fork.process_withdrawals(
-                    block_env, block_output, self.env.withdrawals
-                )
+            self.fork.process_withdrawals(
+                block_env, block_output, self.env.withdrawals
+            )
 
         if self.fork.has_compute_requests_hash:
             self.fork.process_general_purpose_requests(block_env, block_output)
