@@ -574,6 +574,8 @@ def apply_body(
     ----------
     block_env :
         The block scoped environment.
+    block_output :
+        The block output for the current block.
     transactions :
         Transactions included in the block.
     withdrawals :
