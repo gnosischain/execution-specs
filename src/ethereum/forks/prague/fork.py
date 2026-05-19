@@ -68,7 +68,6 @@ from .requests import (
 from .state_tracker import (
     BlockState,
     TransactionState,
-    create_ether,
     destroy_account,
     extract_block_diff,
     get_account,
@@ -794,7 +793,7 @@ def apply_body(
             rlp.encode(wd),
         )
 
-    process_withdrawals(block_env, withdrawals)
+    process_withdrawals(block_env, block_output, withdrawals)
 
     process_general_purpose_requests(
         block_env=block_env,
@@ -1050,12 +1049,12 @@ def process_withdrawals(
         )
         amounts.append(int(wd.amount))
         addresses.append(wd.address)
-    
+
     payload = encode(
         ["uint256", "uint64[]", "address[]"],
         [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
     )
-    
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=DEPOSIT_CONTRACT_ADDRESS,
@@ -1104,7 +1103,7 @@ def process_block_rewards(
         address = hex_to_address(addr)
         balance = get_account(reward_state, address).balance + U256(amount)
         set_account_balance(reward_state, address, balance)
-    
+
     incorporate_tx_into_block(reward_state)
 
 

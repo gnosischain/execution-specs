@@ -59,7 +59,6 @@ from .fork_types import VersionedHash
 from .state_tracker import (
     BlockState,
     TransactionState,
-    create_ether,
     destroy_account,
     extract_block_diff,
     get_account,
@@ -856,12 +855,12 @@ def process_withdrawals(
         )
         amounts.append(int(wd.amount))
         addresses.append(wd.address)
-    
+
     payload = encode(
         ["uint256", "uint64[]", "address[]"],
         [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
     )
-    
+
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=DEPOSIT_CONTRACT_ADDRESS,
