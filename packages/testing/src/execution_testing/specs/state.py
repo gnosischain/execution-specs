@@ -132,7 +132,7 @@ class StateTest(BaseTest):
         current_gas_limit: int,
         pre_alloc: Alloc,
         env: Environment,
-        enable_post_processing: bool,
+        ignore_gas_differences: bool,
     ) -> bool:
         """Verify a new lower gas limit yields the same transaction outcome."""
         base_traces = base_tool_result.traces
@@ -161,7 +161,7 @@ class StateTest(BaseTest):
         )
         if not base_traces.are_equivalent(
             modified_tool_output.result.traces,
-            enable_post_processing,
+            ignore_gas_differences,
         ):
             logger.debug(
                 f"Traces are not equivalent (gas_limit={current_gas_limit})"
@@ -318,6 +318,7 @@ class StateTest(BaseTest):
             "extra_data": self.env.extra_data,
             "withdrawals": self.env.withdrawals,
             "parent_beacon_block_root": self.env.parent_beacon_block_root,
+            "slot_number": self.env.slot_number,
             "txs": [self.tx],
             "ommers": [],
             "header_verify": self.blockchain_test_header_verify,
@@ -402,7 +403,7 @@ class StateTest(BaseTest):
             self.operation_mode == OpMode.OPTIMIZE_GAS
             or self.operation_mode == OpMode.OPTIMIZE_GAS_POST_PROCESSING
         ):
-            enable_post_processing = (
+            ignore_gas_differences = (
                 self.operation_mode == OpMode.OPTIMIZE_GAS_POST_PROCESSING
             )
             base_tool_output = transition_tool_output
@@ -422,7 +423,7 @@ class StateTest(BaseTest):
                 current_gas_limit=self.tx.gas_limit - 1,
                 pre_alloc=pre_alloc,
                 env=env,
-                enable_post_processing=enable_post_processing,
+                ignore_gas_differences=ignore_gas_differences,
             ):
                 minimum_gas_limit = 0
                 maximum_gas_limit = int(self.tx.gas_limit)
@@ -438,7 +439,7 @@ class StateTest(BaseTest):
                         current_gas_limit=current_gas_limit,
                         pre_alloc=pre_alloc,
                         env=env,
-                        enable_post_processing=enable_post_processing,
+                        ignore_gas_differences=ignore_gas_differences,
                     ):
                         maximum_gas_limit = current_gas_limit
                     else:
@@ -462,7 +463,7 @@ class StateTest(BaseTest):
                     current_gas_limit=minimum_gas_limit,
                     pre_alloc=pre_alloc,
                     env=env,
-                    enable_post_processing=enable_post_processing,
+                    ignore_gas_differences=ignore_gas_differences,
                 )
                 gas_optimization = current_gas_limit
             else:

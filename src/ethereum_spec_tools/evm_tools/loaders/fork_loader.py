@@ -174,6 +174,23 @@ class ForkLoad:
         return hasattr(module, "hash_block_access_list")
 
     @property
+    def BlockAccessIndex(self) -> Any:
+        """BlockAccessIndex type of the fork."""
+        return self._module("block_access_lists").BlockAccessIndex
+
+    @property
+    def BlockAccessListBuilder(self) -> Any:
+        """BlockAccessListBuilder class of the fork."""
+        return self._module("block_access_lists").BlockAccessListBuilder
+
+    @property
+    def validate_block_access_list_gas_limit(self) -> Any:
+        """validate_block_access_list_gas_limit function of the fork."""
+        return self._module(
+            "block_access_lists"
+        ).validate_block_access_list_gas_limit
+
+    @property
     def signing_hash_2930(self) -> Any:
         """signing_hash_2930 function of the fork."""
         return self._module("transactions").signing_hash_2930
@@ -301,6 +318,15 @@ class ForkLoad:
         return hasattr(self._module("blocks"), "Withdrawal")
 
     @property
+    def has_slot_number(self) -> bool:
+        """Check if the fork supports the SLOTNUM opcode (EIP-7843)."""
+        try:
+            block_env = self._module("vm").BlockEnvironment
+            return "slot_number" in block_env.__dataclass_fields__
+        except (ModuleNotFoundError, AttributeError):
+            return False
+
+    @property
     def decode_transaction(self) -> Any:
         """decode_transaction function of the fork."""
         return self._module("transactions").decode_transaction
@@ -311,63 +337,29 @@ class ForkLoad:
         return hasattr(self._module("transactions"), "decode_transaction")
 
     @property
-    def has_block_state(self) -> bool:
-        """Check if the fork uses BlockState instead of State."""
-        try:
-            module = self._module("state_tracker")
-        except ModuleNotFoundError:
-            return False
-        return hasattr(module, "BlockState")
+    def BlockState(self) -> Any:
+        """BlockState class of the fork."""
+        return self._module("state_tracker").BlockState
 
     @property
-    def State(self) -> Any:
-        """State class of the fork."""
-        return self._module("state").State
+    def TransactionState(self) -> Any:
+        """TransactionState class of the fork."""
+        return self._module("state_tracker").TransactionState
 
     @property
-    def set_account(self) -> Any:
-        """set_account function of the fork."""
-        return self._module("state").set_account
+    def incorporate_tx_into_block(self) -> Any:
+        """incorporate_tx_into_block function of the fork."""
+        return self._module("state_tracker").incorporate_tx_into_block
 
     @property
-    def store_code(self) -> Any:
-        """store_code function of the fork."""
-        return getattr(self._module("state"), "store_code", None)
-
-    @property
-    def set_storage(self) -> Any:
-        """set_storage function of the fork."""
-        return self._module("state").set_storage
-
-    @property
-    def state_root(self) -> Any:
-        """state_root function of the fork."""
-        return self._module("state").state_root
-
-    @property
-    def close_state(self) -> Any:
-        """close_state function of the fork."""
-        return self._module("state").close_state
+    def extract_block_diff(self) -> Any:
+        """extract_block_diff function of the fork."""
+        return self._module("state_tracker").extract_block_diff
 
     @property
     def create_ether(self) -> Any:
         """create_ether function of the fork."""
-        return self._module("state").create_ether
-
-    @property
-    def root(self) -> Any:
-        """Root function of the fork."""
-        return self._module("trie").root
-
-    @property
-    def copy_trie(self) -> Any:
-        """copy_trie function of the fork."""
-        return self._module("trie").copy_trie
-
-    @property
-    def trie_get(self) -> Any:
-        """trie_get function of the fork."""
-        return self._module("trie").trie_get
+        return self._module("state_tracker").create_ether
 
     @property
     def trie_set(self) -> Any:

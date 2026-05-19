@@ -2225,6 +2225,36 @@ class Opcodes(Opcode, Enum):
     Source: [EIP-7516](https://eips.ethereum.org/EIPS/eip-7516)
     """
 
+    SLOTNUM = Opcode(0x4B, popped_stack_items=0, pushed_stack_items=1)
+    """
+    SLOTNUM() = slotNumber
+    ----
+
+    Description
+    ----
+    Returns the current slot number as provided by the consensus layer.
+    The slot number is passed from the consensus layer to the execution
+    layer through the engine API.
+
+    Inputs
+    ----
+    - None
+
+    Outputs
+    ----
+    - slotNumber: current slot number (uint64)
+
+    Fork
+    ----
+    Amsterdam
+
+    Gas
+    ----
+    2
+
+    Source: [EIP-7843](https://eips.ethereum.org/EIPS/eip-7843)
+    """
+
     POP = Opcode(0x50, popped_stack_items=1)
     """
     POP()
@@ -5158,6 +5188,7 @@ class Opcodes(Opcode, Enum):
             "old_memory_size": 0,
             "delegated_address": False,
             "delegated_address_warm": False,
+            "inner_call_cost": 0,
         },
     )
     """
@@ -5236,6 +5267,7 @@ class Opcodes(Opcode, Enum):
             "old_memory_size": 0,
             "delegated_address": False,
             "delegated_address_warm": False,
+            "inner_call_cost": 0,
         },
     )
     """
@@ -5361,6 +5393,7 @@ class Opcodes(Opcode, Enum):
             "old_memory_size": 0,
             "delegated_address": False,
             "delegated_address_warm": False,
+            "inner_call_cost": 0,
         },
     )
     """
@@ -5491,6 +5524,7 @@ class Opcodes(Opcode, Enum):
             "old_memory_size": 0,
             "delegated_address": False,
             "delegated_address_warm": False,
+            "inner_call_cost": 0,
         },
     )
     """
