@@ -201,11 +201,8 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
             and self.parent_beacon_block_root is None
         ):
             updated_values["parent_beacon_block_root"] = 0
-        
-        if (
-            fork.header_slot_number_required()
-            and self.slot_number is None
-        ):
+
+        if fork.header_slot_number_required() and self.slot_number is None:
             updated_values["slot_number"] = 0
 
         if (
