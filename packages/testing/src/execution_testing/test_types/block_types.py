@@ -201,6 +201,12 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
             and self.parent_beacon_block_root is None
         ):
             updated_values["parent_beacon_block_root"] = 0
+        
+        if (
+            fork.header_slot_number_required()
+            and self.slot_number is None
+        ):
+            updated_values["slot_number"] = 0
 
         if (
             not fork.header_zero_difficulty_required()
@@ -208,8 +214,6 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
         ):
             updated_values["fee_recipient"] = TestAddress
             updated_values["difficulty"] = (1 << 128) - 2
-        if fork.header_slot_number_required() and self.slot_number is None:
-            updated_values["slot_number"] = 0
 
         return self.copy(**updated_values)
 

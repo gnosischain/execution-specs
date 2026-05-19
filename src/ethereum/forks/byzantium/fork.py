@@ -565,46 +565,6 @@ def validate_ommers(
             raise InvalidBlock
 
 
-def pay_rewards(
-    block_env: vm.BlockEnvironment,
-    ommers: Tuple[Header, ...],
-) -> None:
-    """
-    Pay rewards to the block miner as well as the ommers miners.
-
-    The miner of the canonical block is rewarded with the predetermined
-    block reward, ``BLOCK_REWARD``, plus a variable award based off of the
-    number of ommer blocks that were mined around the same time, and included
-    in the canonical block's header. An ommer block is a block that wasn't
-    added to the canonical blockchain because it wasn't validated as fast as
-    the accepted block but was mined at the same time. Although not all blocks
-    that are mined are added to the canonical chain, miners are still paid a
-    reward for their efforts. This reward is called an ommer reward and is
-    calculated based on the number associated with the ommer block that they
-    mined.
-
-    Parameters
-    ----------
-    block_env :
-        The block scoped environment.
-    ommers :
-        List of ommers mentioned in the current block.
-
-    """
-    rewards_state = TransactionState(parent=block_env.state)
-    ommer_count = U256(len(ommers))
-    miner_reward = BLOCK_REWARD + (ommer_count * (BLOCK_REWARD // U256(32)))
-    create_ether(rewards_state, block_env.coinbase, miner_reward)
-
-    for ommer in ommers:
-        # Ommer age with respect to the current block.
-        ommer_age = U256(block_env.number - ommer.number)
-        ommer_miner_reward = ((U256(8) - ommer_age) * BLOCK_REWARD) // U256(8)
-        create_ether(rewards_state, ommer.coinbase, ommer_miner_reward)
-
-    incorporate_tx_into_block(rewards_state)
-
-
 def process_transaction(
     block_env: vm.BlockEnvironment,
     block_output: vm.BlockOutput,
