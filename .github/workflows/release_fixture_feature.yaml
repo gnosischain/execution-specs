@@ -55,7 +55,7 @@ jobs:
         uses: ./.github/actions/fetch-binary
         with:
           version: v0.8.24
-          repo_owner: gnosischain
+          repo_owner: ethereum
           repo_name: solidity
           remote_name: solc-static-linux
           binary_name: solc

@@ -2,6 +2,7 @@
 
 import re
 from abc import ABCMeta, abstractmethod
+from enum import Enum, auto
 from typing import (
     TYPE_CHECKING,
     Callable,
@@ -166,6 +167,13 @@ class ExcessBlobGasCalculator(Protocol):
         gas used.
         """
         pass
+
+
+class RefundTypes(Enum):
+    """Enum used to describe all refund types a fork can have."""
+
+    STORAGE_CLEAR = auto()
+    AUTHORIZATION_EXISTING_AUTHORITY = auto()
 
 
 class BaseForkMeta(ABCMeta):
@@ -449,6 +457,12 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         Each system contract address counts as 1 item, and each unique
         storage key it touches (reads or writes) counts as 1 item.
         """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def header_slot_number_required(cls) -> bool:
+        """Return true if the header must contain slot number (EIP-7843)."""
         pass
 
     # Gas related abstract methods
@@ -896,6 +910,14 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         """
         pass
 
+    @classmethod
+    @abstractmethod
+    def engine_payload_attribute_slot_number(cls) -> bool:
+        """
+        Return true if the payload attributes include the slot number.
+        """
+        pass
+
     # Engine API method versions
     @classmethod
     def engine_new_payload_version(cls) -> Optional[int]:
@@ -1000,6 +1022,15 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
     @abstractmethod
     def max_request_type(cls) -> int:
         """Return max request type supported by the fork."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def refund_types(cls) -> List[RefundTypes]:
+        """
+        Return the list of refund types that are possible given current
+        fork logic.
+        """
         pass
 
     # Meta information about the fork
