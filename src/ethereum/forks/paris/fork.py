@@ -36,10 +36,11 @@ from ethereum.exceptions import (
 )
 from ethereum.merkle_patricia_trie import root, trie_set
 from ethereum.state import (
-    EMPTY_CODE_HASH,
     Address,
-    State,
     apply_changes_to_state,
+    EMPTY_ACCOUNT,
+    EMPTY_CODE_HASH,
+    State,
 )
 
 from . import vm
@@ -52,6 +53,7 @@ from .exceptions import (
 from .state_tracker import (
     BlockState,
     TransactionState,
+    account_exists,
     destroy_account,
     extract_block_diff,
     get_account,
@@ -550,49 +552,6 @@ def process_unchecked_system_transaction(
     return system_tx_output
 
 
-def process_block_rewards(
-    block_env: vm.BlockEnvironment,
-) -> None:
-    """
-    Call BlockRewardAuRaBase contract reward function.
-
-    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
-    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
-    """
-    # reward(address[],uint16[]) with benefactors=[coinbase], kind=[0]
-    coinbase_padded = b"\x00" * 12 + bytes(block_env.coinbase)
-    data = (
-        bytes.fromhex("f91c2898")
-        + (64).to_bytes(32, "big")  # offset of address[] arg
-        + (128).to_bytes(32, "big")  # offset of uint16[] arg
-        + (1).to_bytes(32, "big")  # length of address[] = 1
-        + coinbase_padded  # address[0] = coinbase
-        + (1).to_bytes(32, "big")  # length of uint16[] = 1
-        + (0).to_bytes(32, "big")  # kind[0] = 0 (RewardAuthor)
-    )
-
-    account = get_account(block_env.state, BLOCK_REWARDS_CONTRACT_ADDRESS)
-    if account.code_hash == EMPTY_CODE_HASH:
-        return
-
-    if not account_exists(block_env.state, SYSTEM_ADDRESS):
-        set_account(block_env.state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
-
-    out = process_unchecked_system_transaction(
-        block_env=block_env,
-        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
-        data=data,
-    )
-    if out.error:
-        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
-
-    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
-    for addr, amount in zip(addresses, amounts, strict=True):
-        address = hex_to_address(addr)
-        balance = get_account(block_env.state, address).balance + U256(amount)
-        set_account_balance(block_env.state, address, balance)
-
-
 def apply_body(
     block_env: vm.BlockEnvironment,
     transactions: Tuple[LegacyTransaction | Bytes, ...],
@@ -787,14 +746,25 @@ def process_block_rewards(
     Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
     Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
-    # reward(address[],uint16[]) with empty lists
-    data = bytes.fromhex(
-        "f91c2898"
-        "0000000000000000000000000000000000000000000000000000000000000040"
-        "0000000000000000000000000000000000000000000000000000000000000060"
-        "0000000000000000000000000000000000000000000000000000000000000000"
-        "0000000000000000000000000000000000000000000000000000000000000000"
+    # reward(address[],uint16[]) with benefactors=[coinbase], kind=[0]
+    coinbase_padded = b"\x00" * 12 + bytes(block_env.coinbase)
+    data = (
+        bytes.fromhex("f91c2898")
+        + (64).to_bytes(32, "big")  # offset of address[] arg
+        + (128).to_bytes(32, "big")  # offset of uint16[] arg
+        + (1).to_bytes(32, "big")  # length of address[] = 1
+        + coinbase_padded  # address[0] = coinbase
+        + (1).to_bytes(32, "big")  # length of uint16[] = 1
+        + (0).to_bytes(32, "big")  # kind[0] = 0 (RewardAuthor)
     )
+
+    reward_state = TransactionState(parent=block_env.state)
+    account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    if not account_exists(reward_state, SYSTEM_ADDRESS):
+        set_account(reward_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,
@@ -803,11 +773,6 @@ def process_block_rewards(
     )
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
-
-    reward_state = TransactionState(parent=block_env.state)
-    account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
-    if account.code_hash == EMPTY_CODE_HASH:
-        return
 
     if len(out.return_data) == 0:
         return
