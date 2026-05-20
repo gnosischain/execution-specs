@@ -36,11 +36,11 @@ from ethereum.exceptions import (
 )
 from ethereum.merkle_patricia_trie import root, trie_set
 from ethereum.state import (
-    Address,
-    apply_changes_to_state,
     EMPTY_ACCOUNT,
     EMPTY_CODE_HASH,
+    Address,
     State,
+    apply_changes_to_state,
 )
 
 from . import vm

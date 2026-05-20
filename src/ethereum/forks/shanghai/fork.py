@@ -757,7 +757,8 @@ def process_withdrawals(
 
     Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
-    deposit_contract = get_account(block_env.state, DEPOSIT_CONTRACT_ADDRESS)
+    read_state = TransactionState(parent=block_env.state)
+    deposit_contract = get_account(read_state, DEPOSIT_CONTRACT_ADDRESS)
     if deposit_contract.code_hash == EMPTY_CODE_HASH:
         return
 
@@ -776,9 +777,6 @@ def process_withdrawals(
         ["uint256", "uint64[]", "address[]"],
         [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
     )
-
-    if not account_exists(block_env.state, SYSTEM_ADDRESS):
-        set_account(block_env.state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,
