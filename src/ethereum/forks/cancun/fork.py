@@ -811,7 +811,9 @@ def process_transaction(
             tx_state, FEE_COLLECTOR_ADDRESS
         ).balance
         set_account_balance(
-            tx_state, FEE_COLLECTOR_ADDRESS, fee_collector_balance + base_fee
+            tx_state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance + base_fee,
         )
 
     for address in tx_output.accounts_to_delete:

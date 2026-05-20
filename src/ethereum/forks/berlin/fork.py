@@ -31,29 +31,30 @@ from ethereum.exceptions import (
 )
 from ethereum.merkle_patricia_trie import root, trie_set
 from ethereum.state import (
-    Address,
-    apply_changes_to_state,
     EMPTY_ACCOUNT,
     EMPTY_CODE_HASH,
+    Address,
     State,
+    apply_changes_to_state,
 )
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt, encode_receipt
 from .bloom import logs_bloom
 from .state_tracker import (
+    BlockState,
+    TransactionState,
     account_exists,
     account_exists_and_is_empty,
-    BlockState,
     destroy_account,
     destroy_touched_empty_accounts,
     extract_block_diff,
     get_account,
+    get_code,
     incorporate_tx_into_block,
     increment_nonce,
     set_account,
     set_account_balance,
-    TransactionState,
 )
 from .transactions import (
     AccessListTransaction,
@@ -65,6 +66,7 @@ from .transactions import (
     recover_sender,
     validate_transaction,
 )
+from .utils.hexadecimal import hex_to_address
 from .utils.message import prepare_message
 from .vm import Message
 from .vm.gas import GasCosts
@@ -75,10 +77,10 @@ MAX_OMMER_DEPTH = Uint(6)
 BOMB_DELAY_BLOCKS = 9000000
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
-SYSTEM_TRANSACTION_GAS = Uint(30000000)
 BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
     "0x2000000000000000000000000000000000000001"
 )
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
 
 
 @dataclass
@@ -463,68 +465,6 @@ def make_receipt(
     return encode_receipt(tx, receipt)
 
 
-def process_system_transaction(
-    block_env: vm.BlockEnvironment,
-    target_address: Address,
-    system_contract_code: Bytes,
-    data: Bytes,
-) -> MessageCallOutput:
-    """
-    Process a system transaction with the given code.
-
-    Prefer calling `process_checked_system_transaction` or
-    `process_unchecked_system_transaction` depending on whether missing code or
-    an execution error should cause the block to be rejected.
-
-    Parameters
-    ----------
-    block_env :
-        The block scoped environment.
-    target_address :
-        Address of the contract to call.
-    system_contract_code :
-        Code of the contract to call.
-    data :
-        Data to pass to the contract.
-
-    Returns
-    -------
-    system_tx_output : `MessageCallOutput`
-        Output of processing the system transaction.
-
-    """
-    tx_env = vm.TransactionEnvironment(
-        origin=SYSTEM_ADDRESS,
-        gas_price=Uint(0),
-        gas=SYSTEM_TRANSACTION_GAS,
-        access_list_addresses=set(),
-        access_list_storage_keys=set(),
-        index_in_block=None,
-        tx_hash=None,
-    )
-
-    system_tx_message = Message(
-        block_env=block_env,
-        tx_env=tx_env,
-        caller=SYSTEM_ADDRESS,
-        target=target_address,
-        current_target=target_address,
-        gas=SYSTEM_TRANSACTION_GAS,
-        value=U256(0),
-        data=data,
-        code=system_contract_code,
-        depth=Uint(0),
-        code_address=target_address,
-        should_transfer_value=False,
-        is_static=False,
-        accessed_addresses=set(),
-        accessed_storage_keys=set(),
-        parent_evm=None,
-    )
-
-    return process_message_call(system_tx_message)
-
-
 def process_unchecked_system_transaction(
     block_env: vm.BlockEnvironment,
     target_address: Address,
@@ -549,14 +489,47 @@ def process_unchecked_system_transaction(
         Output of processing the system transaction.
 
     """
+    system_tx_state = TransactionState(parent=block_env.state)
     system_contract_code = get_code(
-        block_env.state,
-        get_account(block_env.state, target_address).code_hash,
+        system_tx_state,
+        get_account(system_tx_state, target_address).code_hash,
     )
 
-    return process_system_transaction(
-        block_env, target_address, system_contract_code, data
+    tx_env = vm.TransactionEnvironment(
+        origin=SYSTEM_ADDRESS,
+        gas_price=Uint(0),
+        gas=SYSTEM_TRANSACTION_GAS,
+        access_list_addresses=set(),
+        access_list_storage_keys=set(),
+        state=system_tx_state,
+        index_in_block=None,
+        tx_hash=None,
     )
+
+    system_tx_message = Message(
+        block_env=block_env,
+        tx_env=tx_env,
+        caller=SYSTEM_ADDRESS,
+        target=target_address,
+        current_target=target_address,
+        gas=SYSTEM_TRANSACTION_GAS,
+        value=U256(0),
+        data=data,
+        code=system_contract_code,
+        depth=Uint(0),
+        code_address=target_address,
+        should_transfer_value=False,
+        is_static=False,
+        accessed_addresses=set(),
+        accessed_storage_keys=set(),
+        parent_evm=None,
+    )
+
+    system_tx_output = process_message_call(system_tx_message)
+
+    incorporate_tx_into_block(system_tx_state)
+
+    return system_tx_output
 
 
 def apply_body(
