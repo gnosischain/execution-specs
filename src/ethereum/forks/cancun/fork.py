@@ -850,10 +850,13 @@ def process_withdrawals(
 
     Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
-    read_state = TransactionState(parent=block_env.state)
-    deposit_contract = get_account(read_state, DEPOSIT_CONTRACT_ADDRESS)
+    wd_state = TransactionState(parent=block_env.state)
+    deposit_contract = get_account(wd_state, DEPOSIT_CONTRACT_ADDRESS)
     if deposit_contract.code_hash == EMPTY_CODE_HASH:
         return
+
+    if not account_exists(wd_state, SYSTEM_ADDRESS):
+        set_account(wd_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     amounts = []
     addresses = []
@@ -878,6 +881,8 @@ def process_withdrawals(
     )
     if out.error:
         raise InvalidBlock(f"Withdrawal system call failed: {out.error}")
+
+    incorporate_tx_into_block(wd_state)
 
 
 def process_block_rewards(
