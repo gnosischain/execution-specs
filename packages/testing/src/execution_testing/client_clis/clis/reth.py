@@ -81,7 +81,8 @@ class RethExceptionMapper(ExceptionMapper):
             r"transaction gas limit.*is greater than the cap"
         ),
         BlockException.SYSTEM_CONTRACT_CALL_FAILED: (
-            r"failed to apply .* requests contract call"
+            r"failed to apply .* requests contract call|"
+            r"execution reverted|invalid opcode: INVALID"
         ),
         BlockException.INCORRECT_BLOB_GAS_USED: (
             r"blob gas used mismatch|"

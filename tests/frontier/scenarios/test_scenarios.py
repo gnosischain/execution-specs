@@ -228,15 +228,21 @@ def test_scenarios(
             tx_max_gas *= 2
 
         tx_gasprice: int = 10
+        block_number = len(blocks) + 1
+        block_fee_recipient = (
+            Environment(number=block_number)
+            .set_fork_requirements(fork)
+            .fee_recipient
+        )
         exec_env = ExecutionEnvironment(
             fork=fork,
             origin=tx_origin,
             gasprice=tx_gasprice,
             timestamp=tx_env.timestamp,  # we can't know timestamp before head,
             # use gas hash
-            number=len(blocks) + 1,
+            number=block_number,
             gaslimit=tx_env.gas_limit,
-            coinbase=tx_env.fee_recipient,
+            coinbase=block_fee_recipient,
         )
 
         def make_result(

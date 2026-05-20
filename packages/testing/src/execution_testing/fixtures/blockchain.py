@@ -21,6 +21,7 @@ from typing import (
 
 import ethereum_rlp as eth_rlp
 import pytest
+from coincurve.keys import PrivateKey
 from ethereum_types.numeric import Uint
 from pydantic import (
     AliasChoices,
@@ -45,6 +46,7 @@ from execution_testing.base_types import (
     HeaderNonce,
     HexNumber,
     Number,
+    TestPrivateKey,
     ZeroPaddedHexNumber,
     unwrap_annotation,
 )
@@ -227,6 +229,15 @@ class FixtureHeader(CamelModel):
 
     fork: Fork | None = Field(None, exclude=True)
 
+    def set_fork(self, fork: Fork | None) -> None:
+        """
+        Set the runtime-only fork reference and clear cached properties that
+        depend on fork-specific header encoding.
+        """
+        object.__setattr__(self, "fork", fork)
+        for _prop in ("rlp_encode_list", "rlp", "block_hash"):
+            self.__dict__.pop(_prop, None)
+
     def model_post_init(self, __context: Any) -> None:
         """
         Model post init method used to check for required fields of a given
@@ -264,16 +275,48 @@ class FixtureHeader(CamelModel):
     @cached_property
     def rlp_encode_list(self) -> List:
         """Compute the RLP of the header."""
-        header_list = []
+        # Gnosis only: non-zero difficulty signals an Aura-sealed block
+        aura = (
+            self.fork is not None
+            and not self.fork.header_zero_difficulty_required()
+        )
+        header_list: List[bytes | Uint] = []
         for field in self.__class__.model_fields:
             if field == "fork":
                 continue
             value = getattr(self, field)
             if value is not None:
-                header_list.append(
-                    value if isinstance(value, bytes) else Uint(value)
-                )
+                if aura and field == "prev_randao":
+                    # AuRa: mixHash encodes the step (block number)
+                    header_list.append(Uint(int(self.number)))
+                elif aura and field == "nonce":
+                    # AuRa seal: 65-byte zero at genesis, ECDSA elsewhere
+                    if int(self.number) == 0:
+                        header_list.append(bytes(65))
+                    else:
+                        header_list.append(self._aura_signature)
+                else:
+                    header_list.append(
+                        value if isinstance(value, bytes) else Uint(value)
+                    )
         return header_list
+
+    @cached_property
+    def _aura_signature(self) -> bytes:
+        """Return 65-byte r||s||v ECDSA seal over the unsealed header RLP."""
+        sealing_list: List[bytes | Uint] = []
+        for field in self.__class__.model_fields:
+            if field in ("fork", "prev_randao", "nonce"):
+                continue
+            value = getattr(self, field)
+            if value is None:
+                continue
+            sealing_list.append(
+                value if isinstance(value, bytes) else Uint(value)
+            )
+        sealing_hash = Bytes(eth_rlp.encode(sealing_list)).keccak256()
+        privkey = PrivateKey(TestPrivateKey.to_bytes(32, "big"))
+        return privkey.sign_recoverable(bytes(sealing_hash), hasher=None)
 
     @cached_property
     def rlp(self) -> Bytes:
@@ -716,10 +759,15 @@ class FixtureBlockBase(CamelModel):
         if self.withdrawals is not None:
             block.append([w.to_serializable_list() for w in self.withdrawals])
 
-        return FixtureBlock(
+        fixture_block = FixtureBlock(
             **self.model_dump(),
             rlp=eth_rlp.encode(block),
         )
+
+        if self.header.fork is not None:
+            fixture_block.header.set_fork(self.header.fork)
+
+        return fixture_block
 
 
 class FixtureBlock(FixtureBlockBase):
@@ -781,6 +829,13 @@ class BlockchainFixtureCommon(BaseFixture):
                 if "chainid" not in data["config"]:
                     data["config"]["chainid"] = "0x01"
         return data
+
+    @model_validator(mode="after")
+    def propagate_fork_to_genesis(self) -> Self:
+        """Restore genesis header's runtime fork context after JSON load."""
+        if self.genesis.fork is None:
+            self.genesis.set_fork(self.fork.transitions_from())
+        return self
 
     def get_fork(self) -> Fork | TransitionFork | None:
         """Return fork of the fixture as a string."""

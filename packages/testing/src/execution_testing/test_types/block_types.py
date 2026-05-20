@@ -18,6 +18,7 @@ from execution_testing.base_types import (
     Hash,
     HexNumber,
     NumberBoundTypeVar,
+    TestAddress,
     ZeroPaddedHexNumber,
 )
 from execution_testing.forks import Fork
@@ -203,6 +204,13 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
 
         if fork.header_slot_number_required() and self.slot_number is None:
             updated_values["slot_number"] = 0
+
+        if (
+            not fork.header_zero_difficulty_required()
+            and int(self.number) != 0
+        ):
+            updated_values["fee_recipient"] = TestAddress
+            updated_values["difficulty"] = (1 << 128) - 2
 
         return self.copy(**updated_values)
 

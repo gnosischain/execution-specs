@@ -126,7 +126,7 @@
         "sealEngine": "NoProof",
         "_info": {
             "hash": "0xc2da7ab682d573a2ff88b987526c1ae2d5abac2c738b575294b7976c5358078b",
-            "fixture_format": "blockchain_test"
+            "fixture-format": "blockchain_test"
         }
     }
 }

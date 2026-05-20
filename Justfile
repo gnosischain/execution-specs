@@ -11,7 +11,7 @@ root := justfile_directory()
 output_dir := root / ".just"
 xdist_workers := env("PYTEST_XDIST_AUTO_NUM_WORKERS", "6")
 evm_bin := env("EVM_BIN", "evm")
-latest_fork := "Amsterdam"
+latest_fork := "Osaka"
 
 # --- Static Analysis ---
 
@@ -144,7 +144,7 @@ fill-pypy *args:
         --basetemp="{{ output_dir }}/fill-pypy/tmp" \
         --log-to "{{ output_dir }}/fill-pypy/logs" \
         --clean \
-        --from Paris \
+        --from ConstantinopleFix \
         --until "{{ latest_fork }}" \
         --ignore=tests/ported_static \
         "$@" \
