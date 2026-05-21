@@ -136,10 +136,8 @@ jobs:
     needs: prepare
     runs-on: >-
       ${{
-        matrix.simulator == 'gnosis/consensus' && 'self-hosted-ghr-size-m-x64' ||
-        matrix.simulator == 'gnosis/engine' && 'self-hosted-ghr-size-m-x64' ||
-        matrix.simulator == 'gnosis/sync' && 'self-hosted-ghr-size-xl-x64' ||
-        contains(matrix.simulator, 'gnosis/eels/') && 'self-hosted-ghr-size-ccx33-x64' ||
+        matrix.simulator == 'gnosis/engine' && 'self-hosted' ||
+        contains(matrix.simulator, 'gnosis/eels/') && 'self-hosted' ||
         'ubuntu-latest'
       }}
     concurrency:
@@ -175,7 +173,6 @@ jobs:
           extra_flags: >-
             ${{ env.GLOBAL_EXTRA_FLAGS }}
             ${{ matrix.simulator == 'gnosis/rpc-compat' && env.RPC_COMPAT_FLAGS || '' }}
-            ${{ matrix.simulator == 'gnosis/consensus' && env.CONSENSUS_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-engine' && env.EELS_ENGINE_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-rlp' && env.EELS_RLP_FLAGS || '' }}
             ${{ inputs.extra_flags }}
