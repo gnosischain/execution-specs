@@ -20,7 +20,7 @@ Gnosis diff
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Final, List, Optional, Tuple
 
 from eth_abi import decode, encode
 from ethereum_rlp import rlp
@@ -124,7 +124,9 @@ BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
-MAX_BLOB_GAS_PER_BLOCK = GasCosts.BLOB_SCHEDULE_MAX * GasCosts.PER_BLOB
+MAX_BLOB_GAS_PER_BLOCK: Final[U64] = (
+    GasCosts.BLOB_SCHEDULE_MAX * GasCosts.PER_BLOB
+)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
 BLOB_FEE_COLLECTOR = hex_to_address(
     "0x1559000000000000000000000000000000000000"
