@@ -69,9 +69,6 @@ env:
   GLOBAL_EXTRA_FLAGS: >-
     --client.checktimelimit=300s
     --docker.buildoutput
-  # Docker-specific flags (only used when client_source is 'docker')
-  DOCKER_AUTH_FLAGS: >-
-    --docker.auth
   # Flags used for the gnosis/eels/consume-engine simulator
   EELS_ENGINE_FLAGS: >-
     --sim.parallelism=6
@@ -116,12 +113,6 @@ jobs:
           steps.client_config_schedule.outputs.client_config ||
           steps.client_config_dispatch.outputs.client_config
         }}
-      # client_source to determine if we need docker auth
-      client_source: >-
-        ${{
-          github.event_name == 'schedule' && 'git' ||
-          inputs.client_source
-        }}
     steps:
       - uses: gnosischain/hive-github-action/helpers/client-config@fd3538daf961800fee4544c882c892e6601ae2f4
         if: github.event_name == 'schedule'
@@ -159,7 +150,7 @@ jobs:
       HIVE_PARALLEL_TX_PROCESSING_DISABLED: "true"
       HIVE_AMSTERDAM_TIMESTAMP: "1777456800"
       # Hardcoded EELS build args pinned to bal@v0.1.0
-      EELS_BUILD_ARG_FIXTURES: "https://github.com/gnosischain/execution-spec-tests/releases/download/v0.1.0/fixtures_bal.tar.gz"
+      EELS_BUILD_ARG_FIXTURES: "https://github.com/gnosischain/execution-spec-tests/releases/download/bal@v0.1.0/fixtures_bal.tar.gz"
       EELS_BUILD_ARG_BRANCH: "forks/amsterdam"
     runs-on: >-
       ${{
@@ -198,7 +189,6 @@ jobs:
           client_config: ${{ needs.prepare.outputs.client_config }}
           extra_flags: >-
             ${{ env.GLOBAL_EXTRA_FLAGS }}
-            ${{ needs.prepare.outputs.client_source == 'docker' && env.DOCKER_AUTH_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-engine' && env.EELS_ENGINE_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-rlp' && env.EELS_RLP_FLAGS || '' }}
           gcs_upload: true
