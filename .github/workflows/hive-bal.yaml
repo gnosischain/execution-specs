@@ -7,7 +7,7 @@ on:
       client:
         type: string
         default: '"go-ethereum","nethermind","erigon","reth"'
-        description: Comma-separated list of clients to test .e.g go-ethereum, reth, nethermind, erigon
+        description: Comma-separated list of clients to test e.g. go-ethereum, reth, nethermind, erigon
       simulator:
         type: string
         default: >-
@@ -17,7 +17,7 @@ on:
           ]
         description: >-
           Comma-separated list of simulators to test
-          .e.g gnosis/rpc-compat, gnosis/eels/consume-engine, gnosis/eels/consume-rlp, gnosis/eels/execute-blobs
+          e.g. gnosis/eels/consume-engine, gnosis/eels/consume-rlp
       hive_version:
         type: string
         default: gnosischain/hive@master
