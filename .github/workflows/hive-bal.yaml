@@ -1,5 +1,4 @@
-name: Hive - Gnosis (Fusaka)
-
+name: Hive - BAL
 on:
   schedule:
     - cron: '0 0 * * *'  # Run every day at 00:00 UTC
@@ -7,17 +6,18 @@ on:
     inputs:
       client:
         type: string
-        default: '"go-ethereum-gnosis","reth-gnosis","nethermind-gnosis","erigon-gnosis"'
-        description: Comma-separated list of clients to test e.g. go-ethereum-gnosis, reth-gnosis, nethermind-gnosis, erigon-gnosis
+        default: '"go-ethereum","nethermind","erigon","reth"'
+        description: Comma-separated list of clients to test .e.g go-ethereum, reth, nethermind, erigon
       simulator:
         type: string
         default: >-
-          "gnosis/eels/consume-engine",
-          "gnosis/eels/consume-rlp",
-          "gnosis/eels/consume-sync"
+          [
+            "gnosis/eels/consume-engine",
+            "gnosis/eels/consume-rlp"
+          ]
         description: >-
           Comma-separated list of simulators to test
-          e.g. gnosis/eels/consume-engine, gnosis/eels/consume-rlp, gnosis/eels/consume-sync
+          .e.g gnosis/rpc-compat, gnosis/eels/consume-engine, gnosis/eels/consume-rlp, gnosis/eels/execute-blobs
       hive_version:
         type: string
         default: gnosischain/hive@master
@@ -31,11 +31,16 @@ on:
         options:
           - docker
           - git
+      common_client_tag:
+        type: string
+        description: >-
+          If provided, this tag will be used for all clients, overriding individual tags/branches in client_repos and client_images
+        default: "bal-devnet-7"
       client_repos:
         type: string
         default: |
           {
-            "geth": "gnosischain/go-ethereum@v1.16.8-gc",
+            "geth": "gnosischain/go-ethereum@release-1.17.3-gc",
             "reth": "gnosischain/reth_gnosis@master",
             "nethermind": "NethermindEth/nethermind@master",
             "erigon": "erigontech/erigon@main"
@@ -47,42 +52,54 @@ on:
           {
             "geth": "ghcr.io/gnosischain/geth:latest",
             "reth": "ghcr.io/gnosischain/reth_gnosis:latest",
-            "nethermind": "nethermind/nethermind:1.36.1",
-            "erigon": "erigontech/erigon:latest"
+            "nethermind": "docker.ethquokkaops.io/dh/ethpandaops/nethermind:master",
+            "erigon": "docker.ethquokkaops.io/dh/ethpandaops/erigon:main"
           }
         description: 'JSON object containing client docker images in format {"client": "registry:tag", ...}'
 
 env:
+  # Proxy
   GOPROXY: "${{ vars.GOPROXY }}"
+  # Hive action environment variables
   GCS_BUCKET: gnosis-hive-ui-staging
-  GCS_PATH: fusaka
-  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging/fusaka
+  GCS_PATH: bal
+  GCS_PUBLIC_URL: https://storage.googleapis.com/gnosis-hive-ui-staging/bal
   INSTALL_RCLONE_VERSION: v1.68.2
-  EELS_BUILD_ARG_FIXTURES: https://github.com/gnosischain/execution-spec-tests/releases/download/v0.1.0/fixtures_osaka.tar.gz
-  EELS_BUILD_ARG_BRANCH: forks/amsterdam
   # Flags used for all simulators
   GLOBAL_EXTRA_FLAGS: >-
     --client.checktimelimit=300s
     --docker.buildoutput
+  # Docker-specific flags (only used when client_source is 'docker')
+  DOCKER_AUTH_FLAGS: >-
+    --docker.auth
   # Flags used for the gnosis/eels/consume-engine simulator
   EELS_ENGINE_FLAGS: >-
     --sim.parallelism=6
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
     --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
+    --sim.limit='.*fork_(Amsterdam|OsakaToAmsterdamAtTime15k|Osaka).*'
+    --sim.limit.exact=false
     --sim.loglevel=3
-    --sim.limit=.*Osaka.*
   # Flags used for the gnosis/eels/consume-rlp simulator
   EELS_RLP_FLAGS: >-
     --sim.parallelism=6
     --sim.buildarg fixtures=${EELS_BUILD_ARG_FIXTURES}
     --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
+    --sim.limit='.*fork_(Amsterdam|OsakaToAmsterdamAtTime15k|Osaka).*'
+    --sim.limit.exact=false
     --sim.loglevel=3
-    --sim.limit=.*Osaka.*
+  # Flags used for the gnosis/eels/execute simulator
+  EELS_EXECUTE_FLAGS: >-
+    --sim.buildarg branch=${EELS_BUILD_ARG_BRANCH}
+  # Flags used for the gnosis/rpc-compat simulator
+  RPC_COMPAT_FLAGS: >-
+    --sim.loglevel=3
 
 jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
+      # Hive version
       hive_repo: >-
         ${{
           steps.client_config_schedule.outputs.hive_repo ||
@@ -93,63 +110,84 @@ jobs:
           steps.client_config_schedule.outputs.hive_tag ||
           steps.client_config_dispatch.outputs.hive_tag
         }}
+      # client_config contains the YAML client config for Hive
       client_config: >-
         ${{
           steps.client_config_schedule.outputs.client_config ||
           steps.client_config_dispatch.outputs.client_config
         }}
+      # client_source to determine if we need docker auth
+      client_source: >-
+        ${{
+          github.event_name == 'schedule' && 'git' ||
+          inputs.client_source
+        }}
     steps:
-      - uses: gnosischain/hive-github-action/helpers/client-config@9f65ec1bd266757a681c38d38b7fc9e341b08f0a
+      - uses: ethpandaops/hive-github-action/helpers/client-config@09050fc75bae8a10b1876a0826ca4114ea9ed6e8 # v0.6.3
         if: github.event_name == 'schedule'
-        name: 'Client config: schedule'
+        name: "Client config: schedule"
         id: client_config_schedule
         with:
-          client_source: 'git'
-          hive_version: 'gnosischain/hive@master'
+          common_client_tag: "bal-devnet-7"
+          client_source: "git"
+          hive_version: "ethereum/hive@master"
           goproxy: ${{ env.GOPROXY }}
 
-      - uses: gnosischain/hive-github-action/helpers/client-config@9f65ec1bd266757a681c38d38b7fc9e341b08f0a
+      - uses: ethpandaops/hive-github-action/helpers/client-config@09050fc75bae8a10b1876a0826ca4114ea9ed6e8 # v0.6.3
         if: github.event_name == 'workflow_dispatch'
-        name: 'Client config: workflow_dispatch'
+        name: "Client config: workflow_dispatch"
         id: client_config_dispatch
         with:
           client_repos: ${{ inputs.client_repos }}
           client_images: ${{ inputs.client_images }}
+          common_client_tag: ${{ inputs.common_client_tag }}
           client_source: ${{ inputs.client_source }}
           hive_version: ${{ inputs.hive_version }}
           goproxy: ${{ env.GOPROXY }}
 
   test:
-    timeout-minutes: 2160
+    timeout-minutes: 4320
     needs: prepare
-    if: >-
-      github.event_name == 'schedule' ||
-      !contains(inputs.simulator, 'consume-sync') ||
-      (contains(inputs.simulator, 'consume-engine') || contains(inputs.simulator, 'consume-rlp'))
-    runs-on: ubuntu-latest
+    env:
+      # BAL-specific environment variables
+      HIVE_PARALLEL_TX_PROCESSING_DISABLED: "true"
+      HIVE_AMSTERDAM_TIMESTAMP: "1777456800"
+      # Hardcoded EELS build args pinned to bal@v7.2.0
+      EELS_BUILD_ARG_FIXTURES: "https://github.com/ethereum/execution-specs/releases/download/tests-bal@v7.2.0/fixtures_bal.tar.gz"
+      EELS_BUILD_ARG_BRANCH: "devnets/bal/7"
+    runs-on: >-
+      ${{
+        matrix.simulator == 'gnosis/rpc-compat' && 'ubuntu-latest' ||
+        contains(matrix.simulator, 'gnosis/eels/') && 'self-hosted-ghr-size-ccx33-x64' ||
+        'ubuntu-latest'
+      }}
     concurrency:
       group: >-
-        ${{ github.head_ref || inputs }}-${{ matrix.client }}-${{ matrix.simulator }}
+        ${{ github.head_ref || inputs || github.workflow }}-${{ matrix.client }}-${{ matrix.simulator }}
     strategy:
       fail-fast: false
       matrix:
         client: >-
           ${{ fromJSON(format('[{0}]', inputs.client || '
-            "go-ethereum-gnosis",
-            "reth-gnosis",
-            "nethermind-gnosis",
-            "erigon-gnosis"
+            "go-ethereum",
+            "nethermind",
+            "reth",
+            "erigon"
           '))}}
         simulator: >-
           ${{ fromJSON(format('[{0}]', inputs.simulator || '
             "gnosis/eels/consume-engine",
             "gnosis/eels/consume-rlp"
           '))}}
-        exclude:
-          - simulator: 'gnosis/eels/consume-sync'
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: gnosischain/hive-github-action@1d88652e508626aaefa085d830ea05f422384300
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ethpandaops/hive-github-action/helpers/self-hosted-runner-dependencies@09050fc75bae8a10b1876a0826ca4114ea9ed6e8 # v0.6.3
+        if: runner.environment != 'github-hosted'
+      - uses: ethpandaops/actions/docker-login@a91b7a8dd6a264f5e845ac2aa52d2d6f24e6d01d
+        with:
+          username: ethpandaops
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: ethpandaops/hive-github-action@09050fc75bae8a10b1876a0826ca4114ea9ed6e8 # v0.6.3
         with:
           hive_repository: ${{ needs.prepare.outputs.hive_repo }}
           hive_version: ${{ needs.prepare.outputs.hive_tag }}
@@ -158,38 +196,9 @@ jobs:
           client_config: ${{ needs.prepare.outputs.client_config }}
           extra_flags: >-
             ${{ env.GLOBAL_EXTRA_FLAGS }}
+            ${{ needs.prepare.outputs.client_source == 'docker' && env.DOCKER_AUTH_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-engine' && env.EELS_ENGINE_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-rlp' && env.EELS_RLP_FLAGS || '' }}
-          gcs_upload: true
-          gcs_bucket: ${{ env.GCS_BUCKET }}
-          gcs_path: ${{ env.GCS_PATH }}
-          gcs_public_url: ${{ env.GCS_PUBLIC_URL }}
-          rclone_config: ${{ secrets.HIVE_RCLONE_CONFIG }}
-          rclone_version: ${{ env.INSTALL_RCLONE_VERSION }}
-          workflow_artifact_upload: true
-          website_upload: true
-
-  test-consume-sync-matrix:
-    timeout-minutes: 2160
-    needs: prepare
-    runs-on: ubuntu-latest
-    concurrency:
-      group: ${{ github.head_ref || inputs }}-sync-matrix
-    if: contains(inputs.simulator || 'gnosis/eels/consume-sync', 'gnosis/eels/consume-sync')
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: gnosischain/hive-github-action@1d88652e508626aaefa085d830ea05f422384300
-        with:
-          hive_repository: ${{ needs.prepare.outputs.hive_repo }}
-          hive_version: ${{ needs.prepare.outputs.hive_tag }}
-          client: >-
-            ${{
-              inputs.client || '"go-ethereum-gnosis","reth-gnosis","nethermind-gnosis","erigon-gnosis"'
-            }}
-          simulator: 'gnosis/eels/consume-sync'
-          client_config: ${{ needs.prepare.outputs.client_config }}
-          extra_flags: >-
-            ${{ env.GLOBAL_EXTRA_FLAGS }}
           gcs_upload: true
           gcs_bucket: ${{ env.GCS_BUCKET }}
           gcs_path: ${{ env.GCS_PATH }}
