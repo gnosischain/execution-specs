@@ -64,7 +64,7 @@ concurrency:
 
 env:
   # Use direct URL instead of release spec (e.g., fusaka@v0.1.0) to avoid GitHub API rate limits
-  FIXTURES_URL: https://github.com/gnosischain/execution-spec-tests/releases/download/v0.1.0/fixtures_fusaka.tar.gz
+  FIXTURES_URL: https://github.com/gnosischain/execution-spec-tests/releases/download/fusaka@v0.1.0/fixtures_fusaka.tar.gz
 
 jobs:
   cache-docker-images:
