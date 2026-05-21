@@ -51,8 +51,8 @@ on:
             "images": {
               "geth": "ghcr.io/gnosischain/geth:latest",
               "reth": "ghcr.io/gnosischain/reth_gnosis:latest",
-              "nethermind": "docker.ethquokkaops.io/dh/ethpandaops/nethermind:master",
-              "erigon": "docker.ethquokkaops.io/dh/ethpandaops/erigon:main",
+              "nethermind": "nethermind/nethermind:latest",
+              "erigon": "erigontech/erigon:latest"
             }
           }
         description: 'JSON object containing client configuration with "repos" and "images" objects for git and docker sources respectively'
@@ -88,7 +88,6 @@ env:
   GLOBAL_EXTRA_FLAGS: >-
     --client.checktimelimit=180s
     --sim.parallelism=4
-    --docker.auth
     --docker.buildoutput
   # Flags used for the gnosis/eels/consume-engine simulator
   EELS_ENGINE_FLAGS: >-
@@ -121,7 +120,7 @@ jobs:
       client_config: ${{ steps.client_config.outputs.client_config }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: gnosischain/hive-github-action/helpers/client-config@315b005b3f9d6582796d5917ddbf0bee3dc6fbfa
+      - uses: gnosischain/hive-github-action/helpers/client-config@fd3538daf961800fee4544c882c892e6601ae2f4
         name: "Client config"
         id: client_config
         with:
@@ -155,15 +154,10 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: ethpandaops/actions/docker-login@a91b7a8dd6a264f5e845ac2aa52d2d6f24e6d01d
-        with:
-          username: ethpandaops
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - uses: ethpandaops/hive-github-action/helpers/self-hosted-runner-dependencies@09050fc75bae8a10b1876a0826ca4114ea9ed6e8 # v0.6.3
+      - uses: gnosischain/hive-github-action/helpers/self-hosted-runner-dependencies@fd3538daf961800fee4544c882c892e6601ae2f4
         if: runner.environment != 'github-hosted'
 
-      - uses: gnosischain/hive-github-action@master
+      - uses: gnosischain/hive-github-action@fd3538daf961800fee4544c882c892e6601ae2f4
         with:
           hive_repository: ${{ needs.prepare.outputs.hive_repo }}
           hive_version: ${{ needs.prepare.outputs.hive_tag }}
@@ -183,5 +177,5 @@ jobs:
           rclone_config: ${{ secrets.HIVE_RCLONE_CONFIG }}
           rclone_version: ${{ env.INSTALL_RCLONE_VERSION }}
           workflow_artifact_upload: ${{ inputs.workflow_artifact_upload }}
-          website_upload: false
-          website_index_generation: false
+          website_upload: true
+          website_index_generation: true
