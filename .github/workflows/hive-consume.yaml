@@ -33,9 +33,9 @@ on:
         required: false
         default: "ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
       client:
-        description: "Hive client to test (e.g., go-ethereum, reth)"
+        description: "Hive client to test (e.g., go-ethereum-gnosis, reth-gnosis)"
         required: false
-        default: "go-ethereum"
+        default: "go-ethereum-gnosis"
       client_file:
         description: "Client config file name under .github/configs/hive/ (e.g., latest.yaml, master.yaml)"
         required: false
@@ -48,10 +48,10 @@ on:
         type: string
         default: "ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
       client:
-        description: "Hive client to test (e.g., go-ethereum, reth)"
+        description: "Hive client to test (e.g., go-ethereum-gnosis, reth-gnosis)"
         required: false
         type: string
-        default: "go-ethereum"
+        default: "go-ethereum-gnosis"
       client_file:
         description: "Client config file name under .github/configs/hive/ (e.g., latest.yaml, master.yaml)"
         required: false
@@ -84,7 +84,7 @@ jobs:
     needs: cache-docker-images
     runs-on: ubuntu-latest
     env:
-      CLIENT: ${{ inputs.client || 'go-ethereum' }}
+      CLIENT: ${{ inputs.client || 'go-ethereum-gnosis' }}
       CLIENT_FILE: ${{ inputs.client_file || 'latest.yaml' }}
     strategy:
       fail-fast: true
