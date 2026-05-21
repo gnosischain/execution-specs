@@ -31,11 +31,11 @@ on:
       docker_images:
         description: "Space-separated list of Docker images to cache"
         required: false
-        default: "docker.io/nethermind/nethermind:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
+        default: "ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
       client:
-        description: "Hive client to test (e.g., nethermind-gnosis, go-ethereum-gnosis)"
+        description: "Hive client to test (e.g., go-ethereum, reth)"
         required: false
-        default: "nethermind-gnosis"
+        default: "go-ethereum"
       client_file:
         description: "Client config file name under .github/configs/hive/ (e.g., latest.yaml, master.yaml)"
         required: false
@@ -46,12 +46,12 @@ on:
         description: "Space-separated list of Docker images to cache"
         required: false
         type: string
-        default: "docker.io/nethermind/nethermind:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
+        default: "ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
       client:
-        description: "Hive client to test (e.g., nethermind-gnosis, go-ethereum-gnosis)"
+        description: "Hive client to test (e.g., go-ethereum, reth)"
         required: false
         type: string
-        default: "nethermind-gnosis"
+        default: "go-ethereum"
       client_file:
         description: "Client config file name under .github/configs/hive/ (e.g., latest.yaml, master.yaml)"
         required: false
@@ -77,14 +77,14 @@ jobs:
       - name: Cache Docker images
         uses: ./.github/actions/cache-docker-images
         with:
-          images: ${{ inputs.docker_images || 'docker.io/nethermind/nethermind:latest docker.io/alpine:latest docker.io/library/golang:1-alpine' }}
+          images: ${{ inputs.docker_images || 'ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine' }}
 
   test-hive:
     name: ${{ matrix.name }}
     needs: cache-docker-images
     runs-on: ubuntu-latest
     env:
-      CLIENT: ${{ inputs.client || 'nethermind-gnosis' }}
+      CLIENT: ${{ inputs.client || 'go-ethereum' }}
       CLIENT_FILE: ${{ inputs.client_file || 'latest.yaml' }}
     strategy:
       fail-fast: true
