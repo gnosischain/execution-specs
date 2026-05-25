@@ -138,7 +138,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: gnosischain/hive
-          ref: master
+          ref: fix/neth-client
           path: hive
 
       # Redirect Go's caches to a per-job temp dir so the setup-go cache
