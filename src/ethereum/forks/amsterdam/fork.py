@@ -40,6 +40,7 @@ from ethereum.exceptions import (
 from ethereum.forks.bpo5.blocks import Header as PreviousHeader
 from ethereum.merkle_patricia_trie import root, trie_set
 from ethereum.state import (
+    EMPTY_ACCOUNT,
     EMPTY_CODE_HASH,
     Address,
     BlockDiff,
@@ -80,14 +81,15 @@ from .requests import (
 from .state_tracker import (
     BlockState,
     TransactionState,
+    account_exists,
     account_exists_and_is_empty,
-    create_ether,
     destroy_account,
     extract_block_diff,
     get_account,
     get_code,
     incorporate_tx_into_block,
     increment_nonce,
+    set_account,
     set_account_balance,
 )
 from .transactions import (
@@ -120,6 +122,16 @@ BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
+    "0xbabe2bed00000000000000000000000000000003"
+)
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0x2000000000000000000000000000000000000001"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0x1559000000000000000000000000000000000000"
+)
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
@@ -1091,6 +1103,29 @@ def process_transaction(
         tx_state, block_env.coinbase, coinbase_balance_after_mining_fee
     )
 
+    # transfer base fee to fee collector address
+    base_fee = U256(tx_gas_used * block_env.base_fee_per_gas)
+    if base_fee != 0:
+        fee_collector_balance = get_account(
+            tx_state, FEE_COLLECTOR_ADDRESS
+        ).balance
+        set_account_balance(
+            tx_state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance + base_fee,
+        )
+
+    # transfer blob fee to fee collector address
+    if blob_gas_fee != 0:
+        blob_fee_collector_balance = get_account(
+            tx_state, BLOB_FEE_COLLECTOR
+        ).balance
+        set_account_balance(
+            tx_state,
+            BLOB_FEE_COLLECTOR,
+            blob_fee_collector_balance + U256(blob_gas_fee),
+        )
+
     # EIP-7708: Emit burn logs for balances held by accounts marked for
     # deletion AFTER miner fee transfer.
     finalization_logs: List[Log] = []
@@ -1153,6 +1188,14 @@ def process_withdrawals(
 
     Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
+    wd_state = TransactionState(parent=block_env.state)
+    deposit_contract = get_account(wd_state, DEPOSIT_CONTRACT_ADDRESS)
+    if deposit_contract.code_hash == EMPTY_CODE_HASH:
+        return
+
+    if not account_exists(wd_state, SYSTEM_ADDRESS):
+        set_account(wd_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
+
     amounts = []
     addresses = []
     for w in withdrawals:
@@ -1172,6 +1215,10 @@ def process_withdrawals(
     if out.error:
         raise InvalidBlock(f"Withdrawal system call failed: {out.error}")
 
+    incorporate_tx_into_block(
+        wd_state, block_env.block_access_list_builder
+    )
+
 
 def process_block_rewards(
     block_env: vm.BlockEnvironment,
@@ -1182,14 +1229,25 @@ def process_block_rewards(
     Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
     Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
     """
-    # reward(address[],uint16[]) with empty lists
-    data = bytes.fromhex(
-        "f91c2898"
-        "0000000000000000000000000000000000000000000000000000000000000040"
-        "0000000000000000000000000000000000000000000000000000000000000060"
-        "0000000000000000000000000000000000000000000000000000000000000000"
-        "0000000000000000000000000000000000000000000000000000000000000000"
+    # reward(address[],uint16[]) with benefactors=[coinbase], kind=[0]
+    coinbase_padded = b"\x00" * 12 + bytes(block_env.coinbase)
+    data = (
+        bytes.fromhex("f91c2898")
+        + (64).to_bytes(32, "big")  # offset of address[] arg
+        + (128).to_bytes(32, "big")  # offset of uint16[] arg
+        + (1).to_bytes(32, "big")  # length of address[] = 1
+        + coinbase_padded  # address[0] = coinbase
+        + (1).to_bytes(32, "big")  # length of uint16[] = 1
+        + (0).to_bytes(32, "big")  # kind[0] = 0 (RewardAuthor)
     )
+
+    reward_state = TransactionState(parent=block_env.state)
+    account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    if not account_exists(reward_state, SYSTEM_ADDRESS):
+        set_account(reward_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,
@@ -1199,9 +1257,7 @@ def process_block_rewards(
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
 
-    reward_state = TransactionState(parent=block_env.state)
-    account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
-    if account.code_hash == EMPTY_CODE_HASH:
+    if len(out.return_data) == 0:
         return
 
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
