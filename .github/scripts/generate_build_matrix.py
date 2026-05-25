@@ -35,7 +35,7 @@ FORK_ORDER = [
     "TangerineWhistle",
     "SpuriousDragon",
     "Byzantium",
-    "Constantinople",
+    "ConstantinopleFix",
     "Istanbul",
     "MuirGlacier",
     "Berlin",
@@ -47,8 +47,6 @@ FORK_ORDER = [
     "Cancun",
     "Prague",
     "Osaka",
-    "BPO1",
-    "BPO2",
     "Amsterdam",
 ]
 
