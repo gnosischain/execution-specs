@@ -10,7 +10,7 @@ on:
       client:
         description: "Client passed to --client"
         required: true
-        default: "nethermind-gnosis"
+        default: "nethermind"
       test_dir:
         description: "Optional test directory under tests/ (e.g. osaka). Leave empty to fill all tests."
         required: false
@@ -49,7 +49,7 @@ jobs:
             --sim.loglevel=5 \
             --docker.output \
             --docker.pull > hive.log 2>&1 &
-      
+
       - name: Install wait-on utility
         run: npm install -g wait-on
 
