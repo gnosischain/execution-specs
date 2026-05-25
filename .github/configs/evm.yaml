@@ -10,4 +10,4 @@ static:
 benchmark:
   impl: geth
   repo: gnosischain/go-ethereum
-  ref: master
+  ref: release-1.17.3-gc
