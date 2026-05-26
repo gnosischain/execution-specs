@@ -30,7 +30,7 @@ jobs:
   build:
     name: fill (${{ matrix.label || matrix.feature }})
     needs: setup
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 1440
     strategy:
       fail-fast: true
