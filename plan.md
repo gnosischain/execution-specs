@@ -8,7 +8,7 @@ Gnosis fork of Ethereum EELS. Branch structure: `forks/osaka` (shipped), `forks/
 
 ### 1. Extend Hive consume to multi-client
 
-**Status**: Single-client consume (nethermind-gnosis) implemented in PR [#12](https://github.com/gnosischain/execution-specs/pull/12). Next step is extending to all 4 Gnosis clients (reth, geth, nethermind, erigon) — either as a matrix in `hive-consume.yaml` or keeping the multi-client variant as a separate manual workflow.
+**Status**: Single-client consume (nethermind) implemented in PR [#12](https://github.com/gnosischain/execution-specs/pull/12). Next step is extending to all 4 Gnosis clients (reth, geth, nethermind, erigon) — either as a matrix in `hive-consume.yaml` or keeping the multi-client variant as a separate manual workflow.
 
 ### 2. Optimize fill scope for PR vs release
 
@@ -58,4 +58,4 @@ The `gnosis-osaka` branch is based on upstream `forks/osaka`. As upstream evolve
 - [x] CI workflow adaptation to Gnosis infrastructure (hive repo, client configs, Docker images)
 - [x] CLAUDE.md created with full project documentation
 - [x] Branch structure: `forks/osaka`, `forks/amsterdam`, `mainnet` (upstream merge strategy)
-- [x] Hive consume fix: fill+consume with nethermind-gnosis — PR [#12](https://github.com/gnosischain/execution-specs/pull/12)
+- [x] Hive consume fix: fill+consume with nethermind — PR [#12](https://github.com/gnosischain/execution-specs/pull/12)
