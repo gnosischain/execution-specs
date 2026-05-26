@@ -135,8 +135,8 @@ jobs:
     needs: prepare
     runs-on: >-
       ${{
-        matrix.simulator == 'gnosis/engine' && '[self-hosted, Linux, X64]' ||
-        contains(matrix.simulator, 'gnosis/eels/') && '[self-hosted, Linux, X64]' ||
+        matrix.simulator == 'gnosis/engine' && 'self-hosted' ||
+        contains(matrix.simulator, 'gnosis/eels/') && 'self-hosted' ||
         'ubuntu-latest'
       }}
     concurrency:
