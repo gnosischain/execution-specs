@@ -23,29 +23,29 @@ runs:
       id: cache-restore
       uses: actions/cache/restore@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
-        path: /tmp/docker-images
+        path: ${{ github.workspace }}/tmp/docker-images
         key: ${{ inputs.cache-key-prefix }}-week${{ steps.week.outputs.num }}-${{ hashFiles('.github/actions/cache-docker-images/action.yaml', 'execution-specs/.github/actions/cache-docker-images/action.yaml') }}
 
     - name: Pull and save Docker images
       shell: bash
       run: |
-        mkdir -p /tmp/docker-images
+        mkdir -p "${{ github.workspace }}/tmp/docker-images"
         for image in ${{ inputs.images }}; do
           # Create a safe filename from image name
           filename=$(echo "$image" | sed 's/[\/:]/-/g').tar.gz
-          if [ ! -f "/tmp/docker-images/$filename" ]; then
+          if [ ! -f "${{ github.workspace }}/tmp/docker-images/$filename" ]; then
             echo "Pulling $image..."
             docker pull "$image"
-            echo "Saving $image to /tmp/docker-images/$filename..."
-            docker save "$image" | gzip > "/tmp/docker-images/$filename"
+            echo "Saving $image to ${{ github.workspace }}/tmp/docker-images/$filename..."
+            docker save "$image" | gzip > "${{ github.workspace }}/tmp/docker-images/$filename"
           else
             echo "Cache hit for $image, skipping pull"
           fi
         done
 
-    - name: Save Docker image cache 
+    - name: Save Docker image cache
       if: steps.cache-restore.outputs.cache-hit != 'true'
       uses: actions/cache/save@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
-        path: /tmp/docker-images
+        path: ${{ github.workspace }}/tmp/docker-images
         key: ${{ inputs.cache-key-prefix }}-week${{ steps.week.outputs.num }}-${{ hashFiles('.github/actions/cache-docker-images/action.yaml', 'execution-specs/.github/actions/cache-docker-images/action.yaml') }}
