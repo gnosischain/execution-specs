@@ -753,7 +753,17 @@ def test_bal_invalid_missing_withdrawal_account_empty_block(
                         amount=10,
                     )
                 ],
-                expected_block_access_list=BlockAccessListExpectation(),
+                exception=BlockException.INVALID_BLOCK_ACCESS_LIST,
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations=beacon_root_system_call_expectations(
+                        block_timestamp,
+                        beacon_root,
+                    )
+                ).modify(
+                    append_account(
+                        BalAccountChange(address=SYSTEM_ADDRESS),
+                    )
+                ),
             )
         ],
     )
