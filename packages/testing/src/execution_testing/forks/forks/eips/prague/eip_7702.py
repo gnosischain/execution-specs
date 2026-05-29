@@ -15,6 +15,7 @@ from execution_testing.vm import OpcodeBase
 
 from ....base_fork import (
     BaseFork,
+    RefundTypes,
     TransactionIntrinsicCostCalculator,
 )
 from ....gas_costs import GasCosts
@@ -33,7 +34,7 @@ class EIP7702(BaseFork):
         """Add gas costs for authorization operations."""
         return replace(
             super(EIP7702, cls).gas_costs(),
-            GAS_AUTH_PER_EMPTY_ACCOUNT=25_000,
+            AUTH_PER_EMPTY_ACCOUNT=25_000,
             REFUND_AUTH_PER_EXISTING_ACCOUNT=12_500,
         )
 
@@ -50,9 +51,9 @@ class EIP7702(BaseFork):
 
         if metadata["delegated_address"] or metadata["delegated_address_warm"]:
             if metadata["delegated_address_warm"]:
-                base_cost += gas_costs.GAS_WARM_ACCESS
+                base_cost += gas_costs.WARM_ACCESS
             else:
-                base_cost += gas_costs.GAS_COLD_ACCOUNT_ACCESS
+                base_cost += gas_costs.COLD_ACCOUNT_ACCESS
 
         return base_cost
 
@@ -89,9 +90,18 @@ class EIP7702(BaseFork):
                     )
                 intrinsic_cost += (
                     authorization_list_or_count
-                    * gas_costs.GAS_AUTH_PER_EMPTY_ACCOUNT
+                    * gas_costs.AUTH_PER_EMPTY_ACCOUNT
                 )
 
             return intrinsic_cost
 
         return fn
+
+    @classmethod
+    def refund_types(cls) -> List[RefundTypes]:
+        """
+        At Prague, existing authorization refund is introduced.
+        """
+        refunds = super(EIP7702, cls).refund_types()
+        refunds.append(RefundTypes.AUTHORIZATION_EXISTING_AUTHORITY)
+        return refunds

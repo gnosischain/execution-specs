@@ -6,11 +6,15 @@ import pytest
 from execution_testing import (
     Account,
     Alloc,
+    BalAccountExpectation,
+    BlockAccessListExpectation,
     Environment,
+    Fork,
     Op,
     StateTestFiller,
     Storage,
     Transaction,
+    TransactionReceipt,
 )
 
 REFERENCE_SPEC_GIT_PATH = "EIPS/eip-6780.md"
@@ -22,6 +26,7 @@ def test_selfdestruct_balance_transfer_reverted(
     state_test: StateTestFiller,
     env: Environment,
     pre: Alloc,
+    fork: Fork,
 ) -> None:
     """
     Test that SELFDESTRUCT balance transfer is reverted on sub-call revert.
@@ -64,6 +69,28 @@ def test_selfdestruct_balance_transfer_reverted(
 
     sender = pre.fund_eoa()
 
+    # Under EIP-7708 the SELFDESTRUCT-triggered Transfer log is emitted inside
+    # the reverted sub-call, so it must be discarded together with the rest of
+    # the reverted state.
+    expected_receipt = (
+        TransactionReceipt(logs=[]) if fork.is_eip_enabled(7708) else None
+    )
+
+    # Under EIP-7928 (BAL): victim and beneficiary are touched in the
+    # reverted sub-call's SELFDESTRUCT and again by outer's BALANCE reads.
+    # The balance transfer is undone, so they appear with empty changes
+    # (accessed but no net state change).
+    expected_bal = (
+        BlockAccessListExpectation(
+            account_expectations={
+                victim: BalAccountExpectation.empty(),
+                beneficiary: BalAccountExpectation.empty(),
+            }
+        )
+        if fork.is_eip_enabled(7928)
+        else None
+    )
+
     state_test(
         env=env,
         pre=pre,
@@ -78,5 +105,7 @@ def test_selfdestruct_balance_transfer_reverted(
             sender=sender,
             to=outer,
             gas_limit=1_000_000,
+            expected_receipt=expected_receipt,
         ),
+        expected_block_access_list=expected_bal,
     )

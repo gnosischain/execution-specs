@@ -32,6 +32,7 @@ REFERENCE_SPEC_VERSION = "N/A"
     ],
 )
 @pytest.mark.valid_from("Cancun")
+@pytest.mark.valid_before("EIP7954")
 @pytest.mark.parametrize(
     "d, g, v",
     [
@@ -79,33 +80,6 @@ def test_create2_init_code_size_limit(
     # Source: yul
     # berlin
     # {
-    #   mstore(0, calldataload(0))
-    #   let call_result := call(10000000, 0xc94f5374fce5edbc8e2a8697c15331677e6ebf0b, 0, 0, calldatasize(), 0, 0)  # noqa: E501
-    #   sstore(0, call_result)
-    #   sstore(1, 1)
-    # }
-    contract_0 = pre.deploy_contract(  # noqa: F841
-        code=Op.MSTORE(offset=0x0, value=Op.CALLDATALOAD(offset=0x0))
-        + Op.SSTORE(
-            key=0x0,
-            value=Op.CALL(
-                gas=0x989680,
-                address=0xC94F5374FCE5EDBC8E2A8697C15331677E6EBF0B,
-                value=Op.DUP1,
-                args_offset=Op.DUP2,
-                args_size=Op.CALLDATASIZE,
-                ret_offset=Op.DUP1,
-                ret_size=0x0,
-            ),
-        )
-        + Op.SSTORE(key=Op.DUP1, value=0x1)
-        + Op.STOP,
-        nonce=0,
-        address=Address(0xB94F5374FCE5EDBC8E2A8697C15331677E6EBF0B),  # noqa: E501
-    )
-    # Source: yul
-    # berlin
-    # {
     #   // :yul { codecopy(0x00, 0x00, 0x0a) return(0x00, 0x0a) }
     #   mstore(0, 0x600a80600080396000f300000000000000000000000000000000000000000000)  # noqa: E501
     #   // get initcode size from calldata
@@ -137,6 +111,33 @@ def test_create2_init_code_size_limit(
         + Op.STOP,
         nonce=0,
         address=Address(0xC94F5374FCE5EDBC8E2A8697C15331677E6EBF0B),  # noqa: E501
+    )
+    # Source: yul
+    # berlin
+    # {
+    #   mstore(0, calldataload(0))
+    #   let call_result := call(10000000, 0xc94f5374fce5edbc8e2a8697c15331677e6ebf0b, 0, 0, calldatasize(), 0, 0)  # noqa: E501
+    #   sstore(0, call_result)
+    #   sstore(1, 1)
+    # }
+    contract_0 = pre.deploy_contract(  # noqa: F841
+        code=Op.MSTORE(offset=0x0, value=Op.CALLDATALOAD(offset=0x0))
+        + Op.SSTORE(
+            key=0x0,
+            value=Op.CALL(
+                gas=0x989680,
+                address=contract_1,
+                value=Op.DUP1,
+                args_offset=Op.DUP2,
+                args_size=Op.CALLDATASIZE,
+                ret_offset=Op.DUP1,
+                ret_size=0x0,
+            ),
+        )
+        + Op.SSTORE(key=Op.DUP1, value=0x1)
+        + Op.STOP,
+        nonce=0,
+        address=Address(0xB94F5374FCE5EDBC8E2A8697C15331677E6EBF0B),  # noqa: E501
     )
 
     expect_entries_: list[dict] = [

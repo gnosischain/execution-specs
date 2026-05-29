@@ -33,6 +33,7 @@ from execution_testing import (
     BlockAccessListExpectation,
     BlockchainTestFiller,
     Bytecode,
+    Conditional,
     Fork,
     Initcode,
     Op,
@@ -41,6 +42,7 @@ from execution_testing import (
 )
 
 from .spec import ref_spec_7928
+from .test_block_access_lists_eip4788 import SYSTEM_ADDRESS
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_7928.git_path
 REFERENCE_SPEC_VERSION = ref_spec_7928.version
@@ -124,16 +126,16 @@ def test_bal_sstore_and_oog(
 
     intrinsic_gas_cost = fork.transaction_intrinsic_cost_calculator()()
 
-    # Full cost: PUSHes + SSTORE (GAS_COLD_STORAGE_ACCESS + GAS_STORAGE_SET)
+    # Full cost: PUSHes + SSTORE (COLD_STORAGE_ACCESS + STORAGE_SET)
     full_cost = storage_contract_code.gas_cost(fork)
 
     # Push cost for stipend boundary calculations
     push_code = Op.PUSH1(0x42) + Op.PUSH1(0x01)
     push_cost = push_code.gas_cost(fork)
 
-    # GAS_CALL_STIPEND is a threshold check, not a gas cost
+    # CALL_STIPEND is a threshold check, not a gas cost
     # Keep from gas_costs
-    stipend = fork.gas_costs().GAS_CALL_STIPEND
+    stipend = fork.gas_costs().CALL_STIPEND
 
     if out_of_gas_at == OutOfGasAt.EIP_2200_STIPEND:
         # 2300 after PUSHes (fails stipend check: 2300 <= 2300)
@@ -322,6 +324,118 @@ def test_bal_balance_and_oog(
 
 
 @pytest.mark.parametrize(
+    "access_opcode",
+    [
+        pytest.param(lambda target: Op.BALANCE(target), id="balance"),
+        pytest.param(lambda target: Op.EXTCODESIZE(target), id="extcodesize"),
+        pytest.param(lambda target: Op.EXTCODEHASH(target), id="extcodehash"),
+        pytest.param(
+            lambda target: Op.EXTCODECOPY(target, 0, 0, 0),
+            id="extcodecopy",
+        ),
+        pytest.param(lambda target: Op.CALL(address=target), id="call"),
+        pytest.param(
+            lambda target: Op.STATICCALL(address=target),
+            id="staticcall",
+        ),
+    ],
+)
+def test_bal_account_touch_system_address(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    access_opcode: Callable[[Address], Bytecode],
+) -> None:
+    """
+    Ensure a regular transaction that explicitly touches SYSTEM_ADDRESS via
+    an account-accessing opcode includes SYSTEM_ADDRESS as an account-only
+    BAL entry.
+
+    This confirms that SYSTEM_ADDRESS is only excluded from the BAL when it
+    appears as the synthetic caller of a pre-execution system call; a real
+    EVM state access from user code MUST still land in the BAL.
+    """
+    alice = pre.fund_eoa()
+    pre.fund_address(SYSTEM_ADDRESS, amount=1)
+
+    toucher = pre.deploy_contract(code=access_opcode(SYSTEM_ADDRESS) + Op.STOP)
+
+    tx = Transaction(
+        sender=alice,
+        to=toucher,
+        gas_limit=200_000,
+    )
+
+    block = Block(
+        txs=[tx],
+        expected_block_access_list=BlockAccessListExpectation(
+            account_expectations={
+                toucher: BalAccountExpectation.empty(),
+                SYSTEM_ADDRESS: BalAccountExpectation.empty(),
+            }
+        ),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[block],
+        post={
+            alice: Account(nonce=1),
+            toucher: Account(),
+            SYSTEM_ADDRESS: Account(balance=1),
+        },
+    )
+
+
+def test_bal_selfdestruct_to_system_address_zero_balance(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    fork: Fork,
+) -> None:
+    """
+    Ensure `SYSTEM_ADDRESS` is in BAL when accessed via `SELFDESTRUCT`,
+    even with zero balance transferred. Companion to
+    `test_bal_account_touch_system_address`, which covers the
+    `BALANCE`/`EXTCODE*`/`CALL`/`STATICCALL` opcodes.
+    """
+    alice = pre.fund_eoa()
+
+    init_code = Op.SELFDESTRUCT(SYSTEM_ADDRESS)
+    new_contract = compute_create_address(address=alice, nonce=0)
+
+    tx = Transaction(
+        sender=alice,
+        to=None,  # CREATE
+        value=0,  # zero contract balance at SELFDESTRUCT time
+        data=init_code,
+        gas_limit=fork.transaction_gas_limit_cap(),
+        gas_price=10,
+    )
+
+    block = Block(
+        txs=[tx],
+        expected_block_access_list=BlockAccessListExpectation(
+            account_expectations={
+                alice: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=1),
+                    ],
+                ),
+                SYSTEM_ADDRESS: BalAccountExpectation.empty(),
+            }
+        ),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[block],
+        post={
+            alice: Account(nonce=1),
+            new_contract: Account.NONEXISTENT,
+        },
+    )
+
+
+@pytest.mark.parametrize(
     "fails_at_extcodesize",
     [True, False],
     ids=["oog_at_extcodesize", "successful_extcodesize"],
@@ -401,7 +515,13 @@ def test_bal_extcodesize_and_oog(
 )
 @pytest.mark.parametrize("value", [0, 1], ids=["no_value", "with_value"])
 @pytest.mark.parametrize(
-    "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
+    "args_size,ret_size",
+    [
+        pytest.param(0, 0, id="no_memory"),
+        pytest.param(4096, 0, id="args_large"),
+        pytest.param(0, 4096, id="ret_large"),
+        pytest.param(32, 32, id="both_small"),
+    ],
 )
 def test_bal_call_no_delegation_and_oog_before_target_access(
     pre: Alloc,
@@ -411,13 +531,18 @@ def test_bal_call_no_delegation_and_oog_before_target_access(
     target_is_warm: bool,
     target_is_empty: bool,
     value: int,
-    memory_expansion: bool,
+    args_size: int,
+    ret_size: int,
 ) -> None:
     """
     CALL without 7702 delegation - test SUCCESS and OOG before target access.
 
     When target_is_warm=True, we use EIP-2930 tx access list to warm the
     target. Access list warming does NOT add to BAL - only EVM access does.
+
+    Memory expansion is parametrized independently for args (insize) and
+    ret (outsize) per #1910, surfacing client-impl asymmetry bugs in the
+    memory-cost calculator.
     """
     alice = pre.fund_eoa()
 
@@ -427,19 +552,21 @@ def test_bal_call_no_delegation_and_oog_before_target_access(
         else pre.deploy_contract(code=Op.STOP)
     )
 
-    ret_size = 32 if memory_expansion else 0
+    new_memory_size = max(args_size, ret_size)
 
     # Full gas metadata: includes create_cost when applicable
     call_code = Op.CALL(
         gas=0,
         address=target,
         value=value,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
         ret_offset=0,
         address_warm=target_is_warm,
         value_transfer=value > 0,
         account_new=value > 0 and target_is_empty,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
     )
     caller = pre.deploy_contract(code=call_code, balance=value)
 
@@ -459,12 +586,14 @@ def test_bal_call_no_delegation_and_oog_before_target_access(
             gas=0,
             address=target,
             value=value,
+            args_size=args_size,
+            args_offset=0,
             ret_size=ret_size,
             ret_offset=0,
             address_warm=target_is_warm,
             value_transfer=value > 0,
             account_new=False,
-            new_memory_size=ret_size,
+            new_memory_size=new_memory_size,
         )
         gas_limit = intrinsic_cost + call_static.gas_cost(fork) - 1
     else:  # SUCCESS
@@ -537,7 +666,13 @@ def test_bal_call_no_delegation_and_oog_before_target_access(
     "target_is_warm", [False, True], ids=["cold_target", "warm_target"]
 )
 @pytest.mark.parametrize(
-    "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
+    "args_size,ret_size",
+    [
+        pytest.param(0, 0, id="no_memory"),
+        pytest.param(4096, 0, id="args_large"),
+        pytest.param(0, 4096, id="ret_large"),
+        pytest.param(32, 32, id="both_small"),
+    ],
 )
 @pytest.mark.eels_base_coverage
 def test_bal_call_no_delegation_oog_after_target_access(
@@ -545,7 +680,8 @@ def test_bal_call_no_delegation_oog_after_target_access(
     blockchain_test: BlockchainTestFiller,
     fork: Fork,
     target_is_warm: bool,
-    memory_expansion: bool,
+    args_size: int,
+    ret_size: int,
 ) -> None:
     """
     CALL without 7702 delegation - OOG after state access.
@@ -561,8 +697,11 @@ def test_bal_call_no_delegation_oog_after_target_access(
         - target is always empty - required for create cost
         - value=1 (greater than 0) - required for create cost
 
-    The create_cost (GAS_NEW_ACCOUNT = 25000) is charged only for value
+    The create_cost (NEW_ACCOUNT = 25000) is charged only for value
     transfers to empty accounts, creating the gap tested here.
+
+    Memory expansion is parametrized independently for args (insize) and
+    ret (outsize) per #1910.
 
     """
     alice = pre.fund_eoa()
@@ -572,8 +711,7 @@ def test_bal_call_no_delegation_oog_after_target_access(
     # value > 0 required for create_cost
     value = 1
 
-    # memory expansion / no expansion
-    ret_size = 32 if memory_expansion else 0
+    new_memory_size = max(args_size, ret_size)
 
     # Static gas (before state access): no create_cost
     # Pass static check, fail at second check due to create cost
@@ -581,12 +719,14 @@ def test_bal_call_no_delegation_oog_after_target_access(
         gas=0,
         address=target,
         value=value,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
         ret_offset=0,
         address_warm=target_is_warm,
         value_transfer=True,
         account_new=False,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
     )
     caller = pre.deploy_contract(code=call_code, balance=value)
 
@@ -652,7 +792,13 @@ def test_bal_call_no_delegation_oog_after_target_access(
 )
 @pytest.mark.parametrize("value", [0, 1], ids=["no_value", "with_value"])
 @pytest.mark.parametrize(
-    "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
+    "args_size,ret_size",
+    [
+        pytest.param(0, 0, id="no_memory"),
+        pytest.param(4096, 0, id="args_large"),
+        pytest.param(0, 4096, id="ret_large"),
+        pytest.param(32, 32, id="both_small"),
+    ],
 )
 def test_bal_call_7702_delegation_and_oog(
     pre: Alloc,
@@ -662,33 +808,37 @@ def test_bal_call_7702_delegation_and_oog(
     target_is_warm: bool,
     delegation_is_warm: bool,
     value: int,
-    memory_expansion: bool,
+    args_size: int,
+    ret_size: int,
 ) -> None:
     """
     CALL with 7702 delegation - test all OOG boundaries.
 
     When target_is_warm or delegation_is_warm, we use EIP-2930 tx access list.
     Access list warming does NOT add targets to BAL - only EVM access does.
+
+    Memory expansion is parametrized independently for args and ret per #1910.
     """
     alice = pre.fund_eoa()
 
     delegation_target = pre.deploy_contract(code=Op.STOP)
     target = pre.fund_eoa(amount=0, delegation=delegation_target)
 
-    # memory expansion / no expansion
-    ret_size = 32 if memory_expansion else 0
+    new_memory_size = max(args_size, ret_size)
 
     # Full gas metadata: includes delegation cost
     call_code = Op.CALL(
         gas=0,
         address=target,
         value=value,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
         ret_offset=0,
         address_warm=target_is_warm,
         value_transfer=value > 0,
         account_new=False,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
         delegated_address=True,
         delegated_address_warm=delegation_is_warm,
     )
@@ -712,12 +862,14 @@ def test_bal_call_7702_delegation_and_oog(
         gas=0,
         address=target,
         value=value,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
         ret_offset=0,
         address_warm=target_is_warm,
         value_transfer=value > 0,
         account_new=False,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
     )
 
     if oog_boundary == OutOfGasBoundary.OOG_BEFORE_TARGET_ACCESS:
@@ -812,7 +964,13 @@ def test_bal_call_7702_delegation_and_oog(
     "target_is_warm", [False, True], ids=["cold_target", "warm_target"]
 )
 @pytest.mark.parametrize(
-    "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
+    "args_size,ret_size",
+    [
+        pytest.param(0, 0, id="no_memory"),
+        pytest.param(4096, 0, id="args_large"),
+        pytest.param(0, 4096, id="ret_large"),
+        pytest.param(32, 32, id="both_small"),
+    ],
 )
 def test_bal_delegatecall_no_delegation_and_oog_before_target_access(
     pre: Alloc,
@@ -820,28 +978,32 @@ def test_bal_delegatecall_no_delegation_and_oog_before_target_access(
     fork: Fork,
     oog_boundary: OutOfGasBoundary,
     target_is_warm: bool,
-    memory_expansion: bool,
+    args_size: int,
+    ret_size: int,
 ) -> None:
     """
     DELEGATECALL without 7702 delegation - test SUCCESS and OOG boundaries.
 
     When target_is_warm=True, we use EIP-2930 tx access list to warm the
     target. Access list warming does NOT add to BAL - only EVM access does.
+
+    Memory expansion is parametrized independently for args and ret per #1910.
     """
     alice = pre.fund_eoa()
 
     target = pre.deploy_contract(code=Op.STOP)
 
-    ret_size = 32 if memory_expansion else 0
-    ret_offset = 0
+    new_memory_size = max(args_size, ret_size)
 
     delegatecall_code = Op.DELEGATECALL(
         address=target,
         gas=0,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
-        ret_offset=ret_offset,
+        ret_offset=0,
         address_warm=target_is_warm,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
     )
 
     caller = pre.deploy_contract(code=delegatecall_code)
@@ -910,7 +1072,13 @@ def test_bal_delegatecall_no_delegation_and_oog_before_target_access(
     ids=["cold_delegation", "warm_delegation"],
 )
 @pytest.mark.parametrize(
-    "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
+    "args_size,ret_size",
+    [
+        pytest.param(0, 0, id="no_memory"),
+        pytest.param(4096, 0, id="args_large"),
+        pytest.param(0, 4096, id="ret_large"),
+        pytest.param(32, 32, id="both_small"),
+    ],
 )
 def test_bal_delegatecall_7702_delegation_and_oog(
     pre: Alloc,
@@ -919,7 +1087,8 @@ def test_bal_delegatecall_7702_delegation_and_oog(
     oog_boundary: OutOfGasBoundary,
     target_is_warm: bool,
     delegation_is_warm: bool,
-    memory_expansion: bool,
+    args_size: int,
+    ret_size: int,
 ) -> None:
     """
     DELEGATECALL with 7702 delegation - test all OOG boundaries.
@@ -930,24 +1099,26 @@ def test_bal_delegatecall_7702_delegation_and_oog(
     For 7702 delegation, there's ALWAYS a gap between static gas and
     second check (delegation_cost) - all 3 scenarios produce distinct
     behaviors.
+
+    Memory expansion is parametrized independently for args and ret per #1910.
     """
     alice = pre.fund_eoa()
 
     delegation_target = pre.deploy_contract(code=Op.STOP)
     target = pre.fund_eoa(amount=0, delegation=delegation_target)
 
-    # memory expansion / no expansion
-    ret_size = 32 if memory_expansion else 0
-    ret_offset = 0
+    new_memory_size = max(args_size, ret_size)
 
     # Full gas metadata: includes delegation cost
     delegatecall_code = Op.DELEGATECALL(
         gas=0,
         address=target,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
-        ret_offset=ret_offset,
+        ret_offset=0,
         address_warm=target_is_warm,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
         delegated_address=True,
         delegated_address_warm=delegation_is_warm,
     )
@@ -971,10 +1142,12 @@ def test_bal_delegatecall_7702_delegation_and_oog(
     delegatecall_static = Op.DELEGATECALL(
         gas=0,
         address=target,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
-        ret_offset=ret_offset,
+        ret_offset=0,
         address_warm=target_is_warm,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
     )
 
     if oog_boundary == OutOfGasBoundary.OOG_BEFORE_TARGET_ACCESS:
@@ -1047,7 +1220,13 @@ def test_bal_delegatecall_7702_delegation_and_oog(
 )
 @pytest.mark.parametrize("value", [0, 1], ids=["no_value", "with_value"])
 @pytest.mark.parametrize(
-    "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
+    "args_size,ret_size",
+    [
+        pytest.param(0, 0, id="no_memory"),
+        pytest.param(4096, 0, id="args_large"),
+        pytest.param(0, 4096, id="ret_large"),
+        pytest.param(32, 32, id="both_small"),
+    ],
 )
 def test_bal_callcode_no_delegation_and_oog_before_target_access(
     pre: Alloc,
@@ -1056,7 +1235,8 @@ def test_bal_callcode_no_delegation_and_oog_before_target_access(
     oog_boundary: OutOfGasBoundary,
     target_is_warm: bool,
     value: int,
-    memory_expansion: bool,
+    args_size: int,
+    ret_size: int,
 ) -> None:
     """
     CALLCODE without 7702 delegation - test SUCCESS and OOG boundaries.
@@ -1064,23 +1244,27 @@ def test_bal_callcode_no_delegation_and_oog_before_target_access(
     When target_is_warm=True, we use EIP-2930 tx access list to warm the
     target. Access list warming does NOT add to BAL - only EVM access does.
     CALLCODE has no balance transfer to target (runs in caller's context).
+
+    Memory expansion is parametrized independently for args and ret per #1910.
     """
     alice = pre.fund_eoa()
 
     target = pre.deploy_contract(code=Op.STOP)
 
-    ret_size = 32 if memory_expansion else 0
+    new_memory_size = max(args_size, ret_size)
 
     callcode_code = Op.CALLCODE(
         gas=0,
         address=target,
         value=value,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
         ret_offset=0,
         address_warm=target_is_warm,
         value_transfer=value > 0,
         account_new=False,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
     )
     caller = pre.deploy_contract(code=callcode_code, balance=value)
 
@@ -1156,7 +1340,13 @@ def test_bal_callcode_no_delegation_and_oog_before_target_access(
 )
 @pytest.mark.parametrize("value", [0, 1], ids=["no_value", "with_value"])
 @pytest.mark.parametrize(
-    "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
+    "args_size,ret_size",
+    [
+        pytest.param(0, 0, id="no_memory"),
+        pytest.param(4096, 0, id="args_large"),
+        pytest.param(0, 4096, id="ret_large"),
+        pytest.param(32, 32, id="both_small"),
+    ],
 )
 def test_bal_callcode_7702_delegation_and_oog(
     pre: Alloc,
@@ -1166,7 +1356,8 @@ def test_bal_callcode_7702_delegation_and_oog(
     target_is_warm: bool,
     delegation_is_warm: bool,
     value: int,
-    memory_expansion: bool,
+    args_size: int,
+    ret_size: int,
 ) -> None:
     """
     CALLCODE with 7702 delegation - test all OOG boundaries.
@@ -1177,26 +1368,29 @@ def test_bal_callcode_7702_delegation_and_oog(
     For 7702 delegation, there's ALWAYS a gap between static gas and
     second check (delegation_cost) - all 3 scenarios produce distinct
     behaviors.
+
+    Memory expansion is parametrized independently for args and ret per #1910.
     """
     alice = pre.fund_eoa()
 
     delegation_target = pre.deploy_contract(code=Op.STOP)
     target = pre.fund_eoa(amount=0, delegation=delegation_target)
 
-    # memory expansion / no expansion
-    ret_size = 32 if memory_expansion else 0
+    new_memory_size = max(args_size, ret_size)
 
     # Full gas metadata: includes delegation cost
     callcode_code = Op.CALLCODE(
         gas=0,
         address=target,
         value=value,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
         ret_offset=0,
         address_warm=target_is_warm,
         value_transfer=value > 0,
         account_new=False,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
         delegated_address=True,
         delegated_address_warm=delegation_is_warm,
     )
@@ -1220,12 +1414,14 @@ def test_bal_callcode_7702_delegation_and_oog(
         gas=0,
         address=target,
         value=value,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
         ret_offset=0,
         address_warm=target_is_warm,
         value_transfer=value > 0,
         account_new=False,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
     )
 
     if oog_boundary == OutOfGasBoundary.OOG_BEFORE_TARGET_ACCESS:
@@ -1297,7 +1493,13 @@ def test_bal_callcode_7702_delegation_and_oog(
     "target_is_warm", [False, True], ids=["cold_target", "warm_target"]
 )
 @pytest.mark.parametrize(
-    "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
+    "args_size,ret_size",
+    [
+        pytest.param(0, 0, id="no_memory"),
+        pytest.param(4096, 0, id="args_large"),
+        pytest.param(0, 4096, id="ret_large"),
+        pytest.param(32, 32, id="both_small"),
+    ],
 )
 def test_bal_staticcall_no_delegation_and_oog_before_target_access(
     pre: Alloc,
@@ -1305,7 +1507,8 @@ def test_bal_staticcall_no_delegation_and_oog_before_target_access(
     fork: Fork,
     oog_boundary: OutOfGasBoundary,
     target_is_warm: bool,
-    memory_expansion: bool,
+    args_size: int,
+    ret_size: int,
 ) -> None:
     """
     STATICCALL without 7702 delegation - test SUCCESS and OOG boundaries.
@@ -1317,16 +1520,17 @@ def test_bal_staticcall_no_delegation_and_oog_before_target_access(
 
     target = pre.deploy_contract(code=Op.STOP)
 
-    ret_size = 32 if memory_expansion else 0
-    ret_offset = 0
+    new_memory_size = max(args_size, ret_size)
 
     staticcall_code = Op.STATICCALL(
         address=target,
         gas=0,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
-        ret_offset=ret_offset,
+        ret_offset=0,
         address_warm=target_is_warm,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
     )
 
     caller = pre.deploy_contract(code=staticcall_code)
@@ -1395,7 +1599,13 @@ def test_bal_staticcall_no_delegation_and_oog_before_target_access(
     ids=["cold_delegation", "warm_delegation"],
 )
 @pytest.mark.parametrize(
-    "memory_expansion", [False, True], ids=["no_memory", "with_memory"]
+    "args_size,ret_size",
+    [
+        pytest.param(0, 0, id="no_memory"),
+        pytest.param(4096, 0, id="args_large"),
+        pytest.param(0, 4096, id="ret_large"),
+        pytest.param(32, 32, id="both_small"),
+    ],
 )
 def test_bal_staticcall_7702_delegation_and_oog(
     pre: Alloc,
@@ -1404,7 +1614,8 @@ def test_bal_staticcall_7702_delegation_and_oog(
     oog_boundary: OutOfGasBoundary,
     target_is_warm: bool,
     delegation_is_warm: bool,
-    memory_expansion: bool,
+    args_size: int,
+    ret_size: int,
 ) -> None:
     """
     STATICCALL with 7702 delegation - test all OOG boundaries.
@@ -1421,25 +1632,23 @@ def test_bal_staticcall_7702_delegation_and_oog(
     delegation_target = pre.deploy_contract(code=Op.STOP)
     target = pre.fund_eoa(amount=0, delegation=delegation_target)
 
-    # memory expansion / no expansion
-    ret_size = 32 if memory_expansion else 0
-    ret_offset = 0
+    new_memory_size = max(args_size, ret_size)
 
-    # Full gas metadata: includes delegation cost
     staticcall_code = Op.STATICCALL(
         gas=0,
         address=target,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
-        ret_offset=ret_offset,
+        ret_offset=0,
         address_warm=target_is_warm,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
         delegated_address=True,
         delegated_address_warm=delegation_is_warm,
     )
 
     caller = pre.deploy_contract(code=staticcall_code)
 
-    # Build access list for warming
     access_list: list[AccessList] = []
     if target_is_warm:
         access_list.append(AccessList(address=target, storage_keys=[]))
@@ -1452,14 +1661,15 @@ def test_bal_staticcall_7702_delegation_and_oog(
         access_list=access_list
     )
 
-    # Static gas (before state access): no delegation
     staticcall_static = Op.STATICCALL(
         gas=0,
         address=target,
+        args_size=args_size,
+        args_offset=0,
         ret_size=ret_size,
-        ret_offset=ret_offset,
+        ret_offset=0,
         address_warm=target_is_warm,
-        new_memory_size=ret_size,
+        new_memory_size=new_memory_size,
     )
 
     if oog_boundary == OutOfGasBoundary.OOG_BEFORE_TARGET_ACCESS:
@@ -2321,88 +2531,128 @@ def test_bal_create_contract_init_revert(
     )
 
 
+@pytest.mark.parametrize(
+    "delegated,target_is_warm,delegation_is_warm",
+    [
+        pytest.param(False, False, False, id="no_delegation-cold_target"),
+        pytest.param(False, True, False, id="no_delegation-warm_target"),
+        pytest.param(
+            True, False, False, id="delegated-cold_target-cold_delegation"
+        ),
+        pytest.param(
+            True, True, False, id="delegated-warm_target-cold_delegation"
+        ),
+        pytest.param(
+            True, False, True, id="delegated-cold_target-warm_delegation"
+        ),
+        pytest.param(
+            True, True, True, id="delegated-warm_target-warm_delegation"
+        ),
+    ],
+)
+@pytest.mark.with_all_call_opcodes(
+    selector=lambda call_opcode: call_opcode in (Op.CALL, Op.CALLCODE)
+)
 def test_bal_call_revert_insufficient_funds(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
+    call_opcode: Op,
+    delegated: bool,
+    target_is_warm: bool,
+    delegation_is_warm: bool,
 ) -> None:
     """
-    Test BAL with CALL failure due to insufficient balance (not OOG).
+    Test BAL with CALL/CALLCODE failure due to insufficient balance
+    (not OOG), with and without 7702 delegation.
 
-    Contract (balance=100): SLOAD(0x01)→CALL(target, value=1000)→SSTORE(0x02).
-    CALL fails because 1000 > 100. Target is 0xDEAD.
+    Caller (balance=100): SLOAD(0x01) → call_opcode(target, value=1000)
+    → SSTORE(0x02, result). The call fails because 1000 > 100. The
+    failure happens after delegation resolution. However, the delegation
+    target's account has not been read yet.
+    So when the target is a 7702-delegated EOA, the target itself appears in
+    the BAL since it is already read. The delegation target however,
+    does not appear in the BAL, since it does not need to be read
+    for verifying sufficient balance.
 
-    Expected BAL:
-    - Contract: storage_reads [0x01], storage_changes slot 0x02 (value=0)
-    - Target: appears in BAL (accessed before balance check fails)
+    Access-list warming does NOT add to BAL on its own — only EVM
+    access does — so the BAL is identical across warm/cold variants.
     """
     alice = pre.fund_eoa()
 
-    contract_balance = 100
-    transfer_amount = 1000  # More than contract has
+    caller_balance = 100
+    transfer_amount = 1000  # > caller_balance, transfer must fail
+    target_balance = 1  # non-zero balance keeps non-delegated target non-empty
 
-    # Target address that should be warmed but not receive funds
-    # Give it a small balance so it's not considered "empty" and pruned
-    target_balance = 1
-    target_address = pre.fund_eoa(amount=target_balance)
+    delegation_target: Address | None = None
+    if delegated:
+        delegation_target = pre.deploy_contract(code=Op.STOP)
+        target = pre.fund_eoa(
+            amount=target_balance, delegation=delegation_target
+        )
+    else:
+        target = pre.fund_eoa(amount=target_balance)
 
-    # Contract that:
-    # 1. SLOAD slot 0x01
-    # 2. CALL target with value=1000 (will fail - insufficient funds)
-    # 3. SSTORE slot 0x02 with CALL result (0 = failure)
-    contract_code = (
-        Op.SLOAD(0x01)  # Read from slot 0x01, push to stack
-        + Op.POP  # Discard value
-        # CALL(gas, addr, value, argsOffset, argsSize, retOffset, retSize)
-        + Op.CALL(100_000, target_address, transfer_amount, 0, 0, 0, 0)
-        # CALL result is on stack (0 = failure, 1 = success)
-        # Stack: [result]
-        + Op.PUSH1(0x02)  # Push slot number
-        # Stack: [0x02, result]
-        + Op.SSTORE  # SSTORE pops slot (0x02), then value (result)
+    caller_code = (
+        Op.SLOAD(0x01)
+        + Op.POP
+        + call_opcode(100_000, target, transfer_amount, 0, 0, 0, 0)
+        + Op.PUSH1(0x02)
+        + Op.SSTORE
         + Op.STOP
     )
 
-    contract = pre.deploy_contract(
-        code=contract_code,
-        balance=contract_balance,
-        storage={
-            0x02: 0xDEAD
-        },  # Non-zero initial value so SSTORE(0) is a change
+    caller = pre.deploy_contract(
+        code=caller_code,
+        balance=caller_balance,
+        storage={0x02: 0xDEAD},  # non-zero so SSTORE(0) is a change
     )
+
+    access_list: list[AccessList] = []
+    if target_is_warm:
+        access_list.append(AccessList(address=target, storage_keys=[]))
+    if delegated and delegation_is_warm:
+        assert delegation_target is not None
+        access_list.append(
+            AccessList(address=delegation_target, storage_keys=[])
+        )
 
     tx = Transaction(
         sender=alice,
-        to=contract,
+        to=caller,
         gas_limit=1_000_000,
+        access_list=access_list,
     )
+
+    account_expectations: Dict[Address, BalAccountExpectation | None] = {
+        alice: BalAccountExpectation(
+            nonce_changes=[BalNonceChange(block_access_index=1, post_nonce=1)],
+        ),
+        caller: BalAccountExpectation(
+            storage_reads=[0x01],
+            storage_changes=[
+                BalStorageSlot(
+                    slot=0x02,
+                    slot_changes=[
+                        BalStorageChange(block_access_index=1, post_value=0)
+                    ],
+                )
+            ],
+        ),
+        # Target accessed before balance check fails.
+        target: BalAccountExpectation.empty(),
+    }
+
+    if delegated:
+        assert delegation_target is not None
+        # Delegation target must NOT appear in the BAL — get_account
+        # for code_address only runs inside generic_call, which is
+        # never invoked when the balance check fails.
+        account_expectations[delegation_target] = None
 
     block = Block(
         txs=[tx],
         expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                alice: BalAccountExpectation(
-                    nonce_changes=[
-                        BalNonceChange(block_access_index=1, post_nonce=1)
-                    ],
-                ),
-                contract: BalAccountExpectation(
-                    # Storage read for slot 0x01
-                    storage_reads=[0x01],
-                    # Storage change for slot 0x02 (CALL result = 0)
-                    storage_changes=[
-                        BalStorageSlot(
-                            slot=0x02,
-                            slot_changes=[
-                                BalStorageChange(
-                                    block_access_index=1, post_value=0
-                                )
-                            ],
-                        )
-                    ],
-                ),
-                # Target appears in BAL - accessed before balance check fails
-                target_address: BalAccountExpectation.empty(),
-            }
+            account_expectations=account_expectations
         ),
     )
 
@@ -2411,11 +2661,11 @@ def test_bal_call_revert_insufficient_funds(
         blocks=[block],
         post={
             alice: Account(nonce=1),
-            contract: Account(
-                balance=contract_balance,  # Unchanged - transfer failed
-                storage={0x02: 0},  # CALL returned 0 (failure)
+            caller: Account(
+                balance=caller_balance,  # unchanged - transfer failed
+                storage={0x02: 0},  # Failed call returned 0
             ),
-            target_address: Account(balance=target_balance),  # Unchanged
+            target: Account(balance=target_balance),  # unchanged
         },
     )
 
@@ -2947,14 +3197,14 @@ def test_bal_create_and_oog(
     )
 
 
+@pytest.mark.with_all_create_opcodes
 def test_bal_create_early_failure(
-    pre: Alloc,
-    blockchain_test: BlockchainTestFiller,
+    pre: Alloc, blockchain_test: BlockchainTestFiller, create_opcode: Op
 ) -> None:
     """
-    Test BAL with CREATE failure due to insufficient endowment.
+    Test BAL with CREATE/CREATE2 failure due to insufficient endowment.
 
-    Factory (balance=50) attempts CREATE(value=100).
+    Factory (balance=50) attempts CREATE/CREATE2(value=100).
     Fails before nonce increment (before track_address).
     Distinct from collision where address IS accessed.
 
@@ -2966,21 +3216,17 @@ def test_bal_create_early_failure(
     alice = pre.fund_eoa()
 
     factory_balance = 50
-    endowment = 100  # More than factory has
+    endowment = 100
 
-    # Simple init code that deploys STOP
     init_code = Initcode(deploy_code=Op.STOP)
     init_code_bytes = bytes(init_code)
 
-    # Factory code: CREATE(value=endowment) and store result in slot 0
     factory_code = (
-        # Push init code to memory
         Op.MSTORE(0, Op.PUSH32(init_code_bytes))
-        # SSTORE(0, CREATE(value, offset, size))
         + Op.SSTORE(
             0x00,
-            Op.CREATE(
-                value=endowment,  # 100 > 50, will fail
+            create_opcode(
+                value=endowment,
                 offset=32 - len(init_code_bytes),
                 size=len(init_code_bytes),
             ),
@@ -2988,16 +3234,18 @@ def test_bal_create_early_failure(
         + Op.STOP
     )
 
-    # Deploy factory with insufficient balance for the CREATE endowment
     factory = pre.deploy_contract(
         code=factory_code,
         balance=factory_balance,
-        storage={0x00: 0xDEAD},  # Initial value to prove SSTORE works
+        storage={0x00: 0xDEAD},
     )
 
-    # Calculate what the contract address WOULD be (but it won't be created)
     would_be_contract_address = compute_create_address(
-        address=factory, nonce=1
+        address=factory,
+        nonce=1,
+        salt=0,
+        initcode=init_code_bytes,
+        opcode=create_opcode,
     )
 
     tx = Transaction(
@@ -3016,9 +3264,7 @@ def test_bal_create_early_failure(
                     ],
                 ),
                 factory: BalAccountExpectation(
-                    # NO nonce_changes - CREATE failed before increment_nonce
                     nonce_changes=[],
-                    # Storage changes: slot 0 = 0xDEAD → 0 (CREATE returned 0)
                     storage_changes=[
                         BalStorageSlot(
                             slot=0x00,
@@ -3030,8 +3276,6 @@ def test_bal_create_early_failure(
                         )
                     ],
                 ),
-                # Contract address MUST NOT appear in BAL - never accessed
-                # (CREATE failed before track_address was called)
                 would_be_contract_address: None,
             }
         ),
@@ -3042,11 +3286,242 @@ def test_bal_create_early_failure(
         blocks=[block],
         post={
             alice: Account(nonce=1),
-            # Factory nonce unchanged (still 1), balance unchanged
             factory: Account(
                 nonce=1, balance=factory_balance, storage={0x00: 0}
             ),
-            # Contract was never created
             would_be_contract_address: Account.NONEXISTENT,
+        },
+    )
+
+
+@pytest.mark.with_all_create_opcodes
+@pytest.mark.parametrize(
+    "storage_op",
+    ["read", "write"],
+    ids=["sload_then_selfdestruct", "sstore_then_selfdestruct"],
+)
+def test_bal_create_storage_op_then_selfdestruct_same_tx(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    create_opcode: Op,
+    storage_op: str,
+) -> None:
+    """
+    Same-tx CREATE/CREATE2 + storage_op + SELFDESTRUCT.
+
+    The deterministic address A is pre-funded. A single tx deploys a
+    contract at A via the parametrized create opcode; init code performs
+    SLOAD or SSTORE on slot B then SELFDESTRUCTs. Because the contract
+    is destroyed in the same tx, slot B MUST appear in `storage_reads`
+    and MUST NOT appear in `storage_changes` (writes demoted to reads
+    per EIP-7928).
+    """
+    alice = pre.fund_eoa()
+    beneficiary = pre.fund_eoa(amount=0)
+    fund_amount = 100
+    slot_b = 0x07
+
+    if storage_op == "read":
+        initcode = Op.POP(Op.SLOAD(slot_b)) + Op.SELFDESTRUCT(beneficiary)
+    else:
+        initcode = Op.SSTORE(slot_b, 0xCAFE) + Op.SELFDESTRUCT(beneficiary)
+    initcode_bytes = bytes(initcode)
+
+    salt = 0
+    is_create2 = create_opcode == Op.CREATE2
+    if is_create2:
+        deploy_op = Op.CREATE2(
+            value=0, offset=0, size=Op.CALLDATASIZE, salt=salt
+        )
+    else:
+        deploy_op = Op.CREATE(value=0, offset=0, size=Op.CALLDATASIZE)
+
+    factory_code = (
+        Op.CALLDATACOPY(0, 0, Op.CALLDATASIZE)
+        + Op.SSTORE(0, deploy_op)
+        + Op.STOP
+    )
+    factory = pre.deploy_contract(code=factory_code)
+    target_a = compute_create_address(
+        address=factory,
+        nonce=1,
+        salt=salt,
+        initcode=initcode_bytes,
+        opcode=create_opcode,
+    )
+    pre.fund_address(target_a, fund_amount)
+
+    tx = Transaction(
+        sender=alice,
+        to=factory,
+        data=initcode_bytes,
+        gas_limit=1_000_000,
+    )
+
+    block = Block(
+        txs=[tx],
+        expected_block_access_list=BlockAccessListExpectation(
+            account_expectations={
+                target_a: BalAccountExpectation(
+                    balance_changes=[
+                        BalBalanceChange(block_access_index=1, post_balance=0),
+                    ],
+                    storage_reads=[slot_b],
+                    storage_changes=[],
+                    code_changes=[],
+                    nonce_changes=[],
+                ),
+                beneficiary: BalAccountExpectation(
+                    balance_changes=[
+                        BalBalanceChange(
+                            block_access_index=1,
+                            post_balance=fund_amount,
+                        )
+                    ],
+                ),
+            }
+        ),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[block],
+        post={
+            target_a: Account.NONEXISTENT,
+            beneficiary: Account(balance=fund_amount),
+            factory: Account(nonce=2, storage={0: target_a}),
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "pre_balance",
+    [0, 100],
+    ids=["no_balance", "with_balance"],
+)
+def test_bal_create2_selfdestruct_then_recreate_same_block(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    pre_balance: int,
+) -> None:
+    """
+    Tx1 CREATE2+SSTORE+SELFDESTRUCT, Tx2 CREATE2 resurrection at same
+    address.
+
+    Two identical txs invoke the same factory with the same initcode
+    (same hash => same CREATE2 address A). The factory branches on its
+    own storage slot 1: on the first tx, the slot is 0 so the factory
+    CREATE2's then CALLs A (runtime SSTOREs to a target slot then
+    SELFDESTRUCTs) and records the CALL's return code in slot 1; on the
+    second tx, slot 1 is non-zero so only CREATE2 runs and A persists
+    with the runtime code (its runtime is never executed).
+
+    Per EIP-7928 SELFDESTRUCT-in-tx semantics, Tx1's destructed A has no
+    `nonce_changes` or `code_changes`; only `balance_changes` if it was
+    pre-funded. The SSTORE is demoted to `storage_reads` because the
+    contract is destroyed in the same tx. Tx2's fresh A has
+    `nonce_changes` (post=1), `code_changes` (post=runtime), and empty
+    storage.
+    """
+    alice = pre.fund_eoa()
+    beneficiary = pre.fund_eoa(amount=0)
+    salt = 0
+    target_slot = 0x07
+
+    runtime = Op.SSTORE(target_slot, 0xCAFE) + Op.SELFDESTRUCT(beneficiary)
+    runtime_bytes = bytes(runtime)
+    initcode_bytes = bytes(Initcode(deploy_code=runtime))
+
+    factory_code = (
+        Op.CALLDATACOPY(0, 0, Op.CALLDATASIZE)
+        + Op.SSTORE(
+            0,
+            Op.CREATE2(value=0, offset=0, size=Op.CALLDATASIZE, salt=salt),
+        )
+        + Conditional(
+            condition=Op.ISZERO(Op.SLOAD(1)),
+            if_true=Op.SSTORE(1, Op.CALL(Op.GAS, Op.SLOAD(0), 0, 0, 0, 0, 0)),
+            if_false=Op.STOP,
+        )
+        + Op.STOP
+    )
+    factory = pre.deploy_contract(code=factory_code)
+    target_a = compute_create_address(
+        address=factory,
+        salt=salt,
+        initcode=initcode_bytes,
+        opcode=Op.CREATE2,
+    )
+
+    if pre_balance > 0:
+        pre.fund_address(target_a, pre_balance)
+
+    tx1 = Transaction(
+        sender=alice,
+        to=factory,
+        data=initcode_bytes,
+        gas_limit=500_000,
+    )
+    tx2 = Transaction(
+        sender=alice,
+        to=factory,
+        data=initcode_bytes,
+        gas_limit=500_000,
+    )
+
+    target_a_balance_changes = []
+    if pre_balance > 0:
+        target_a_balance_changes = [
+            BalBalanceChange(block_access_index=1, post_balance=0),
+        ]
+        beneficiary_expectation = BalAccountExpectation(
+            balance_changes=[
+                BalBalanceChange(
+                    block_access_index=1, post_balance=pre_balance
+                )
+            ],
+        )
+    else:
+        # SELFDESTRUCT touches the beneficiary even with 0 value; no
+        # balance change is recorded.
+        beneficiary_expectation = BalAccountExpectation.empty()
+
+    block = Block(
+        txs=[tx1, tx2],
+        expected_block_access_list=BlockAccessListExpectation(
+            account_expectations={
+                target_a: BalAccountExpectation(
+                    # Tx1 destruction (EIP-7928 #165): no nonce/code changes;
+                    # the SSTORE is demoted to a storage_read because A is
+                    # destroyed same-tx. Tx2 resurrection: fresh contract
+                    # with nonce=1, runtime, and untouched storage.
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=2, post_nonce=1),
+                    ],
+                    code_changes=[
+                        BalCodeChange(
+                            block_access_index=2, new_code=runtime_bytes
+                        ),
+                    ],
+                    balance_changes=target_a_balance_changes,
+                    storage_changes=[],
+                    storage_reads=[target_slot],
+                ),
+                beneficiary: beneficiary_expectation,
+            }
+        ),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[block],
+        post={
+            target_a: Account(
+                nonce=1, balance=0, code=runtime_bytes, storage={}
+            ),
+            beneficiary: Account(balance=pre_balance)
+            if pre_balance > 0
+            else Account.NONEXISTENT,
+            factory: Account(nonce=3, storage={0: target_a, 1: 1}),
         },
     )

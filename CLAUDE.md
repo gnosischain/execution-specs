@@ -8,7 +8,10 @@ This is the **Gnosis chain fork** of the Ethereum Execution Layer Specifications
 
 The `master` branch is the main branch. The `forks/amsterdam` branch tracks upstream through Amsterdam.
 
-## Build and Development
+## Tooling
+
+- **uv** is the package manager. **just** is the command runner (`just --list`).
+- The `execution_testing` package under `packages/testing/` is a UV workspace member.
 
 Requires: Python 3.11+, `uv` (>=0.7.0), `geth` in `$PATH`. PyPy 7.3.19+ needed for full CI.
 
@@ -58,13 +61,17 @@ uv run mkdocs serve
 uvx pre-commit install
 ```
 
+## Linting
+
+When done with changes, ask the user if they'd like to run `/lint` before committing. Don't skip this unless the user explicitly says to.
+
 ### CI Workflows (`.github/workflows/`)
 
 There are two phases in the test pipeline: **fill** (generate fixtures from the EELS spec — proves spec is internally consistent) and **consume** (feed fixtures to a real client via Hive — proves client compatibility). Currently only fill runs automatically on PRs; consume has no working automated PR gate.
 
 **Core test pipeline** (`test.yaml`): Runs on PRs. Fill only — no consume. Jobs: `static`, `py3` (fill Paris->Osaka), `pypy3`, `tests_pytest_py3`, `tests_pytest_pypy3`. Setup action (`.github/actions/setup-env/`) installs Rust, build-essential, tox, and downloads geth.
 
-**Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Intended to consume fixtures against `go-ethereum-gnosis` via Hive (4 modes: Engine, RLP, Sync, Dev Mode). Currently broken: it downloads upstream Ethereum fixtures (`FIXTURES_URL`) instead of generating Gnosis fixtures via fill, so the state roots never match. Uses `gnosischain/hive` repo (branch `master`) and `gnosis.yaml` client config.
+**Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Intended to consume fixtures against `go-ethereum-gnosis` via Hive (4 modes: Engine, RLP, Sync, Dev Mode). Uses `gnosischain/hive` repo (branch `master`) and `latest.yaml` client config.
 
 **Manual hive workflows** (workflow_dispatch only, not automated on PRs):
 
@@ -73,21 +80,21 @@ There are two phases in the test pipeline: **fill** (generate fixtures from the 
 
 **All workflow files:**
 
-| File                               | Trigger                           | What it does                                                                       |
-|------------------------------------|-----------------------------------|------------------------------------------------------------------------------------|
-| test.yaml                          | PR, push to master                | Core pipeline: static checks, py3 fill, pypy3 fill, framework unit tests           |
-| test-docs.yaml                     | PR, push                          | mkdocs build, markdownlint, changelog validation                                   |
+| File                               | Trigger                           | What it does                                                                        |
+|------------------------------------|-----------------------------------|-------------------------------------------------------------------------------------|
+| test.yaml                          | PR, push to master                | Core pipeline: static checks, py3 fill, pypy3 fill, framework unit tests            |
+| test-docs.yaml                     | PR, push                          | mkdocs build, markdownlint, changelog validation                                    |
 | hive-consume.yaml                  | PR (hive paths), push to forks/** | Hive integration: Engine/RLP/Sync simulators + Dev Mode against go-ethereum-gnosis  |
-| benchmark.yaml                     | push to forks/**                  | Gas benchmarks, fixed opcode benchmarks                                            |
-| eest_hive_gnosis.yaml              | manual                            | Fill + consume against a single Gnosis client                                      |
-| eest_hive_gnosis_multi_client.yaml | manual                            | Fill once, then consume against 4 Gnosis clients (reth/geth/nethermind/erigon)     |
-| eest_hive_matrix.yaml              | manual                            | Upstream hive matrix testing                                                       |
-| run_eest_remote.yaml               | manual                            | Run EEST tests on a remote machine                                                 |
-| release_fixture_full.yaml          | manual                            | Generate and publish full fixture releases                                         |
-| release_fixture_feature.yaml       | manual                            | Generate fixtures for a feature branch                                             |
-| gh-pages.yaml                      | push to master                    | Deploy spec docs to GitHub Pages                                                   |
-| eip-rebase.yaml                    | manual                            | Rebase EIP feature branches                                                        |
-| update-devnet-branch.yaml          | manual                            | Update devnet branches                                                             |
+| benchmark.yaml                     | push to forks/**                  | Gas benchmarks, fixed opcode benchmarks                                             |
+| eest_hive_gnosis.yaml              | manual                            | Fill + consume against a single Gnosis client                                       |
+| eest_hive_gnosis_multi_client.yaml | manual                            | Fill once, then consume against 4 Gnosis clients (reth/geth/nethermind/erigon)      |
+| eest_hive_matrix.yaml              | manual                            | Upstream hive matrix testing                                                        |
+| run_eest_remote.yaml               | manual                            | Run EEST tests on a remote machine                                                  |
+| release_fixture_full.yaml          | manual                            | Generate and publish full fixture releases                                          |
+| release_fixture_feature.yaml       | manual                            | Generate fixtures for a feature branch                                              |
+| gh-pages.yaml                      | push to master                    | Deploy spec docs to GitHub Pages                                                    |
+| eip-rebase.yaml                    | manual                            | Rebase EIP feature branches                                                         |
+| update-devnet-branch.yaml          | manual                            | Update devnet branches                                                              |
 
 ## Architecture
 
@@ -131,26 +138,56 @@ Each fork package follows a consistent internal structure:
 
 Uses `ethereum-types` package for domain types: `U256`, `Uint`, `Bytes`, `Address`, etc. Full type annotations throughout; mypy runs in strict mode.
 
-## Code Conventions
+## Code Style
 
 - **Line length**: 79 characters (enforced by ruff)
 - **Max cyclomatic complexity**: 7
-- **Imports**: explicit only (no star imports), relative within packages
-- **Docstrings**: Google-style, imperative mood ("Return" not "Returns")
-- **Naming**: Avoid EIP numbers in identifiers; use descriptive English words
+- **Imports**: explicit only (no star imports), relative within packages; import isolation enforced by `ethereum-spec-lint` — never import from future or ancient (2+ back) forks
+- **Docstrings**: imperative mood ("Return" not "Returns"), blank line after summary for multi-line
+- **Naming**: `snake_case` for variables/functions, `PascalCase` for classes, `UPPER_CASE` for constants; avoid EIP numbers in identifiers, use descriptive English words
 - **Cross-fork changes**: Keep differences between forks minimal for clean diffs. When modifying multiple forks, start with one fork, get feedback, then propagate
 - **Patch tool**: Use `python src/ethereum_spec_tools/patch_tool.py <source_fork> <target_fork1> <target_fork2>` to propagate unstaged changes across forks
 - **Custom dictionary**: `whitelist.txt` for codespell exceptions
+- **`pathlib` over `os.path`**
 
-## Current Status (as of 2026-02-03)
+## Branches
 
-**PR #2** (`gnosis-osaka` -> `master`): "Implement Gnosis spec post-shangai on forks/osaka"
+- There is no main branch. Default branch = most active fork (currently forks/amsterdam). Run git remote show origin | grep HEAD to check.
+- `mainnet` — stable specs for forks live on mainnet
+- `forks/amsterdam` — PRs target this default branch
+- PRs strictly follow the template in `.github/PULL_REQUEST_TEMPLATE.md`. In the Checklist section, include unchecked items that don't apply — only remove them if they are truly irrelevant to the PR type.
 
-- `static`: PASS (all lint/type checks)
-- `py3`: PASS (50,738 tests, Paris->Osaka)
-- `tests_pytest_py3` / `tests_pytest_pypy3`: PASS
-- `pypy3`: FAIL — exit code 143 (killed by CI, timeout/OOM, not a test failure)
-- Hive Engine/RLP/Sync: FAIL — Docker cache miss (ephemeral runners can't reliably share week-based cache keys)
-- Hive Dev Mode: FAIL — merkle root mismatch because it uses **upstream Ethereum fixtures** (`FIXTURES_URL` points to `ethereum/execution-spec-tests`) against a Gnosis-configured client
+## PR Reviews
 
-See `plan.md` for pending tasks.
+When reviewing PRs that implement or test EIPs:
+
+1. Identify the EIP number(s) from the branch name, PR title, or changed file paths
+2. Fetch each EIP spec from `https://eips.ethereum.org/EIPS/eip-<number>` before starting the review
+3. Verify the implementation matches the EIP's specification requirements
+
+## When to Use Skills
+
+- Writing or modifying tests → run `/write-test` first
+- Writing or modifying pytester-based plugin tests → run `/pytester` first
+- Filling test fixtures → run `/fill-tests` first
+- Implementing an EIP or modifying fork code in `src/` → run `/implement-eip` first
+- Modifying GitHub Actions workflows → run `/edit-workflow` first
+- Assessing EIP complexity or scope → run `/assess-eip`
+- Working on EIP test coverage or checklists → run `/eip-checklist` first
+- Checking if config/skills are stale → run `/audit-config`
+- Writing or modifying docstrings in `src/ethereum/` → run `/write-docstring` first
+- Done with changes and ready to lint → run `/lint`
+
+## Available Skills
+
+- `/write-test` — test writing patterns, fixtures, markers, bytecode helpers
+- `/pytester` — pytester execution modes, isolation, output handling for plugin tests
+- `/fill-tests` — `fill` CLI reference, flags, debugging, benchmark tests
+- `/implement-eip` — fork structure, import rules, adding opcodes/precompiles/tx types
+- `/edit-workflow` — GitHub Actions conventions and version pinning
+- `/assess-eip` — structured EIP complexity assessment
+- `/eip-checklist` — EIP testing checklist system for tracking coverage
+- `/lint` — full static analysis suite with auto-fix workflow
+- `/audit-config` — verify CLAUDE.md and skills are still accurate
+- `/write-docstring` — narrative Markdown docstring conventions for the spec
+- `/grammar-check` — audit grammar in documentation and code comments

@@ -14,6 +14,7 @@ Entry point for the Ethereum specification.
 from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple
 
+from eth_abi import decode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U64, U256, Uint
@@ -29,6 +30,14 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 from ethereum.fork_criteria import ByBlockNumber
+from ethereum.merkle_patricia_trie import root, trie_set
+from ethereum.state import (
+    EMPTY_ACCOUNT,
+    EMPTY_CODE_HASH,
+    Address,
+    State,
+    apply_changes_to_state,
+)
 
 from . import FORK_CRITERIA, vm
 from .blocks import Block, Header, Log, Receipt, encode_receipt
@@ -37,17 +46,20 @@ from .exceptions import (
     InsufficientMaxFeePerGasError,
     PriorityFeeGreaterThanMaxFeeError,
 )
-from .fork_types import EMPTY_CODE_HASH, Address
-from .state import (
-    State,
+from .state_tracker import (
+    BlockState,
+    TransactionState,
+    account_exists,
     account_exists_and_is_empty,
-    create_ether,
     destroy_account,
     destroy_touched_empty_accounts,
+    extract_block_diff,
     get_account,
+    get_code,
+    incorporate_tx_into_block,
     increment_nonce,
+    set_account,
     set_account_balance,
-    state_root,
 )
 from .transactions import (
     AccessListTransaction,
@@ -60,20 +72,27 @@ from .transactions import (
     recover_sender,
     validate_transaction,
 )
-from .trie import root, trie_set
+from .utils.hexadecimal import hex_to_address
 from .utils.message import prepare_message
-from .vm.interpreter import process_message_call
+from .vm import Message
+from .vm.gas import GasCosts
+from .vm.interpreter import MessageCallOutput, process_message_call
 
-BLOCK_REWARD = U256(2 * 10**18)
 BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
-GAS_LIMIT_ADJUSTMENT_FACTOR = Uint(1024)
-GAS_LIMIT_MINIMUM = Uint(5000)
-MINIMUM_DIFFICULTY = Uint(131072)
 INITIAL_BASE_FEE = Uint(1000000000)
+MINIMUM_DIFFICULTY = Uint(131072)
 MAX_OMMER_DEPTH = Uint(6)
 BOMB_DELAY_BLOCKS = 9700000
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
+SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0x2000000000000000000000000000000000000001"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0x1559000000000000000000000000000000000000"
+)
+SYSTEM_TRANSACTION_GAS = Uint(30000000)
 
 
 @dataclass
@@ -177,9 +196,11 @@ def state_transition(chain: BlockChain, block: Block) -> None:
     validate_header(chain, block.header)
     validate_ommers(block.ommers, block.header, chain)
 
+    block_state = BlockState(pre_state=chain.state)
+
     block_env = vm.BlockEnvironment(
         chain_id=chain.chain_id,
-        state=chain.state,
+        state=block_state,
         block_gas_limit=block.header.gas_limit,
         block_hashes=get_last_256_block_hashes(chain),
         coinbase=block.header.coinbase,
@@ -192,9 +213,13 @@ def state_transition(chain: BlockChain, block: Block) -> None:
     block_output = apply_body(
         block_env=block_env,
         transactions=block.transactions,
-        ommers=block.ommers,
     )
-    block_state_root = state_root(block_env.state)
+    block_diff = extract_block_diff(block_state)
+    block_state_root, _ = chain.state.compute_state_root_and_trie_changes(
+        block_diff.account_changes,
+        block_diff.storage_changes,
+        block_diff.storage_clears,
+    )
     transactions_root = root(block_output.transactions_trie)
     receipt_root = root(block_output.receipts_trie)
     block_logs_bloom = logs_bloom(block_output.block_logs)
@@ -212,6 +237,7 @@ def state_transition(chain: BlockChain, block: Block) -> None:
     if block_logs_bloom != block.header.bloom:
         raise InvalidBlock
 
+    apply_changes_to_state(chain.state, block_diff)
     chain.blocks.append(block)
     if len(chain.blocks) > 255:
         # Real clients have to store more blocks to deal with reorgs, but the
@@ -440,6 +466,7 @@ def check_transaction(
     block_env: vm.BlockEnvironment,
     block_output: vm.BlockOutput,
     tx: Transaction,
+    tx_state: TransactionState,
 ) -> Tuple[Address, Uint]:
     """
     Check if the transaction is includable in the block.
@@ -452,6 +479,8 @@ def check_transaction(
         The block output for the current block.
     tx :
         The transaction.
+    tx_state :
+        The transaction state tracker.
 
     Returns
     -------
@@ -482,7 +511,7 @@ def check_transaction(
     if tx.gas > gas_available:
         raise GasUsedExceedsLimitError("gas used exceeds limit")
     sender_address = recover_sender(block_env.chain_id, tx)
-    sender_account = get_account(block_env.state, sender_address)
+    sender_account = get_account(tx_state, sender_address)
 
     if isinstance(tx, FeeMarketTransaction):
         if tx.max_fee_per_gas < tx.max_priority_fee_per_gas:
@@ -555,10 +584,76 @@ def make_receipt(
     return encode_receipt(tx, receipt)
 
 
+def process_unchecked_system_transaction(
+    block_env: vm.BlockEnvironment,
+    target_address: Address,
+    data: Bytes,
+) -> MessageCallOutput:
+    """
+    Process a system transaction without checking if the contract contains
+    code or if the transaction fails.
+
+    Parameters
+    ----------
+    block_env :
+        The block scoped environment.
+    target_address :
+        Address of the contract to call.
+    data :
+        Data to pass to the contract.
+
+    Returns
+    -------
+    system_tx_output : `MessageCallOutput`
+        Output of processing the system transaction.
+
+    """
+    system_tx_state = TransactionState(parent=block_env.state)
+    system_contract_code = get_code(
+        system_tx_state,
+        get_account(system_tx_state, target_address).code_hash,
+    )
+
+    tx_env = vm.TransactionEnvironment(
+        origin=SYSTEM_ADDRESS,
+        gas_price=block_env.base_fee_per_gas,
+        gas=SYSTEM_TRANSACTION_GAS,
+        access_list_addresses=set(),
+        access_list_storage_keys=set(),
+        state=system_tx_state,
+        index_in_block=None,
+        tx_hash=None,
+    )
+
+    system_tx_message = Message(
+        block_env=block_env,
+        tx_env=tx_env,
+        caller=SYSTEM_ADDRESS,
+        target=target_address,
+        current_target=target_address,
+        gas=SYSTEM_TRANSACTION_GAS,
+        value=U256(0),
+        data=data,
+        code=system_contract_code,
+        depth=Uint(0),
+        code_address=target_address,
+        should_transfer_value=False,
+        is_static=False,
+        accessed_addresses=set(),
+        accessed_storage_keys=set(),
+        parent_evm=None,
+    )
+
+    system_tx_output = process_message_call(system_tx_message)
+
+    incorporate_tx_into_block(system_tx_state)
+
+    return system_tx_output
+
+
 def apply_body(
     block_env: vm.BlockEnvironment,
     transactions: Tuple[LegacyTransaction | Bytes, ...],
-    ommers: Tuple[Header, ...],
 ) -> vm.BlockOutput:
     """
     Executes a block.
@@ -576,9 +671,6 @@ def apply_body(
         The block scoped environment.
     transactions :
         Transactions included in the block.
-    ommers :
-        Headers of ancestor blocks which are not direct parents (formerly
-        uncles.)
 
     Returns
     -------
@@ -588,10 +680,10 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
+    process_block_rewards(block_env)
+
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
-
-    pay_rewards(block_env.state, block_env.number, block_env.coinbase, ommers)
 
     return block_output
 
@@ -672,49 +764,6 @@ def validate_ommers(
             raise InvalidBlock
 
 
-def pay_rewards(
-    state: State,
-    block_number: Uint,
-    coinbase: Address,
-    ommers: Tuple[Header, ...],
-) -> None:
-    """
-    Pay rewards to the block miner as well as the ommers miners.
-
-    The miner of the canonical block is rewarded with the predetermined
-    block reward, ``BLOCK_REWARD``, plus a variable award based off of the
-    number of ommer blocks that were mined around the same time, and included
-    in the canonical block's header. An ommer block is a block that wasn't
-    added to the canonical blockchain because it wasn't validated as fast as
-    the accepted block but was mined at the same time. Although not all blocks
-    that are mined are added to the canonical chain, miners are still paid a
-    reward for their efforts. This reward is called an ommer reward and is
-    calculated based on the number associated with the ommer block that they
-    mined.
-
-    Parameters
-    ----------
-    state :
-        Current account state.
-    block_number :
-        Position of the block within the chain.
-    coinbase :
-        Address of account which receives block reward and transaction fees.
-    ommers :
-        List of ommers mentioned in the current block.
-
-    """
-    ommer_count = U256(len(ommers))
-    miner_reward = BLOCK_REWARD + (ommer_count * (BLOCK_REWARD // U256(32)))
-    create_ether(state, coinbase, miner_reward)
-
-    for ommer in ommers:
-        # Ommer age with respect to the current block.
-        ommer_age = U256(block_number - ommer.number)
-        ommer_miner_reward = ((U256(8) - ommer_age) * BLOCK_REWARD) // U256(8)
-        create_ether(state, ommer.coinbase, ommer_miner_reward)
-
-
 def process_transaction(
     block_env: vm.BlockEnvironment,
     block_output: vm.BlockOutput,
@@ -745,6 +794,8 @@ def process_transaction(
         Index of the transaction in the block.
 
     """
+    tx_state = TransactionState(parent=block_env.state)
+
     trie_set(
         block_output.transactions_trie,
         rlp.encode(index),
@@ -760,21 +811,20 @@ def process_transaction(
         block_env=block_env,
         block_output=block_output,
         tx=tx,
+        tx_state=tx_state,
     )
 
-    sender_account = get_account(block_env.state, sender)
+    sender_account = get_account(tx_state, sender)
 
     effective_gas_fee = tx.gas * effective_gas_price
 
     gas = tx.gas - intrinsic_gas
-    increment_nonce(block_env.state, sender)
+    increment_nonce(tx_state, sender)
 
     sender_balance_after_gas_fee = (
         Uint(sender_account.balance) - effective_gas_fee
     )
-    set_account_balance(
-        block_env.state, sender, U256(sender_balance_after_gas_fee)
-    )
+    set_account_balance(tx_state, sender, U256(sender_balance_after_gas_fee))
 
     access_list_addresses = set()
     access_list_storage_keys = set()
@@ -790,6 +840,7 @@ def process_transaction(
         gas=gas,
         access_list_addresses=access_list_addresses,
         access_list_storage_keys=access_list_storage_keys,
+        state=tx_state,
         index_in_block=index,
         tx_hash=get_transaction_hash(encode_transaction(tx)),
     )
@@ -811,28 +862,42 @@ def process_transaction(
     transaction_fee = tx_gas_used_after_refund * priority_fee_per_gas
 
     # refund gas
-    sender_balance_after_refund = get_account(
-        block_env.state, sender
-    ).balance + U256(gas_refund_amount)
-    set_account_balance(block_env.state, sender, sender_balance_after_refund)
+    sender_balance_after_refund = get_account(tx_state, sender).balance + U256(
+        gas_refund_amount
+    )
+    set_account_balance(tx_state, sender, sender_balance_after_refund)
 
     # transfer miner fees
     coinbase_balance_after_mining_fee = get_account(
-        block_env.state, block_env.coinbase
+        tx_state, block_env.coinbase
     ).balance + U256(transaction_fee)
     if coinbase_balance_after_mining_fee != 0:
         set_account_balance(
-            block_env.state,
+            tx_state,
             block_env.coinbase,
             coinbase_balance_after_mining_fee,
         )
-    elif account_exists_and_is_empty(block_env.state, block_env.coinbase):
-        destroy_account(block_env.state, block_env.coinbase)
+    elif account_exists_and_is_empty(tx_state, block_env.coinbase):
+        destroy_account(tx_state, block_env.coinbase)
+
+    # transfer base fee to fee collector address
+    # FEE_COLLECTOR_ADDRESS is intentionally excluded from touched_accounts
+    # to prevent it from being destroyed by destroy_touched_empty_accounts.
+    base_fee = U256(tx_gas_used_after_refund * block_env.base_fee_per_gas)
+    if base_fee != 0:
+        fee_collector_balance = get_account(
+            tx_state, FEE_COLLECTOR_ADDRESS
+        ).balance
+        set_account_balance(
+            tx_state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance + base_fee,
+        )
 
     for address in tx_output.accounts_to_delete:
-        destroy_account(block_env.state, address)
+        destroy_account(tx_state, address)
 
-    destroy_touched_empty_accounts(block_env.state, tx_output.touched_accounts)
+    destroy_touched_empty_accounts(tx_state, tx_output.touched_accounts)
 
     block_output.block_gas_used += tx_gas_used_after_refund
 
@@ -851,6 +916,57 @@ def process_transaction(
 
     block_output.block_logs += tx_output.logs
 
+    incorporate_tx_into_block(tx_state)
+
+
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Call BlockRewardAuRaBase contract reward function.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    """
+    # reward(address[],uint16[]) with benefactors=[coinbase], kind=[0]
+    coinbase_padded = b"\x00" * 12 + bytes(block_env.coinbase)
+    data = (
+        bytes.fromhex("f91c2898")
+        + (64).to_bytes(32, "big")  # offset of address[] arg
+        + (128).to_bytes(32, "big")  # offset of uint16[] arg
+        + (1).to_bytes(32, "big")  # length of address[] = 1
+        + coinbase_padded  # address[0] = coinbase
+        + (1).to_bytes(32, "big")  # length of uint16[] = 1
+        + (0).to_bytes(32, "big")  # kind[0] = 0 (RewardAuthor)
+    )
+
+    reward_state = TransactionState(parent=block_env.state)
+    account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    if not account_exists(reward_state, SYSTEM_ADDRESS):
+        set_account(reward_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
+
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        data=data,
+    )
+    if out.error:
+        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
+
+    if len(out.return_data) == 0:
+        return
+
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    for addr, amount in zip(addresses, amounts, strict=True):
+        address = hex_to_address(addr)
+        balance = get_account(reward_state, address).balance + U256(amount)
+        set_account_balance(reward_state, address, balance)
+
+    incorporate_tx_into_block(reward_state)
+
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
     """
@@ -858,12 +974,12 @@ def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
 
     The bounds of the gas limit, ``max_adjustment_delta``, is set as the
     quotient of the parent block's gas limit and the
-    ``GAS_LIMIT_ADJUSTMENT_FACTOR``. Therefore, if the gas limit that is
+    ``LIMIT_ADJUSTMENT_FACTOR``. Therefore, if the gas limit that is
     passed through as a parameter is greater than or equal to the *sum* of
     the parent's gas and the adjustment delta then the limit for gas is too
     high and fails this function's check. Similarly, if the limit is less
     than or equal to the *difference* of the parent's gas and the adjustment
-    delta *or* the predefined ``GAS_LIMIT_MINIMUM`` then this function's
+    delta *or* the predefined ``LIMIT_MINIMUM`` then this function's
     check fails because the gas limit doesn't allow for a sufficient or
     reasonable amount of gas to be used on a block.
 
@@ -881,12 +997,12 @@ def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:
         True if gas limit constraints are satisfied, False otherwise.
 
     """
-    max_adjustment_delta = parent_gas_limit // GAS_LIMIT_ADJUSTMENT_FACTOR
+    max_adjustment_delta = parent_gas_limit // GasCosts.LIMIT_ADJUSTMENT_FACTOR
     if gas_limit >= parent_gas_limit + max_adjustment_delta:
         return False
     if gas_limit <= parent_gas_limit - max_adjustment_delta:
         return False
-    if gas_limit < GAS_LIMIT_MINIMUM:
+    if gas_limit < GasCosts.LIMIT_MINIMUM:
         return False
 
     return True

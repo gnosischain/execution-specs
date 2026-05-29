@@ -221,24 +221,28 @@ def test_scenarios(
             1, hint=f"runner result {scenario.name}"
         )
 
-        tx_max_gas = (
-            7_000_000
-            if test_program.id == ProgramInvalidOpcode().id
-            else 1_000_000
-        )
+        tx_max_gas = 1_000_000
+        if test_program.id == ProgramInvalidOpcode().id:
+            tx_max_gas = 10_000_000 if fork.is_eip_enabled(8037) else 7_000_000
         if scenario.category == "double_call_combinations":
             tx_max_gas *= 2
 
         tx_gasprice: int = 10
+        block_number = len(blocks) + 1
+        block_fee_recipient = (
+            Environment(number=block_number)
+            .set_fork_requirements(fork)
+            .fee_recipient
+        )
         exec_env = ExecutionEnvironment(
             fork=fork,
             origin=tx_origin,
             gasprice=tx_gasprice,
             timestamp=tx_env.timestamp,  # we can't know timestamp before head,
             # use gas hash
-            number=len(blocks) + 1,
+            number=block_number,
             gaslimit=tx_env.gas_limit,
-            coinbase=tx_env.fee_recipient,
+            coinbase=block_fee_recipient,
         )
 
         def make_result(

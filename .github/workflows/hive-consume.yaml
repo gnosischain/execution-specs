@@ -16,104 +16,210 @@ on:
     paths:
       - ".github/workflows/hive-consume.yaml"
       - ".github/actions/start-hive-dev/**"
+      - ".github/actions/cache-docker-images/**"
+      - ".github/actions/load-docker-images/**"
       - ".github/configs/hive/**"
       - "packages/testing/src/execution_testing/cli/pytest_commands/consume.py"
+      - "packages/testing/src/execution_testing/cli/pytest_commands/build_block.py"
       - "packages/testing/src/execution_testing/cli/pytest_commands/pytest_ini_files/pytest-consume.ini"
       - "packages/testing/src/execution_testing/cli/pytest_commands/plugins/consume/**"
       - "packages/testing/src/execution_testing/cli/pytest_commands/plugins/pytest_hive/**"
       - "packages/testing/src/execution_testing/fixtures/consume.py"
       - "packages/testing/src/execution_testing/rpc/**"
   workflow_dispatch:
+    inputs:
+      docker_images:
+        description: "Space-separated list of Docker images to cache"
+        required: false
+        default: "ghcr.io/chetna-mittal/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
+      client:
+        description: "Hive client to test (e.g., go-ethereum-gnosis, reth-gnosis)"
+        required: false
+        default: "go-ethereum-gnosis"
+      client_file:
+        description: "Client config file name under .github/configs/hive/ (e.g., latest.yaml, master.yaml)"
+        required: false
+        default: "latest.yaml"
+  workflow_call:
+    inputs:
+      docker_images:
+        description: "Space-separated list of Docker images to cache"
+        required: false
+        type: string
+        default: "ghcr.io/chetna-mittal/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
+      client:
+        description: "Hive client to test (e.g., go-ethereum-gnosis, reth-gnosis)"
+        required: false
+        type: string
+        default: "go-ethereum-gnosis"
+      client_file:
+        description: "Client config file name under .github/configs/hive/ (e.g., latest.yaml, master.yaml)"
+        required: false
+        type: string
+        default: "latest.yaml"
 
 concurrency:
   group: hive-consume-${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
 
+env:
+  # Use direct URL instead of release spec (e.g., fusaka@v0.1.0) to avoid GitHub API rate limits
+  FIXTURES_URL: https://github.com/gnosischain/execution-spec-tests/releases/download/fusaka@v0.1.0/fixtures_fusaka.tar.gz
+
 jobs:
-  fill:
-    name: Generate Fixtures
+  cache-docker-images:
+    name: Cache Docker Images
     runs-on: ubuntu-latest
     steps:
       - name: Checkout execution-specs
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
-      - name: Bootstrap Python and install deps
-        run: |
-          uv python install 3.11
-          uv python pin 3.11
-          uv sync --all-extras
-          uv pip install solc-select
-          uv run solc-select use 0.8.24 --always-install
-
-      - name: Run fill to generate fixtures
-        run: |
-          uv run fill tests/osaka --fork Osaka --clean -v -x
-
-      - name: Upload generated fixtures
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - name: Cache Docker images
+        uses: ./.github/actions/cache-docker-images
         with:
-          name: test-fixtures
-          path: fixtures/blockchain_tests_engine/
+          images: ${{ inputs.docker_images || 'ghcr.io/chetna-mittal/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine' }}
 
-  consume:
-    name: Consume (nethermind-gnosis)
+  test-hive:
+    name: ${{ matrix.name }}
+    needs: cache-docker-images
     runs-on: ubuntu-latest
-    needs: fill
+    env:
+      CLIENT: ${{ inputs.client || 'go-ethereum-gnosis' }}
+      CLIENT_FILE: ${{ inputs.client_file || 'latest.yaml' }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: Engine
+            mode: simulator
+            simulator: gnosis/eels/consume-engine
+            sim_limit: ".*test_block_at_rlp_limit_with_logs.*Osaka.*"
+          # TODO: Enable once eels/consume-enginex simulator is added to Hive
+          # - name: consume-enginex
+          #   mode: simulator
+          #   simulator: gnosis/eels/consume-enginex
+          #   sim_limit: ".*push0.*(Shanghai|Cancun).*"
+          - name: RLP
+            mode: simulator
+            simulator: gnosis/eels/consume-rlp
+            sim_limit: ".*test_block_at_rlp_limit_with_logs.*Osaka.*"
+          # - name: Sync
+          #   mode: simulator
+          #   simulator: gnosis/eels/consume-sync
+          #   sim_limit: ".*test_block_at_rlp_limit_with_logs.*Osaka.*"
+          - name: Dev Mode Consume Engine
+            mode: dev
+            cli_command: consume engine
+            test_filter: "Osaka and test_block_at_rlp_limit_with_logs"
+          # TODO: Enable once we have a release with the pre-alloc builder format cf #2140
+          # - name: Dev Mode Consume EngineX
+          #   mode: dev
+          #   cli_command: consume enginex
+          #   test_filter: "(fork_shanghai or fork_cancun) and push0"
+          # NOTE: build-block uses testing_buildBlockV1 on the HTTP RPC port
+          # (8545), which has a smaller body cap than the Engine API port
+          # (8551); avoid filters that target near-block-size-limit tests.
+          - name: Dev Mode Build Block
+            mode: dev
+            cli_command: build-block
+            test_filter: "Osaka and test_clz_stack_underflow"
+          # TODO: Enable once eels/build-block simulator is added to Hive
+          # - name: Build Block
+          #   mode: simulator
+          #   simulator: gnosis/eels/build-block
+          #   sim_limit: ".*test_block_at_rlp_limit_with_logs.*Osaka.*"
     steps:
       - name: Checkout execution-specs
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Download fixtures from fill job
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: test-fixtures
-          path: fixtures/blockchain_tests_engine/
+          path: execution-specs
 
+      - name: Checkout Hive
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: gnosischain/hive
+          ref: fix/neth-client
+          path: hive
+
+      # Redirect Go's caches to a per-job temp dir so the setup-go cache
+      # restore doesn't collide with a persistent $GOMODCACHE on
+      # self-hosted runners (see build-benchmark-genesis/action.yaml).
+      - name: Use ephemeral Go cache dirs
+        shell: bash
+        run: |
+          echo "GOMODCACHE=${{ runner.temp }}/go/mod" >> "$GITHUB_ENV"
+          echo "GOCACHE=${{ runner.temp }}/go/build" >> "$GITHUB_ENV"
       - name: Setup go env and cache
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version: ">=1.24"
+          cache-dependency-path: hive/go.sum
 
-      - name: Build and install Hive
-        run: |
-          git clone -b master https://github.com/gnosischain/hive.git
-          cd hive
-          go build -o hive
-
-      - name: Start Hive (dev mode)
-        id: start-hive
-        uses: ./.github/actions/start-hive-dev
+      - name: Install uv and python
+        if: matrix.mode == 'dev'
+        uses: ./execution-specs/.github/actions/setup-uv
         with:
-          clients: nethermind-gnosis
-          client-file: .github/configs/hive/latest.yaml
+          cache-dependency-glob: "execution-specs/uv.lock"
+
+      - name: Setup environment
+        if: matrix.mode == 'dev'
+        uses: ./execution-specs/.github/actions/setup-env
+
+      - name: Load cached Docker images
+        uses: ./execution-specs/.github/actions/load-docker-images
+
+      - name: Build hive
+        run: |
+          cd hive
+          go build .
+
+      - name: Run simulator tests
+        if: matrix.mode == 'simulator'
+        run: |
+          cd hive
+          ./hive --sim '${{ matrix.simulator }}' \
+            --sim.parallelism=1 \
+            --client ${{ env.CLIENT }} \
+            --client-file ../execution-specs/.github/configs/hive/${{ env.CLIENT_FILE }} \
+            --sim.buildarg fixtures=${{ env.FIXTURES_URL }} \
+            --sim.limit="${{ matrix.sim_limit }}" \
+            --sim.loglevel=5 \
+            --docker.buildoutput \
+            --docker.output
+
+      - name: Build Hive client images
+        if: matrix.mode == 'dev'
+        run: |
+          cd hive
+          ./hive \
+            --client ${{ env.CLIENT }} \
+            --client-file ../execution-specs/.github/configs/hive/${{ env.CLIENT_FILE }} \
+            --docker.buildoutput
+        timeout-minutes: 10
+
+      - name: Start Hive in dev mode
+        if: matrix.mode == 'dev'
+        id: start-hive
+        uses: ./execution-specs/.github/actions/start-hive-dev
+        with:
+          clients: ${{ env.CLIENT }}
+          client-file: execution-specs/.github/configs/hive/${{ env.CLIENT_FILE }}
           hive-path: hive
-          timeout: "300"
+          timeout: "30"
 
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
-      - name: Bootstrap Python and install deps
-        run: |
-          uv python install 3.11
-          uv python pin 3.11
-          uv sync --all-extras
-
-      - name: Run consume against nethermind-gnosis
+      - name: Run dev mode command
+        if: matrix.mode == 'dev'
+        working-directory: execution-specs
         env:
           HIVE_SIMULATOR: ${{ steps.start-hive.outputs.hive-url }}
         run: |
-          uv run consume engine -v --input fixtures/blockchain_tests_engine/
+          uv sync --all-extras
+          uv run ${{ matrix.cli_command }} --input ${{ env.FIXTURES_URL }} -k "${{ matrix.test_filter }}"
 
       - name: Upload Hive logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: hive-log
-          path: hive/hive.log
+          name: hive-logs-${{ matrix.name }}
+          path: hive/workspace/
+          retention-days: 7

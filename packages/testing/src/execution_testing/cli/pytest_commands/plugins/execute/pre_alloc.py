@@ -36,6 +36,7 @@ from execution_testing.test_types import (
     EOA,
     AuthorizationTuple,
     ChainConfig,
+    TestPhase,
     Transaction,
     TransactionTestMetadata,
     compute_deterministic_create2_address,
@@ -44,6 +45,7 @@ from execution_testing.tools import Initcode
 from execution_testing.vm import Bytecode, Op
 
 from ..shared.address_stubs import AddressStubs
+from ..shared.execute_fill import stub_eoas_key
 from ..shared.pre_alloc import Alloc as SharedAlloc
 from ..shared.pre_alloc import AllocFlags
 from .contracts import (
@@ -109,6 +111,14 @@ def address_stubs(
 
 
 @pytest.fixture(scope="session")
+def stub_eoas(
+    request: pytest.FixtureRequest,
+) -> Dict[str, EOA]:
+    """Return stub EOAs pre-populated during configuration."""
+    return request.config.stash.get(stub_eoas_key, {})
+
+
+@pytest.fixture(scope="session")
 def skip_cleanup(request: pytest.FixtureRequest) -> bool:
     """Return whether to skip cleanup phase after each test."""
     skip = request.config.getoption("skip_cleanup")
@@ -148,7 +158,6 @@ def execute_required_contracts(
         logger.info(
             "Checking if deterministic factory contract is already deployed"
         )
-        tx_index = 0
         if (
             check_deterministic_factory_deployment(
                 eth_rpc=eth_rpc, fork=session_fork
@@ -156,11 +165,10 @@ def execute_required_contracts(
             is None
         ):
             try:
-                tx_index = deploy_deterministic_factory_contract(
+                deploy_deterministic_factory_contract(
                     eth_rpc=eth_rpc,
                     seed_key=session_worker_key,
                     gas_price=sender_funding_transactions_gas_price,
-                    tx_index=tx_index,
                 )
             except Exception as e:
                 raise RuntimeError(
@@ -281,6 +289,11 @@ class Alloc(SharedAlloc):
         pending_tx = PendingTransaction(
             **kwargs,
         )
+        # Pending txs are setup by definition; override Transaction's
+        # test_phase default (sourced from TestPhaseManager) so a
+        # ``pre.fund_eoa`` call inside ``TestPhaseManager.execution()``
+        # doesn't bleed an EXECUTION phase onto a setup tx.
+        pending_tx.test_phase = TestPhase.SETUP
         pending_tx.metadata = TransactionTestMetadata(
             test_id=self._node_id,
             phase="setup",
@@ -339,10 +352,8 @@ class Alloc(SharedAlloc):
             raise ValueError(
                 f"initcode too large {len(initcode)} > {max_initcode_size}"
             )
-        deploy_gas_limit = gas_costs.GAS_TX_BASE + gas_costs.GAS_TX_CREATE
-        deploy_gas_limit += (
-            len(deploy_code) * gas_costs.GAS_CODE_DEPOSIT_PER_BYTE
-        )
+        deploy_gas_limit = gas_costs.TX_BASE + gas_costs.TX_CREATE
+        deploy_gas_limit += len(deploy_code) * gas_costs.CODE_DEPOSIT_PER_BYTE
         deploy_gas_limit += memory_expansion_gas_calculator(
             new_bytes=len(initcode)
         )
@@ -436,7 +447,7 @@ class Alloc(SharedAlloc):
 
         initcode_prefix = Bytecode()
 
-        deploy_gas_limit = gas_costs.GAS_TX_BASE + gas_costs.GAS_TX_CREATE
+        deploy_gas_limit = gas_costs.TX_BASE + gas_costs.TX_CREATE
 
         if len(storage.root) > 0:
             initcode_prefix += sum(
@@ -453,7 +464,7 @@ class Alloc(SharedAlloc):
         if len(code) > max_code_size:
             raise ValueError(f"code too large: {len(code)} > {max_code_size}")
 
-        deploy_gas_limit += len(code) * gas_costs.GAS_CODE_DEPOSIT_PER_BYTE
+        deploy_gas_limit += len(code) * gas_costs.CODE_DEPOSIT_PER_BYTE
 
         prepared_initcode = Initcode(
             deploy_code=code, initcode_prefix=initcode_prefix
@@ -946,6 +957,23 @@ class Alloc(SharedAlloc):
             logger.debug(f"Transaction response: {response.model_dump_json()}")
         return responses
 
+    def pending_transactions(self) -> List[Transaction]:
+        """
+        Return the queued setup transactions, signed; clears the queue.
+
+        Used by fill-stateful to materialise ``pre.fund_eoa`` /
+        ``pre.deploy_contract`` calls into a synthetic setup block.
+        Unset ``value`` is coerced to ``0`` (live-send path would default
+        it before broadcast).
+        """
+        txs: List[Transaction] = []
+        for tx in self._pending_txs:
+            if tx.value is None:
+                tx.value = HexNumber(0)
+            txs.append(tx.with_signature_and_sender())
+        self._pending_txs.clear()
+        return txs
+
 
 @pytest.fixture(scope="function")
 def alloc_flags(
@@ -973,6 +1001,7 @@ def pre(
     eth_rpc: EthRPC,
     chain_config: ChainConfig,
     address_stubs: AddressStubs | None,
+    stub_eoas: Dict[str, EOA],
     skip_cleanup: bool,
     max_fee_per_gas: int,
     max_priority_fee_per_gas: int,
@@ -994,6 +1023,7 @@ def pre(
     pre = Alloc(
         fork=actual_fork,
         flags=alloc_flags,
+        stub_eoas=stub_eoas,
         sender=worker_key,
         eth_rpc=eth_rpc,
         eoa_iterator=eoa_iterator,

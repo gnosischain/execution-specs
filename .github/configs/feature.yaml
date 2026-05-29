@@ -1,45 +1,25 @@
-# Unless filling for special features, all features should fill for previous forks (starting from Paris) too
+# Unless filling for special features, all features should fill for previous forks (starting from ConstantinopleFix) too
 mainnet:
   evm-type: eels
-  fill-params: --from=Paris --until=Osaka
+  fill-params: --from=ConstantinopleFix --until=Osaka --generate-all-formats
 
 benchmark:
   evm-type: benchmark
-  fill-params: --fork=Osaka --gas-benchmark-values 1,5,10,30,60,100,150 ./tests/benchmark/compute --maxprocesses=30 --dist=worksteal
+  fill-params: --fork=Osaka --generate-all-formats --gas-benchmark-values 1,5,10,30,60,100,150 ./tests/benchmark/compute --maxprocesses=30 --dist=worksteal
   feature_only: true
 
 benchmark_fast:
   evm-type: benchmark
-  fill-params: --fork=Osaka --gas-benchmark-values 100 ./tests/benchmark/compute
-  feature_only: true
-
-merge:
-  evm-type: eels
-  fill-params: --fork=Paris tests/paris
-  feature_only: true
-
-shapella:
-  evm-type: eels
-  fill-params: --fork=Shanghai tests/shanghai
-  feature_only: true
-
-dencun:
-  evm-type: eels
-  fill-params: --fork=Cancun tests/cancun
-  feature_only: true
-
-pectra:
-  evm-type: eels
-  fill-params: --fork=Prague tests/prague
+  fill-params: --fork=Osaka --generate-all-formats --gas-benchmark-values 100 ./tests/benchmark/compute
   feature_only: true
 
 fusaka:
   evm-type: eels
-  fill-params: --fork=Osaka tests/osaka
+  fill-params: --fork=Osaka
   feature_only: true
 
 bal:
   evm-type: eels
-  fill-params: --fork=Amsterdam tests/amsterdam
+  fill-params: --fork=Amsterdam
   feature_only: true
 

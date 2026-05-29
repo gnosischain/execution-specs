@@ -31,7 +31,7 @@ from .exceptions import (
     TransactionException,
 )
 from .fixtures import BaseFixture, FixtureCollector
-from .forks import Fork, GasCosts, TransitionFork
+from .forks import Fork, GasCosts, RefundTypes, TransitionFork
 from .specs import (
     BaseTest,
     BenchmarkTest,
@@ -101,6 +101,7 @@ from .tools import (
     Switch,
     TransactionWithCost,
     While,
+    WhileGas,
     extend_with_defaults,
     gas_test,
     generate_system_contract_deploy_test,
@@ -183,6 +184,7 @@ __all__ = (
     "ParameterSet",
     "ReferenceSpec",
     "ReferenceSpecTypes",
+    "RefundTypes",
     "Removable",
     "Requests",
     "SequentialAddressLayout",
@@ -207,6 +209,7 @@ __all__ = (
     "TransactionWithCost",
     "TransitionFork",
     "While",
+    "WhileGas",
     "CoerceBytes",
     "Withdrawal",
     "WithdrawalRequest",

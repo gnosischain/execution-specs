@@ -1,11 +1,11 @@
 # Hive client configuration file with latest release images
 
 # Geth (Go-Ethereum)
-# GHCR: https://ghcr.io/gnosischain/geth
+# GHCR: https://ghcr.io/chetna-mittal/geth
 - client: go-ethereum-gnosis
   nametag: ""
   build_args:
-    baseimage: ghcr.io/gnosischain/geth
+    baseimage: ghcr.io/chetna-mittal/geth
     tag: latest
 
 # Nethermind

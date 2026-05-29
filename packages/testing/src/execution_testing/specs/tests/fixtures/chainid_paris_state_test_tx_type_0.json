@@ -103,7 +103,7 @@
         },
         "_info": {
             "hash": "0xf36639a4c77a212cffb234afced994bab0286aeddc136371f1e48831dc7fd2e2",
-            "fixture_format": "state_test"
+            "fixture-format": "state_test"
         }
     }
 }
