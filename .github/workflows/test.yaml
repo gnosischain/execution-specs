@@ -76,7 +76,7 @@ jobs:
 
   fill:
     name: fill (${{ matrix.label }})
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: static
     strategy:
       fail-fast: false
@@ -117,7 +117,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   fill-pypy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: static
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -134,7 +134,7 @@ jobs:
           PYPY_GC_MIN: "1G"
 
   json-loader:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: static
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -148,7 +148,7 @@ jobs:
           PYTEST_XDIST_AUTO_NUM_WORKERS: auto
 
   test-tests:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: static
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -163,7 +163,7 @@ jobs:
           PYTEST_XDIST_AUTO_NUM_WORKERS: auto
 
   test-tests-pypy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: static
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

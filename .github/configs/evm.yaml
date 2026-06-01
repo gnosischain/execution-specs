@@ -9,5 +9,5 @@ static:
   targets: ["evmone-t8n"]
 benchmark:
   impl: geth
-  repo: ethereum/go-ethereum
-  ref: master
+  repo: gnosischain/go-ethereum
+  ref: release-1.17.3-gc
