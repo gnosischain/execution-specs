@@ -341,10 +341,6 @@ def generic_call(evm: Evm, params: GenericCall) -> None:
         push(evm.stack, U256(0))
         return
 
-    tx_state = evm.message.tx_env.state
-    code_hash = get_account(tx_state, code_address).code_hash
-    code = get_code(tx_state, code_hash)
-
     call_data = memory_read_bytes(
         evm.memory,
         params.memory_input_start_position,
@@ -574,6 +570,9 @@ def callcode(evm: Evm) -> None:
         check_gas(evm, extra_gas + extend_memory.cost)
         if code_address not in evm.accessed_addresses:
             evm.accessed_addresses.add(code_address)
+
+    code_hash = get_account(tx_state, code_address).code_hash
+    code = get_code(tx_state, code_hash)
 
     message_call_gas = calculate_message_call_gas(
         value,
