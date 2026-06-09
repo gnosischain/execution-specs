@@ -156,7 +156,7 @@ def build_genesis_header(
         ommers_hash=EmptyOmmersRoot,
         fee_recipient=0,
         state_root=state_root,
-        transactions_root=EmptyTrieRoot,
+        transactions_trie=EmptyTrieRoot,
         receipts_root=EmptyTrieRoot,
         logs_bloom=0,
         difficulty=0x20000 if env.difficulty is None else env.difficulty,

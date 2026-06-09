@@ -172,7 +172,7 @@ class FixtureHeader(CamelModel):
         validation_alias=AliasChoices("coinbase", "miner"),
     )
     state_root: Hash
-    transactions_root: Hash = Field(
+    transactions_trie: Hash = Field(
         Hash(EmptyTrieRoot),
         alias="transactionsRoot",
         validation_alias=AliasChoices("transactionsTrie", "transactionsRoot"),
@@ -230,15 +230,6 @@ class FixtureHeader(CamelModel):
     ) = Field(None)
 
     fork: Fork | None = Field(None, exclude=True)
-
-    def set_fork(self, fork: Fork | None) -> None:
-        """
-        Set the runtime-only fork reference and clear cached properties that
-        depend on fork-specific header encoding.
-        """
-        object.__setattr__(self, "fork", fork)
-        for _prop in ("rlp_encode_list", "rlp", "block_hash"):
-            self.__dict__.pop(_prop, None)
 
     def model_post_init(self, __context: Any) -> None:
         """
@@ -806,15 +797,10 @@ class FixtureBlockBase(CamelModel):
         if self.withdrawals is not None:
             block.append([w.to_serializable_list() for w in self.withdrawals])
 
-        fixture_block = FixtureBlock(
+        return FixtureBlock(
             **self.model_dump(),
             rlp=eth_rlp.encode(block),
         )
-
-        if self.header.fork is not None:
-            fixture_block.header.set_fork(self.header.fork)
-
-        return fixture_block
 
 
 class FixtureBlock(FixtureBlockBase):
@@ -876,13 +862,6 @@ class BlockchainFixtureCommon(BaseFixture):
                 if "chainid" not in data["config"]:
                     data["config"]["chainid"] = "0x01"
         return data
-
-    @model_validator(mode="after")
-    def propagate_fork_to_genesis(self) -> Self:
-        """Restore genesis header's runtime fork context after JSON load."""
-        if self.genesis.fork is None:
-            self.genesis.set_fork(self.fork.transitions_from())
-        return self
 
     def get_fork(self) -> Fork | TransitionFork | None:
         """Return fork of the fixture as a string."""

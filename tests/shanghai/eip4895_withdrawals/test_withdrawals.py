@@ -12,6 +12,7 @@ from execution_testing import (
     Block,
     BlockchainTestFiller,
     Bytecode,
+    Fork,
     Op,
     Withdrawal,
 )
