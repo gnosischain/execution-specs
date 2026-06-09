@@ -362,11 +362,6 @@ class ForkLoad:
         return self._module("state_tracker").create_ether
 
     @property
-    def trie_set(self) -> Any:
-        """trie_set function of the fork."""
-        return self._module("trie").trie_set
-
-    @property
     def hex_to_address(self) -> Any:
         """hex_to_address function of the fork."""
         return self._module("utils.hexadecimal").hex_to_address

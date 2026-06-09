@@ -39,6 +39,7 @@ def get_minimal_deposit_contract_code() -> Bytecode:
 def test_withdrawal_system_call_succeeds(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
+    fork: Fork,
 ) -> None:
     """
     Test that the system call to deposit contract succeeds.

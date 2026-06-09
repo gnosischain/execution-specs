@@ -122,9 +122,13 @@ def test_all_opcodes(
         ),
     }
 
+    # EIP-8037 needs gas_limit > TX_MAX_GAS_LIMIT
+    # (16,777,216) for a state_gas_reservoir for SSTORE/CREATE.
+    gas_limit = 50_000_000 if fork.is_eip_enabled(8037) else 9_000_000
+
     tx = Transaction(
         sender=pre.fund_eoa(),
-        gas_limit=9_000_000,
+        gas_limit=gas_limit,
         to=contract_address,
         protected=fork.supports_protected_txs(),
     )
@@ -299,9 +303,6 @@ def constant_gas_opcodes(fork: Fork) -> Generator[ParameterSet, None, None]:
         # delta used by gas_test. Excluded to keep the test meaningful.
         if fork.is_eip_enabled(8037) and opcode in (Op.CREATE, Op.CREATE2):
             continue
-        if opcode.gas_cost(fork) == 0:
-            # zero constant gas opcodes - untestable
-            continue
         yield pytest.param(
             opcode,
             id=f"{opcode}",
@@ -348,4 +349,5 @@ def test_constant_gas(
         subject_code=opcode,
         subject_code_warm=warm_opcode,
         tear_down_code=prepare_suffix(opcode),
+        out_of_gas_testing=opcode.gas_cost(fork) > 0,
     )

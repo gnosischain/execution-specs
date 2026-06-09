@@ -19,7 +19,7 @@ Gnosis diff
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, final
 
 from eth_abi import decode, encode
 from ethereum_rlp import rlp
@@ -55,6 +55,7 @@ from .state_tracker import (
     BlockState,
     TransactionState,
     account_exists,
+    create_ether,
     destroy_account,
     extract_block_diff,
     get_account,
@@ -98,6 +99,7 @@ MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -701,30 +703,15 @@ def process_transaction(
     transaction_fee = tx_gas_used_after_refund * priority_fee_per_gas
 
     # refund gas
-    sender_balance_after_refund = get_account(tx_state, sender).balance + U256(
-        gas_refund_amount
-    )
-    set_account_balance(tx_state, sender, sender_balance_after_refund)
+    create_ether(tx_state, sender, U256(gas_refund_amount))
 
     # transfer miner fees
-    coinbase_balance_after_mining_fee = get_account(
-        tx_state, block_env.coinbase
-    ).balance + U256(transaction_fee)
-    set_account_balance(
-        tx_state, block_env.coinbase, coinbase_balance_after_mining_fee
-    )
+    create_ether(tx_state, block_env.coinbase, U256(transaction_fee))
 
     # transfer base fee to fee collector address
     base_fee = U256(tx_gas_used_after_refund * block_env.base_fee_per_gas)
     if base_fee != 0:
-        fee_collector_balance = get_account(
-            tx_state, FEE_COLLECTOR_ADDRESS
-        ).balance
-        set_account_balance(
-            tx_state,
-            FEE_COLLECTOR_ADDRESS,
-            fee_collector_balance + base_fee,
-        )
+        create_ether(tx_state, FEE_COLLECTOR_ADDRESS, base_fee)
 
     for address in tx_output.accounts_to_delete:
         destroy_account(tx_state, address)
@@ -837,8 +824,7 @@ def process_block_rewards(
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
     for addr, amount in zip(addresses, amounts, strict=True):
         address = hex_to_address(addr)
-        balance = get_account(reward_state, address).balance + U256(amount)
-        set_account_balance(reward_state, address, balance)
+        create_ether(reward_state, address, U256(amount))
 
     incorporate_tx_into_block(reward_state)
 

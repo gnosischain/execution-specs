@@ -6,6 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from execution_testing.base_types import BlobSchedule
+from execution_testing.vm import Opcodes
 
 from ..forks.eips.paris.eip_3675 import EIP3675
 from ..forks.forks import (
@@ -734,52 +735,33 @@ def test_eips() -> None:  # noqa: D103
     assert Shanghai.is_eip_enabled(3855)
 
 
-def test_fork_variant_ordering() -> None:
+def test_oog_budget_lift() -> None:
     """
-    Variants from `with_env_gas_limit` must compare consistently with
-    their canonical parent: equal to the parent, ordered identically
-    against other canonical forks.
+    `Fork.oog_budget_lift` returns zero pre-EIP-8037 and the cumulative
+    SSTORE-set + CREATE + code-deposit state-gas spill on Amsterdam.
     """
-    variant = London.with_env_gas_limit(30_000_000)
-
-    assert variant == London
-    assert hash(variant) == hash(London)
-
-    assert variant > SpuriousDragon
-    assert variant >= SpuriousDragon
-    assert variant < Cancun
-    assert variant <= Cancun
-
-    assert not (variant > London)
-    assert not (variant < London)
-    assert variant >= London
-    assert variant <= London
-
-
-def test_transition_fork_variant_equality() -> None:
-    """
-    Variants of a transition fork created via `with_env_gas_limit` must
-    compare equal to their canonical parent and to each other, even when
-    different gas limits are used. Distinct canonical transition forks
-    must remain unequal.
-    """
-    canonical = CancunToPragueAtTime15k
-    variant_a = canonical.with_env_gas_limit(30_000_000)
-    variant_b = canonical.with_env_gas_limit(45_000_000)
-    variant_c = canonical.with_env_gas_limit(30_000_000)
-
-    assert variant_a is not canonical
-    assert variant_a is not variant_b
-    assert variant_a is not variant_c
-
-    assert variant_a == canonical
-    assert variant_b == canonical
-    assert variant_a == variant_b
-    assert variant_a == variant_c
-
-    assert hash(variant_a) == hash(canonical)
-    assert hash(variant_b) == hash(canonical)
-    assert hash(variant_c) == hash(canonical)
-
-    assert canonical != PragueToOsakaAtTime15k
-    assert variant_a != PragueToOsakaAtTime15k
+    # Pre-EIP-8037: state_gas helpers are 0, so any lift is 0.
+    assert Cancun.oog_budget_lift(sstores_before_oog=1) == 0
+    assert Cancun.oog_budget_lift(creates_before_oog=1) == 0
+    assert (
+        Cancun.oog_budget_lift(
+            sstores_before_oog=3, creates_before_oog=2, deploy_code_size=64
+        )
+        == 0
+    )
+    # Amsterdam: lift composes the three state-gas helpers.
+    sstore = Opcodes.SSTORE(new_value=1).state_cost(Amsterdam)
+    create = Amsterdam.create_state_gas()
+    code_64 = Amsterdam.code_deposit_state_gas(code_size=64)
+    assert Amsterdam.oog_budget_lift() == 0
+    assert Amsterdam.oog_budget_lift(sstores_before_oog=1) == sstore
+    assert Amsterdam.oog_budget_lift(creates_before_oog=1) == create
+    assert Amsterdam.oog_budget_lift(deploy_code_size=64) == code_64
+    assert (
+        Amsterdam.oog_budget_lift(
+            sstores_before_oog=3,
+            creates_before_oog=2,
+            deploy_code_size=64,
+        )
+        == 3 * sstore + 2 * create + code_64
+    )

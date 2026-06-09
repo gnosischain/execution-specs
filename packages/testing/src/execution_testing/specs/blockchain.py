@@ -882,9 +882,13 @@ class BlockchainTest(BaseTest):
                     exclude_none=True,
                     exclude={"blob_gas_used", "slot_number"},
                 )
+                | env.model_dump(
+                    exclude_none=True,
+                    exclude={"blob_gas_used", "slot_number"},
+                )
             ),
             blob_gas_used=blob_gas_used,
-            transactions_root=Transaction.list_root(txs),
+            transactions_trie=Transaction.list_root(txs),
             extra_data=(
                 block.extra_data if block.extra_data is not None else b""
             ),

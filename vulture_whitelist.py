@@ -24,6 +24,9 @@ from ethereum_spec_tools.evm_tools.t8n.evm_trace.eip3155 import (
     FinalTrace,
     Trace,
 )
+from ethereum_spec_tools.lint.lints.final_decorator import (
+    FinalDecoratorHygiene,
+)
 from ethereum_spec_tools.lint.lints.glacier_forks_hygiene import (
     GlacierForksHygiene,
 )
@@ -125,7 +128,12 @@ Trace.memSize
 Trace.returnData
 Trace.refund
 Trace.opName
+Trace.stateGas
+Trace.stateGasCost
 FinalTrace.gasUsed
+
+# src/ethereum_spec_tools/lint/lints/final_decorator.py
+FinalDecoratorHygiene
 
 # src/ethereum_spec_tools/lint/lints/uint_len.py
 UintLenHygiene

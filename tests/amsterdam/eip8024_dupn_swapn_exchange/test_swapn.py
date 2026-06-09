@@ -10,12 +10,15 @@ from execution_testing import (
     Account,
     Alloc,
     Bytecode,
+    EIPChecklist,
+    Fork,
+    Header,
     Op,
     StateTestFiller,
     Transaction,
 )
 
-from .spec import decode_single, ref_spec_8024
+from .spec import Spec, decode_single, ref_spec_8024
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_8024.git_path
 REFERENCE_SPEC_VERSION = ref_spec_8024.version
@@ -142,6 +145,7 @@ def test_swapn_valid_immediates(
 def test_swapn_preserves_other_stack_items(
     pre: Alloc,
     state_test: StateTestFiller,
+    fork: Fork,
 ) -> None:
     """Test SWAPN only swaps the specified items, leaving others unchanged."""
     sender = pre.fund_eoa()
@@ -150,6 +154,16 @@ def test_swapn_preserves_other_stack_items(
     # SWAPN with n=17 swaps position 1 with position 18, so need 18 items
     stack_index = 17
     stack_height = stack_index + 1  # Need 18 items
+
+    # Compute expected storage values (post-swap stack reads).
+    expected_storage: dict = {}
+    for i in range(stack_height):
+        if i == 0:
+            expected_storage[i] = 0x1000  # Was at bottom, now at top
+        elif i == stack_height - 1:
+            expected_storage[i] = 0x1011  # Was at top, now at bottom
+        else:
+            expected_storage[i] = 0x1000 + (stack_height - 1 - i)
 
     # Create a stack with 18 distinct values
     code = Bytecode()
@@ -160,31 +174,39 @@ def test_swapn_preserves_other_stack_items(
     # Pass stack index directly - encoder will handle encoding
     code += Op.SWAPN[stack_index]
 
-    # Store all values to verify only the swapped ones changed
+    # Store all values; metadata pins each slot's 0->non-zero
+    # transition so `code.gas_cost(fork)` accounts for SSTORE state
+    # gas under EIP-8037.
     for i in range(stack_height):
-        code += Op.PUSH1(i) + Op.SSTORE
+        code += Op.PUSH1(i) + Op.SSTORE.with_metadata(
+            key_warm=False,
+            original_value=0,
+            current_value=0,
+            new_value=expected_storage[i],
+        )
 
     code += Op.STOP
 
     contract_address = pre.deploy_contract(code=code)
 
-    tx = Transaction(to=contract_address, sender=sender, gas_limit=1_000_000)
+    intrinsic_cost = fork.transaction_intrinsic_cost_calculator()()
+    code_state = code.state_cost(fork)
+    code_regular = code.gas_cost(fork) - code_state
 
-    # After swap: position 1 and position 18 are swapped
-    # Original stack (top to bottom): 0x1011, 0x1010, ..., 0x1001, 0x1000
-    # After SWAPN[0]: 0x1000, 0x1010, ..., 0x1001, 0x1011
-    expected_storage = {}
-    for i in range(stack_height):
-        if i == 0:
-            expected_storage[i] = 0x1000  # Was at bottom, now at top
-        elif i == stack_height - 1:
-            expected_storage[i] = 0x1011  # Was at top, now at bottom
-        else:
-            expected_storage[i] = 0x1000 + (stack_height - 1 - i)
+    tx = Transaction(
+        to=contract_address,
+        sender=sender,
+        gas_limit=intrinsic_cost + code_regular + code_state,
+    )
 
-    post = {contract_address: Account(storage=expected_storage)}
+    expected_gas_used = max(intrinsic_cost + code_regular, code_state)
 
-    state_test(pre=pre, post=post, tx=tx)
+    state_test(
+        pre=pre,
+        post={contract_address: Account(storage=expected_storage)},
+        tx=tx,
+        blockchain_test_header_verify=Header(gas_used=expected_gas_used),
+    )
 
 
 def test_swapn_stack_underflow(
@@ -209,6 +231,99 @@ def test_swapn_stack_underflow(
     tx = Transaction(to=contract_address, sender=sender, gas_limit=1_000_000)
 
     # Transaction should fail, contract storage unchanged
+    post = {contract_address: Account(storage={})}
+
+    state_test(pre=pre, post=post, tx=tx)
+
+
+@EIPChecklist.Opcode.Test.GasUsage.Normal()
+@EIPChecklist.Opcode.Test.GasUsage.OutOfGasExecution()
+@EIPChecklist.Opcode.Test.GasUsage.ExtraGas()
+@pytest.mark.parametrize("gas_cost_delta", [-2, -1, 0, 1, 2])
+def test_swapn_gas_cost_boundary(
+    gas_cost_delta: int,
+    pre: Alloc,
+    fork: Fork,
+    state_test: StateTestFiller,
+) -> None:
+    """
+    Test SWAPN at the gas cost boundary.
+
+    SWAPN is invoked in a callee that receives exactly its execution cost
+    plus `gas_cost_delta`. The caller records the CALL result: a negative
+    delta starves SWAPN of its base gas (3) and the sub-call runs out of
+    gas (result 0); a zero or positive delta succeeds (result 1).
+    """
+    # SWAPN with decoded value n swaps position 1 with position (n+1), so
+    # it needs stack_index + 1 items on the stack.
+    stack_index = Spec.MIN_STACK_INDEX  # 17
+
+    code = Bytecode()
+    for i in range(stack_index + 1):
+        code += Op.PUSH1(i)
+    code += Op.SWAPN[stack_index]
+
+    contract_address = pre.deploy_contract(code=code)
+
+    call_code = Op.SSTORE(
+        0,
+        Op.CALL(
+            gas=code.gas_cost(fork) + gas_cost_delta,
+            address=contract_address,
+        ),
+    )
+    call_address = pre.deploy_contract(
+        code=call_code,
+        storage={0: 0xDEADBEEF},
+    )
+
+    tx = Transaction(to=call_address, sender=pre.fund_eoa(), gas_limit=200_000)
+
+    post = {call_address: Account(storage={0: 0 if gas_cost_delta < 0 else 1})}
+
+    state_test(pre=pre, post=post, tx=tx)
+
+
+@pytest.mark.parametrize(
+    "invalid_immediate",
+    list(range(91, 128)),  # 0x5b to 0x7f (JUMPDEST and PUSH opcodes)
+    ids=lambda x: f"swapn_invalid_imm_0x{x:02x}",
+)
+def test_swapn_invalid_immediate_aborts(
+    invalid_immediate: int,
+    pre: Alloc,
+    state_test: StateTestFiller,
+) -> None:
+    """
+    Test SWAPN with invalid immediate values (90 < x < 128) aborts.
+
+    Per EIP-8024, immediate values in range [91, 127] (0x5b-0x7f) are
+    invalid because they correspond to JUMPDEST (0x5b) and PUSH opcodes
+    (0x60-0x7f). Attempting to execute SWAPN with these immediates should
+    abort.
+    """
+    sender = pre.fund_eoa()
+
+    # Build a stack tall enough for any valid immediate (max decoded index
+    # is 235, SWAPN needs index + 1 items) so the abort is caused by the
+    # invalid immediate, never an underflow.
+    code = Bytecode()
+    for i in range(Spec.MAX_STACK_INDEX + 1):
+        code += Op.PUSH1(i % 256)
+
+    # Attempt SWAPN with invalid immediate - should abort.
+    # Pass as bytes (raw immediate byte for testing invalid ranges).
+    code += Op.SWAPN[invalid_immediate.to_bytes(1, "big")]
+
+    # This should never execute.
+    code += Op.PUSH1(0x42) + Op.PUSH1(0) + Op.SSTORE
+    code += Op.STOP
+
+    contract_address = pre.deploy_contract(code=code)
+
+    tx = Transaction(to=contract_address, sender=sender, gas_limit=10_000_000)
+
+    # Transaction should fail - invalid immediate causes abort.
     post = {contract_address: Account(storage={})}
 
     state_test(pre=pre, post=post, tx=tx)
