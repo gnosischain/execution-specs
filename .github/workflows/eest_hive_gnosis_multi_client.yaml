@@ -52,10 +52,10 @@ jobs:
       fail-fast: false
       matrix:
         client:
-          - reth-gnosis
-          - go-ethereum-gnosis
-          - nethermind-gnosis
-          - erigon-gnosis
+          - reth
+          - go-ethereum
+          - nethermind
+          - erigon
 
     steps:
       - name: Checkout the repository
