@@ -8,9 +8,7 @@ https://eips.ethereum.org/EIPS/eip-6110
 """
 
 from hashlib import sha256
-from typing import List, Mapping
-
-from execution_testing.base_types import Address
+from typing import Mapping
 
 from ....base_fork import BaseFork
 from ....bytecode import load_contract_bytecode
