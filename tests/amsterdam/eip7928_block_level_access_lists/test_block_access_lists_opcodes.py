@@ -359,11 +359,7 @@ def test_bal_account_touch_system_address(
 
     toucher = pre.deploy_contract(code=access_opcode(SYSTEM_ADDRESS) + Op.STOP)
 
-    tx = Transaction(
-        sender=alice,
-        to=toucher,
-        gas_limit=200_000,
-    )
+    tx = Transaction(sender=alice, to=toucher)
 
     block = Block(
         txs=[tx],
@@ -389,7 +385,6 @@ def test_bal_account_touch_system_address(
 def test_bal_selfdestruct_to_system_address_zero_balance(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
 ) -> None:
     """
     Ensure `SYSTEM_ADDRESS` is in BAL when accessed via `SELFDESTRUCT`,
@@ -407,8 +402,6 @@ def test_bal_selfdestruct_to_system_address_zero_balance(
         to=None,  # CREATE
         value=0,  # zero contract balance at SELFDESTRUCT time
         data=init_code,
-        gas_limit=fork.transaction_gas_limit_cap(),
-        gas_price=10,
     )
 
     block = Block(
@@ -1882,11 +1875,7 @@ def test_bal_storage_write_read_same_frame(
     )
     oracle = pre.deploy_contract(code=oracle_code, storage={0x01: 0x99})
 
-    tx = Transaction(
-        sender=alice,
-        to=oracle,
-        gas_limit=1_000_000,
-    )
+    tx = Transaction(sender=alice, to=oracle)
 
     block = Block(
         txs=[tx],
@@ -1975,11 +1964,7 @@ def test_bal_storage_write_read_cross_frame(
 
     oracle = pre.deploy_contract(code=oracle_code, storage={0x01: 0x99})
 
-    tx = Transaction(
-        sender=alice,
-        to=oracle,
-        gas_limit=1_000_000,
-    )
+    tx = Transaction(sender=alice, to=oracle)
 
     block = Block(
         txs=[tx],
@@ -2017,10 +2002,18 @@ def test_bal_storage_write_read_cross_frame(
     )
 
 
+@pytest.mark.parametrize(
+    "sufficient_gas",
+    [
+        pytest.param(False, id="insufficient_gas"),
+        pytest.param(True, id="sufficient_gas"),
+    ],
+)
 def test_bal_create_oog_code_deposit(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
     fork: Fork,
+    sufficient_gas: bool,
 ) -> None:
     """
     Ensure BAL correctly handles CREATE that runs out of gas during code
@@ -2031,30 +2024,46 @@ def test_bal_create_oog_code_deposit(
 
     # create init code that returns a very large contract to force OOG
     deposited_len = 10_000
-    initcode = Op.RETURN(0, deposited_len)
-
-    factory = pre.deploy_contract(
-        code=Op.MSTORE(0, Op.PUSH32(bytes(initcode)))
-        + Op.SSTORE(
-            1, Op.CREATE(offset=32 - len(initcode), size=len(initcode))
-        )
-        + Op.STOP,
-        storage={1: 0xDEADBEEF},
+    initcode = Op.RETURN(
+        0,
+        deposited_len,
+        old_memory_size=0,
+        new_memory_size=deposited_len,
+        code_deposit_size=deposited_len,
     )
+
+    create_code = Op.MSTORE(
+        0,
+        Op.PUSH32(bytes(initcode)),
+        new_memory_size=len(initcode),
+    ) + Op.CREATE(
+        offset=32 - len(initcode),
+        size=len(initcode),
+        init_code_size=len(initcode),
+    )
+    return_code = Op.PUSH1[0] + Op.MSTORE + Op.RETURN(0, 32)
+    factory_code = create_code + return_code
+
+    factory = pre.deploy_contract(code=factory_code)
 
     contract_address = compute_create_address(address=factory, nonce=1)
 
-    intrinsic_gas_calculator = fork.transaction_intrinsic_cost_calculator()
-    intrinsic_gas = intrinsic_gas_calculator(
-        calldata=b"",
-        contract_creation=False,
-        access_list=[],
+    initcode_cost = initcode.gas_cost(fork)
+    gas = (initcode_cost * 64 // 63) + create_code.gas_cost(fork)
+    if not sufficient_gas:
+        gas -= 1
+
+    entry_code = Op.SSTORE(
+        0, Op.CALL(gas=gas, address=factory, ret_size=32)
+    ) + Op.SSTORE(1, Op.MLOAD(0))
+    entry = pre.deploy_contract(
+        entry_code, storage={0: 0xDEADBEEF, 1: 0xDEADBEEF}
     )
 
     tx = Transaction(
         sender=alice,
-        to=factory,
-        gas_limit=intrinsic_gas + 500_000,  # insufficient for deposit
+        to=entry,
+        gas_limit=fork.transaction_gas_limit_cap(),  # No state reservoir
     )
 
     # BAL expectations:
@@ -2062,23 +2071,56 @@ def test_bal_create_oog_code_deposit(
     # - Factory: nonce change (CREATE increments factory nonce)
     # - Contract address: empty changes (read during collision check,
     #   nonce/code changes rolled back on OOG)
+    if sufficient_gas:
+        entry_storage_changes = [
+            BalStorageSlot(
+                slot=0,
+                slot_changes=[
+                    BalStorageChange(block_access_index=1, post_value=1),
+                ],
+            ),
+            BalStorageSlot(
+                slot=1,
+                slot_changes=[
+                    # SSTORE saves address (CREATE succeeded)
+                    BalStorageChange(
+                        block_access_index=1, post_value=contract_address
+                    ),
+                ],
+            ),
+        ]
+    else:
+        entry_storage_changes = [
+            BalStorageSlot(
+                slot=0,
+                slot_changes=[
+                    BalStorageChange(block_access_index=1, post_value=1),
+                ],
+            ),
+            BalStorageSlot(
+                slot=1,
+                slot_changes=[
+                    # SSTORE saves 0 (CREATE failed)
+                    BalStorageChange(block_access_index=1, post_value=0),
+                ],
+            ),
+        ]
+
     account_expectations = {
         alice: BalAccountExpectation(
             nonce_changes=[BalNonceChange(block_access_index=1, post_nonce=1)],
         ),
         factory: BalAccountExpectation(
             nonce_changes=[BalNonceChange(block_access_index=1, post_nonce=2)],
-            storage_changes=[
-                BalStorageSlot(
-                    slot=1,
-                    slot_changes=[
-                        # SSTORE saves 0 (CREATE failed)
-                        BalStorageChange(block_access_index=1, post_value=0),
-                    ],
-                )
-            ],
         ),
-        contract_address: BalAccountExpectation.empty(),
+        entry: BalAccountExpectation(
+            storage_changes=entry_storage_changes,
+        ),
+        contract_address: BalAccountExpectation(
+            nonce_changes=[BalNonceChange(block_access_index=1, post_nonce=1)],
+        )
+        if sufficient_gas
+        else BalAccountExpectation.empty(),
     }
 
     blockchain_test(
@@ -2093,8 +2135,14 @@ def test_bal_create_oog_code_deposit(
         ],
         post={
             alice: Account(nonce=1),
-            factory: Account(nonce=2, storage={1: 0}),
-            contract_address: Account.NONEXISTENT,
+            factory: Account(nonce=2),
+            entry: Account(
+                nonce=1,
+                storage={0: 1, 1: contract_address if sufficient_gas else 0},
+            ),
+            contract_address: Account(nonce=1)
+            if sufficient_gas
+            else Account.NONEXISTENT,
         },
     )
 
@@ -2127,11 +2175,7 @@ def test_bal_sstore_static_context(
         storage={0: 0xDEAD},  # non-zero so STATICCALL result (0) is detectable
     )
 
-    tx = Transaction(
-        sender=alice,
-        to=contract_a,
-        gas_limit=2_000_000,
-    )
+    tx = Transaction(sender=alice, to=contract_a)
 
     blockchain_test(
         pre=pre,
@@ -2212,10 +2256,7 @@ def blockchain_test_under_static_call(
     )
 
     tx = Transaction(
-        sender=alice,
-        to=static_caller,
-        gas_limit=2_000_000,
-        access_list=tx_access_list,
+        sender=alice, to=static_caller, access_list=tx_access_list
     )
 
     # Inner call fails (returns 0) when forbidden opcodes are tested
@@ -2495,11 +2536,7 @@ def test_bal_create_contract_init_revert(
 
     created_address = compute_create_address(address=factory, nonce=1)
 
-    tx = Transaction(
-        sender=alice,
-        to=caller,
-        gas_limit=500_000,
-    )
+    tx = Transaction(sender=alice, to=caller)
 
     blockchain_test(
         pre=pre,
@@ -2556,6 +2593,7 @@ def test_bal_create_contract_init_revert(
 def test_bal_call_revert_insufficient_funds(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
+    fork: Fork,
     call_opcode: Op,
     delegated: bool,
     target_is_warm: bool,
@@ -2567,12 +2605,10 @@ def test_bal_call_revert_insufficient_funds(
 
     Caller (balance=100): SLOAD(0x01) → call_opcode(target, value=1000)
     → SSTORE(0x02, result). The call fails because 1000 > 100. The
-    failure happens after delegation resolution. However, the delegation
-    target's account has not been read yet.
-    So when the target is a 7702-delegated EOA, the target itself appears in
-    the BAL since it is already read. The delegation target however,
-    does not appear in the BAL, since it does not need to be read
-    for verifying sufficient balance.
+    failure happens after delegation resolution. Under EIP-8037 the
+    call family reads the delegation target's code before the balance
+    check fails, so both the target and the delegation target appear in
+    the BAL. Pre-8037 forks defer that read, so only the target appears.
 
     Access-list warming does NOT add to BAL on its own — only EVM
     access does — so the BAL is identical across warm/cold variants.
@@ -2616,12 +2652,7 @@ def test_bal_call_revert_insufficient_funds(
             AccessList(address=delegation_target, storage_keys=[])
         )
 
-    tx = Transaction(
-        sender=alice,
-        to=caller,
-        gas_limit=1_000_000,
-        access_list=access_list,
-    )
+    tx = Transaction(sender=alice, to=caller, access_list=access_list)
 
     account_expectations: Dict[Address, BalAccountExpectation | None] = {
         alice: BalAccountExpectation(
@@ -2644,10 +2675,17 @@ def test_bal_call_revert_insufficient_funds(
 
     if delegated:
         assert delegation_target is not None
-        # Delegation target must NOT appear in the BAL — get_account
-        # for code_address only runs inside generic_call, which is
-        # never invoked when the balance check fails.
-        account_expectations[delegation_target] = None
+        # Under EIP-8037 the call family reads the delegation target's
+        # code before the balance check fails, so it appears in the
+        # BAL. Pre-8037 forks defer that read and it stays out.
+        # TODO: drop this fork split once #2473 (defer get_code into
+        # generic_call) is consolidated into amsterdam.
+        if fork.is_eip_enabled(8037):
+            account_expectations[delegation_target] = (
+                BalAccountExpectation.empty()
+            )
+        else:
+            account_expectations[delegation_target] = None
 
     block = Block(
         txs=[tx],
@@ -2701,8 +2739,7 @@ def test_bal_create_selfdestruct_to_self_with_call(
     # 2. Writes 0x42 to own slot 0x01
     # 3. Selfdestructs to self
     initcode_runtime = (
-        # CALL(gas, Oracle, value=0, ...)
-        Op.CALL(100_000, oracle, 0, 0, 0, 0, 0)
+        Op.CALL(address=oracle)
         + Op.POP
         # Write to own storage slot 0x01
         + Op.SSTORE(0x01, 0x42)
@@ -2763,11 +2800,7 @@ def test_bal_create_selfdestruct_to_self_with_call(
         opcode=Op.CREATE2,
     )
 
-    tx = Transaction(
-        sender=alice,
-        to=factory,
-        gas_limit=1_000_000,
-    )
+    tx = Transaction(sender=alice, to=factory)
 
     block = Block(
         txs=[tx],
@@ -2830,122 +2863,190 @@ def test_bal_create_selfdestruct_to_self_with_call(
     )
 
 
+@pytest.mark.with_all_create_opcodes
+@pytest.mark.parametrize(
+    "modification",
+    ["collision_only", "then_nonce_change", "then_storage_change"],
+)
 @pytest.mark.pre_alloc_mutable()
-def test_bal_create2_collision(
+def test_bal_create_collision(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
+    fork: Fork,
+    create_opcode: Op,
+    modification: str,
 ) -> None:
     """
-    Test BAL with CREATE2 collision against pre-existing contract.
-
-    Pre-existing contract has code=STOP, nonce=1.
-    Factory (nonce=1, slot[0]=0xDEAD) executes CREATE2 targeting it.
-
-    Expected BAL:
-    - Factory: nonce_changes (1→2), storage_changes slot 0 (0xDEAD→0)
-    - Collision address: empty (accessed during collision check)
-    - Collision address MUST NOT have nonce_changes or code_changes
+    BAL with CREATE/CREATE2 collision against pre-existing contract X,
+    optionally followed by a tx that modifies X via call (closes #2914
+    nonce/storage axes). Balance axis is already covered by the suite's
+    existing collision-then-value-transfer tests. The `code_changes`
+    axis isn't reachable in forward order — see
+    `test_bal_create2_deploy_then_collision`.
     """
     alice = pre.fund_eoa()
+    bob = pre.fund_eoa()
 
-    # Init code that deploys simple STOP contract
-    init_code = Initcode(deploy_code=Op.STOP)
+    # Storage-touching init: a client that wrongly runs init on the
+    # collision leaks a slot-0 access into X's BAL.
+    init_code = Initcode(
+        deploy_code=Op.STOP,
+        initcode_prefix=Op.SSTORE(0, Op.ADD(Op.SLOAD(0), 1)),
+    )
     init_code_bytes = bytes(init_code)
 
-    # Factory code: CREATE2 and store result in slot 0
     factory_code = (
-        # Push init code to memory
         Op.MSTORE(0, Op.PUSH32(init_code_bytes))
-        # SSTORE(0, CREATE2(...)) - stores CREATE2 result in slot 0
         + Op.SSTORE(
             0x00,
-            Op.CREATE2(
+            create_opcode(
                 value=0,
                 offset=32 - len(init_code_bytes),
                 size=len(init_code_bytes),
-                salt=0,
             ),
         )
         + Op.STOP
     )
-
-    # Deploy factory - it starts with nonce=1 by default
     factory = pre.deploy_contract(
         code=factory_code,
-        storage={0x00: 0xDEAD},  # Initial value to prove SSTORE works
+        storage={0x00: 0xDEAD},
     )
 
-    # Calculate the CREATE2 target address
     collision_address = compute_create_address(
         address=factory,
         nonce=1,
         salt=0,
         initcode=init_code_bytes,
-        opcode=Op.CREATE2,
+        opcode=create_opcode,
     )
 
-    # Set up the collision by pre-populating the target address
-    # This contract has code (STOP) and nonce=1, causing collision
-    pre[collision_address] = Account(
-        code=Op.STOP,
-        nonce=1,
-    )
+    if modification == "collision_only":
+        x_code: Bytecode = Op.STOP
+    elif modification == "then_nonce_change":
+        inner_init = Initcode(deploy_code=Op.STOP)
+        x_code = (
+            Op.MSTORE(0, Op.PUSH32(bytes(inner_init)))
+            + Op.CREATE(0, 32 - len(inner_init), len(inner_init))
+            + Op.STOP
+        )
+    elif modification == "then_storage_change":
+        x_code = Op.SSTORE(0x01, 0xCAFE) + Op.STOP
+    else:
+        raise ValueError(f"unknown modification: {modification}")
 
-    tx = Transaction(
-        sender=alice,
-        to=factory,
-        gas_limit=1_000_000,
-    )
+    pre[collision_address] = Account(code=x_code, nonce=1)
 
-    block = Block(
-        txs=[tx],
-        expected_block_access_list=BlockAccessListExpectation(
-            account_expectations={
-                alice: BalAccountExpectation(
-                    nonce_changes=[
-                        BalNonceChange(block_access_index=1, post_nonce=1)
+    tx_gas_limit = fork.transaction_gas_limit_cap()
+    txs = [Transaction(sender=alice, to=factory, gas_limit=tx_gas_limit)]
+
+    account_expectations: dict = {
+        alice: BalAccountExpectation(
+            nonce_changes=[BalNonceChange(block_access_index=1, post_nonce=1)],
+        ),
+        # Factory's nonce bumps even on failed CREATE/CREATE2; slot 0
+        # records the failure return value (0).
+        factory: BalAccountExpectation(
+            nonce_changes=[BalNonceChange(block_access_index=1, post_nonce=2)],
+            storage_changes=[
+                BalStorageSlot(
+                    slot=0x00,
+                    slot_changes=[
+                        BalStorageChange(block_access_index=1, post_value=0)
                     ],
-                ),
-                factory: BalAccountExpectation(
-                    # Nonce incremented 1→2 even on failed CREATE2
-                    nonce_changes=[
-                        BalNonceChange(block_access_index=1, post_nonce=2)
-                    ],
-                    # Storage changes: slot 0 = 0xDEAD → 0 (CREATE2 returned 0)
-                    storage_changes=[
-                        BalStorageSlot(
-                            slot=0x00,
-                            slot_changes=[
-                                BalStorageChange(
-                                    block_access_index=1, post_value=0
-                                )
-                            ],
+                )
+            ],
+        ),
+    }
+
+    post: dict = {
+        alice: Account(nonce=1),
+        factory: Account(nonce=2, storage={0x00: 0}),
+    }
+
+    if modification == "collision_only":
+        account_expectations[collision_address] = BalAccountExpectation.empty()
+        post[collision_address] = Account(
+            code=x_code, nonce=1, balance=0, storage={}
+        )
+    elif modification == "then_nonce_change":
+        txs.append(
+            Transaction(
+                sender=bob, to=collision_address, gas_limit=tx_gas_limit
+            )
+        )
+        account_expectations[bob] = BalAccountExpectation(
+            nonce_changes=[BalNonceChange(block_access_index=2, post_nonce=1)],
+        )
+        # Strict: only the inner-CREATE nonce bump appears; no spurious
+        # code/storage/balance entries from the index-1 collision touch.
+        account_expectations[collision_address] = BalAccountExpectation(
+            nonce_changes=[BalNonceChange(block_access_index=2, post_nonce=2)],
+            balance_changes=[],
+            code_changes=[],
+            storage_changes=[],
+            storage_reads=[],
+        )
+        # Inner CREATE deploys at addr(X, 1).
+        inner_created = compute_create_address(
+            address=collision_address, nonce=1
+        )
+        account_expectations[inner_created] = BalAccountExpectation(
+            nonce_changes=[BalNonceChange(block_access_index=2, post_nonce=1)],
+            code_changes=[
+                BalCodeChange(block_access_index=2, new_code=bytes(Op.STOP))
+            ],
+            balance_changes=[],
+            storage_changes=[],
+            storage_reads=[],
+        )
+        post[bob] = Account(nonce=1)
+        post[collision_address] = Account(
+            code=x_code, nonce=2, balance=0, storage={}
+        )
+        post[inner_created] = Account(
+            nonce=1, code=bytes(Op.STOP), balance=0, storage={}
+        )
+    elif modification == "then_storage_change":
+        txs.append(
+            Transaction(
+                sender=bob, to=collision_address, gas_limit=tx_gas_limit
+            )
+        )
+        account_expectations[bob] = BalAccountExpectation(
+            nonce_changes=[BalNonceChange(block_access_index=2, post_nonce=1)],
+        )
+        # Strict: only the SSTORE slot appears; no spurious other entries.
+        account_expectations[collision_address] = BalAccountExpectation(
+            storage_changes=[
+                BalStorageSlot(
+                    slot=0x01,
+                    slot_changes=[
+                        BalStorageChange(
+                            block_access_index=2, post_value=0xCAFE
                         )
                     ],
-                ),
-                # Collision address: empty (accessed but no state changes)
-                # Explicitly verify ALL fields are empty
-                collision_address: BalAccountExpectation(
-                    nonce_changes=[],  # MUST NOT have nonce changes
-                    balance_changes=[],  # MUST NOT have balance changes
-                    code_changes=[],  # MUST NOT have code changes
-                    storage_changes=[],  # MUST NOT have storage changes
-                    storage_reads=[],  # MUST NOT have storage reads
-                ),
-            }
+                )
+            ],
+            nonce_changes=[],
+            balance_changes=[],
+            code_changes=[],
+            storage_reads=[],
+        )
+        post[bob] = Account(nonce=1)
+        post[collision_address] = Account(
+            code=x_code, nonce=1, balance=0, storage={0x01: 0xCAFE}
+        )
+    else:
+        raise ValueError(f"unknown modification: {modification}")
+
+    block = Block(
+        txs=txs,
+        expected_block_access_list=BlockAccessListExpectation(
+            account_expectations=account_expectations,
         ),
     )
 
-    blockchain_test(
-        pre=pre,
-        blocks=[block],
-        post={
-            alice: Account(nonce=1),
-            factory: Account(nonce=2, storage={0x00: 0}),
-            # Collision address unchanged - contract still exists
-            collision_address: Account(code=bytes(Op.STOP), nonce=1),
-        },
-    )
+    blockchain_test(pre=pre, blocks=[block], post=post)
 
 
 def test_bal_transient_storage_not_tracked(
@@ -2977,11 +3078,7 @@ def test_bal_transient_storage_not_tracked(
 
     contract = pre.deploy_contract(code=contract_code)
 
-    tx = Transaction(
-        sender=alice,
-        to=contract,
-        gas_limit=1_000_000,
-    )
+    tx = Transaction(sender=alice, to=contract)
 
     block = Block(
         txs=[tx],
@@ -3018,6 +3115,136 @@ def test_bal_transient_storage_not_tracked(
         post={
             alice: Account(nonce=1),
             contract: Account(storage={0x02: 0x42}),
+        },
+    )
+
+
+def test_bal_create2_deploy_then_collision(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    fork: Fork,
+) -> None:
+    """
+    Reverse-order companion to `test_bal_create_collision`: tx1 deploys X
+    via CREATE2, tx2 retries the same CREATE2 → collision. Covers the
+    `code_changes` axis of #2914 (forward order would need 7702 +
+    signable EOA at a deterministic CREATE address, infeasible).
+
+    Init increments X's slot 0, so post-state slot 0 == 1 proves it ran
+    once (tx1); the tx2 collision must not re-run it (else a demoted
+    read leaks into X's `storage_reads`).
+
+    CREATE2-only: CREATE auto-increments factory.nonce between txs, so
+    the second attempt targets a different address.
+    """
+    alice = pre.fund_eoa()
+
+    init_code = Initcode(
+        deploy_code=Op.STOP,
+        initcode_prefix=Op.SSTORE(0, Op.ADD(Op.SLOAD(0), 1)),
+    )
+    init_code_bytes = bytes(init_code)
+
+    factory_code = (
+        Op.MSTORE(0, Op.PUSH32(init_code_bytes))
+        + Op.SSTORE(
+            0x00,
+            Op.CREATE2(
+                value=0,
+                offset=32 - len(init_code_bytes),
+                size=len(init_code_bytes),
+                salt=0,
+            ),
+        )
+        + Op.STOP
+    )
+    factory = pre.deploy_contract(
+        code=factory_code,
+        storage={0x00: 0xDEAD},
+    )
+
+    target = compute_create_address(
+        address=factory,
+        salt=0,
+        initcode=init_code_bytes,
+        opcode=Op.CREATE2,
+    )
+
+    tx_gas_limit = fork.transaction_gas_limit_cap()
+    tx_deploy = Transaction(sender=alice, to=factory, gas_limit=tx_gas_limit)
+    tx_collide = Transaction(sender=alice, to=factory, gas_limit=tx_gas_limit)
+
+    block = Block(
+        txs=[tx_deploy, tx_collide],
+        expected_block_access_list=BlockAccessListExpectation(
+            account_expectations={
+                alice: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=1),
+                        BalNonceChange(block_access_index=2, post_nonce=2),
+                    ],
+                ),
+                factory: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=2),
+                        BalNonceChange(block_access_index=2, post_nonce=3),
+                    ],
+                    storage_changes=[
+                        BalStorageSlot(
+                            slot=0x00,
+                            slot_changes=[
+                                BalStorageChange(
+                                    block_access_index=1, post_value=target
+                                ),
+                                BalStorageChange(
+                                    block_access_index=2, post_value=0
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+                # Index-1 deployment entries must survive the
+                # index-2 collision touch. Init ran once (tx1), writing
+                # slot 0 = 1. The tx2 collision must add nothing — in
+                # particular `storage_reads` MUST stay empty (a client
+                # that runs init then reverts on collision would leak
+                # slot 0 here as a demoted read).
+                target: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=1),
+                    ],
+                    code_changes=[
+                        BalCodeChange(
+                            block_access_index=1, new_code=bytes(Op.STOP)
+                        ),
+                    ],
+                    storage_changes=[
+                        BalStorageSlot(
+                            slot=0x00,
+                            slot_changes=[
+                                BalStorageChange(
+                                    block_access_index=1, post_value=1
+                                )
+                            ],
+                        )
+                    ],
+                    balance_changes=[],
+                    storage_reads=[],
+                ),
+            }
+        ),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[block],
+        post={
+            alice: Account(nonce=2),
+            factory: Account(nonce=3, storage={0x00: 0}),
+            # slot 0 == 1 proves init ran exactly once (tx2 collided).
+            target: Account(
+                nonce=1, code=bytes(Op.STOP), balance=0, storage={0x00: 1}
+            ),
         },
     )
 
@@ -3061,7 +3288,16 @@ def test_bal_create_and_oog(
         init_code_size=len(init_code_bytes),
     )
     factory_sstore = Op.SSTORE(0x00, 1)
-    factory_code = factory_mstore + factory_create + factory_sstore
+    oog_sink_memory_size = 10000 * 32
+    factory_oog_sink = Op.MSTORE(
+        oog_sink_memory_size - 32,
+        0,
+        old_memory_size=32,
+        new_memory_size=oog_sink_memory_size,
+    )
+    factory_code = (
+        factory_mstore + factory_create + factory_oog_sink + factory_sstore
+    )
 
     factory = pre.deploy_contract(
         code=factory_code,
@@ -3086,10 +3322,11 @@ def test_bal_create_and_oog(
         gas_limit = intrinsic_cost + create_static_cost - 1
     elif oog_boundary == OutOfGasBoundary.OOG_AFTER_TARGET_ACCESS:
         # Exactly the CREATE static cost — address accessed, child
-        # frame gets 0 gas, CREATE fails, parent OOGs at next opcode
+        # frame gets 0 gas, CREATE fails, sink forces OOG after access
         gas_limit = intrinsic_cost + create_static_cost
     else:
-        # Full success: static cost + child frame (63/64 rule) + SSTORE
+        # Full success: static cost + child frame (63/64 rule) +
+        # SSTORE + gas sink.
         child_gas = init_code.gas_cost(fork)
         remaining_needed = (child_gas * 64 + 62) // 63
         gas_limit = (
@@ -3097,6 +3334,7 @@ def test_bal_create_and_oog(
             + create_static_cost
             + remaining_needed
             + factory_sstore.gas_cost(fork)
+            + factory_oog_sink.gas_cost(fork)
         )
 
     tx = Transaction(
@@ -3248,11 +3486,7 @@ def test_bal_create_early_failure(
         opcode=create_opcode,
     )
 
-    tx = Transaction(
-        sender=alice,
-        to=factory,
-        gas_limit=1_000_000,
-    )
+    tx = Transaction(sender=alice, to=factory)
 
     block = Block(
         txs=[tx],
@@ -3291,6 +3525,147 @@ def test_bal_create_early_failure(
             ),
             would_be_contract_address: Account.NONEXISTENT,
         },
+    )
+
+
+@pytest.mark.with_all_create_opcodes
+@pytest.mark.parametrize("creation_outcome", ["pre_frame_failure", "success"])
+def test_bal_create_existing_target(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    create_opcode: Op,
+    creation_outcome: str,
+) -> None:
+    """
+    Test BAL for CREATE/CREATE2 into a pre-existing balance-only target.
+
+    Under EIP-8037 the account-creation charge is unconditional, so the
+    target's existence is never read to decide it. On a pre-frame failure
+    (insufficient endowment) the pre-existing target is never accessed and
+    stays absent from the BAL; on success it appears with the deployed
+    nonce and code.
+    """
+    alice = pre.fund_eoa()
+
+    init_code = Initcode(deploy_code=Op.STOP)
+    init_code_bytes = bytes(init_code)
+
+    if creation_outcome == "pre_frame_failure":
+        factory_balance, endowment = 50, 100
+    else:
+        factory_balance, endowment = 0, 0
+
+    factory_code = (
+        Op.MSTORE(0, Op.PUSH32(init_code_bytes))
+        + Op.SSTORE(
+            0x00,
+            Op.GT(
+                create_opcode(
+                    value=endowment,
+                    offset=32 - len(init_code_bytes),
+                    size=len(init_code_bytes),
+                ),
+                0,
+            ),
+        )
+        + Op.STOP
+    )
+
+    factory = pre.deploy_contract(
+        code=factory_code,
+        balance=factory_balance,
+        storage={0x00: 0xDEAD},
+    )
+
+    target = compute_create_address(
+        address=factory,
+        nonce=1,
+        salt=0,
+        initcode=init_code_bytes,
+        opcode=create_opcode,
+    )
+    # Pre-existing balance-only leaf (balance, no code, zero nonce).
+    pre.fund_address(target, amount=1)
+
+    tx = Transaction(sender=alice, to=factory)
+
+    if creation_outcome == "pre_frame_failure":
+        expected_bal = BlockAccessListExpectation(
+            account_expectations={
+                alice: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=1)
+                    ],
+                ),
+                factory: BalAccountExpectation(
+                    nonce_changes=[],
+                    storage_changes=[
+                        BalStorageSlot(
+                            slot=0x00,
+                            slot_changes=[
+                                BalStorageChange(
+                                    block_access_index=1, post_value=0
+                                )
+                            ],
+                        )
+                    ],
+                ),
+                # Never accessed despite pre-existing: absent from the BAL.
+                target: None,
+            }
+        )
+        post = {
+            alice: Account(nonce=1),
+            factory: Account(
+                nonce=1, balance=factory_balance, storage={0x00: 0}
+            ),
+            target: Account(balance=1),
+        }
+    else:
+        expected_bal = BlockAccessListExpectation(
+            account_expectations={
+                alice: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=1)
+                    ],
+                ),
+                factory: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=2)
+                    ],
+                    storage_changes=[
+                        BalStorageSlot(
+                            slot=0x00,
+                            slot_changes=[
+                                BalStorageChange(
+                                    block_access_index=1, post_value=1
+                                )
+                            ],
+                        )
+                    ],
+                ),
+                target: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=1)
+                    ],
+                    code_changes=[
+                        BalCodeChange(
+                            block_access_index=1, new_code=bytes(Op.STOP)
+                        )
+                    ],
+                ),
+            }
+        )
+        post = {
+            alice: Account(nonce=1),
+            factory: Account(nonce=2, storage={0x00: 1}),
+            target: Account(nonce=1, balance=1, code=Op.STOP),
+        }
+
+    blockchain_test(
+        pre=pre,
+        blocks=[Block(txs=[tx], expected_block_access_list=expected_bal)],
+        post=post,
     )
 
 
@@ -3351,12 +3726,7 @@ def test_bal_create_storage_op_then_selfdestruct_same_tx(
     )
     pre.fund_address(target_a, fund_amount)
 
-    tx = Transaction(
-        sender=alice,
-        to=factory,
-        data=initcode_bytes,
-        gas_limit=1_000_000,
-    )
+    tx = Transaction(sender=alice, to=factory, data=initcode_bytes)
 
     block = Block(
         txs=[tx],
@@ -3456,18 +3826,8 @@ def test_bal_create2_selfdestruct_then_recreate_same_block(
     if pre_balance > 0:
         pre.fund_address(target_a, pre_balance)
 
-    tx1 = Transaction(
-        sender=alice,
-        to=factory,
-        data=initcode_bytes,
-        gas_limit=500_000,
-    )
-    tx2 = Transaction(
-        sender=alice,
-        to=factory,
-        data=initcode_bytes,
-        gas_limit=500_000,
-    )
+    tx1 = Transaction(sender=alice, to=factory, data=initcode_bytes)
+    tx2 = Transaction(sender=alice, to=factory, data=initcode_bytes)
 
     target_a_balance_changes = []
     if pre_balance > 0:
@@ -3523,5 +3883,211 @@ def test_bal_create2_selfdestruct_then_recreate_same_block(
             if pre_balance > 0
             else Account.NONEXISTENT,
             factory: Account(nonce=3, storage={0: target_a, 1: 1}),
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "destruction_successful,oracle_suffix",
+    [
+        pytest.param(True, Op.STOP, id="destruction_succeeds"),
+        pytest.param(False, Op.REVERT(0, 0), id="destruction_reverts"),
+    ],
+)
+@pytest.mark.with_all_create_opcodes
+def test_bal_dirty_account_selfdestruct(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    create_opcode: Op,
+    destruction_successful: bool,
+    oracle_suffix: Bytecode,
+) -> None:
+    """
+    BAL records dirty state changes on an ephemeral contract only when
+    its same-tx SELFDESTRUCT is rolled back by a reverting parent
+    frame.
+
+    The factory deploys the ephemeral with non-zero endowment (balance
+    dirty), initcode SSTOREs and SLOADs own slots (storage dirty),
+    invokes an empty CREATE so the ephemeral's own nonce bumps 1→2
+    (nonce dirty), and returns runtime (code dirty). The factory then
+    CALLs an oracle which CALLs the ephemeral's runtime
+    (SELFDESTRUCTs), and either STOPs or REVERTs.
+
+    - destruction_succeeds: oracle STOPs; per EIP-6780 the same-tx
+      selfdestruct fully removes the ephemeral; per EIP-7928 its BAL
+      entry must contain no balance/nonce/code/storage changes — only
+      `storage_reads` for the demoted slots.
+
+    - destruction_reverts: oracle REVERTs; the SELFDESTRUCT (and the
+      balance transfer to the beneficiary) are rolled back. The
+      ephemeral persists with all four dirtied fields, which BAL must
+      now record.
+    """
+    alice = pre.fund_eoa()
+    beneficiary = pre.nonexistent_account()
+    factory_balance = 1000
+    endowment = 100
+    slot_write = 0x07
+    slot_read = 0x09
+
+    init_code = Initcode(
+        deploy_code=Op.SELFDESTRUCT(beneficiary),
+        initcode_prefix=(
+            Op.SSTORE(slot_write, 0xCAFE)
+            + Op.POP(Op.SLOAD(slot_read))
+            + Op.POP(create_opcode(value=0, offset=0, size=0))
+        ),
+    )
+
+    # Oracle CALLs whatever address it receives as calldata, then
+    # either STOPs (destruction succeeds) or REVERTs (destruction
+    # rolled back). Pre-deployed so its own creation doesn't appear
+    # in the block's BAL.
+    oracle = pre.deploy_contract(
+        code=Op.POP(Op.CALL(Op.GAS, Op.CALLDATALOAD(0), 0, 0, 0, 0, 0))
+        + oracle_suffix,
+    )
+
+    factory_code = (
+        Op.CALLDATACOPY(0, 0, Op.CALLDATASIZE)
+        + Op.SSTORE(
+            0,
+            create_opcode(value=endowment, offset=0, size=Op.CALLDATASIZE),
+        )
+        + Op.MSTORE(0, Op.SLOAD(0))
+        + Op.POP(Op.CALL(Op.GAS, oracle, 0, 0, 32, 0, 0))
+        + Op.STOP
+    )
+    factory = pre.deploy_contract(code=factory_code, balance=factory_balance)
+
+    ephemeral = compute_create_address(
+        address=factory,
+        nonce=1,
+        initcode=init_code,
+        opcode=create_opcode,
+    )
+    zombie = compute_create_address(
+        address=ephemeral,
+        nonce=1,
+        initcode=b"",
+        opcode=create_opcode,
+    )
+
+    expected_ephemeral_post: Account | None
+    expected_beneficiary_post: Account | None
+    if destruction_successful:
+        expected_ephemeral_bal = BalAccountExpectation(
+            balance_changes=[],
+            nonce_changes=[],
+            code_changes=[],
+            storage_changes=[],
+            storage_reads=[slot_write, slot_read],
+        )
+        expected_beneficiary_bal = BalAccountExpectation(
+            balance_changes=[
+                BalBalanceChange(block_access_index=1, post_balance=endowment)
+            ],
+        )
+        expected_ephemeral_post = Account.NONEXISTENT
+        expected_beneficiary_post = Account(balance=endowment)
+    else:
+        expected_ephemeral_bal = BalAccountExpectation(
+            balance_changes=[
+                BalBalanceChange(block_access_index=1, post_balance=endowment)
+            ],
+            nonce_changes=[BalNonceChange(block_access_index=1, post_nonce=2)],
+            code_changes=[
+                BalCodeChange(
+                    block_access_index=1, new_code=init_code.deploy_code
+                )
+            ],
+            storage_changes=[
+                BalStorageSlot(
+                    slot=slot_write,
+                    slot_changes=[
+                        BalStorageChange(
+                            block_access_index=1, post_value=0xCAFE
+                        )
+                    ],
+                )
+            ],
+            storage_reads=[slot_read],
+        )
+        expected_beneficiary_bal = BalAccountExpectation.empty()
+        expected_ephemeral_post = Account(
+            nonce=2,
+            balance=endowment,
+            code=init_code.deploy_code,
+            storage={slot_write: 0xCAFE},
+        )
+        expected_beneficiary_post = Account.NONEXISTENT
+
+    tx = Transaction(
+        sender=alice,
+        to=factory,
+        data=init_code,
+        gas_limit=1_000_000,
+    )
+
+    block = Block(
+        txs=[tx],
+        expected_block_access_list=BlockAccessListExpectation(
+            account_expectations={
+                alice: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=1)
+                    ],
+                ),
+                factory: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=2)
+                    ],
+                    balance_changes=[
+                        BalBalanceChange(
+                            block_access_index=1,
+                            post_balance=factory_balance - endowment,
+                        )
+                    ],
+                    storage_changes=[
+                        BalStorageSlot(
+                            slot=0,
+                            slot_changes=[
+                                BalStorageChange(
+                                    block_access_index=1,
+                                    post_value=ephemeral,
+                                )
+                            ],
+                        )
+                    ],
+                ),
+                ephemeral: expected_ephemeral_bal,
+                # The zombie is ALWAYS crated
+                # since it was deployed inside the factory's frame,
+                # which never reverts.
+                zombie: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=1)
+                    ],
+                ),
+                oracle: BalAccountExpectation.empty(),
+                beneficiary: expected_beneficiary_bal,
+            }
+        ),
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[block],
+        post={
+            alice: Account(nonce=1),
+            beneficiary: expected_beneficiary_post,
+            factory: Account(
+                nonce=2,
+                balance=factory_balance - endowment,
+                storage={0: ephemeral},
+            ),
+            ephemeral: expected_ephemeral_post,
+            zombie: Account(nonce=1),
         },
     )

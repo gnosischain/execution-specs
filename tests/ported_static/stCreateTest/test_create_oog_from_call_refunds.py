@@ -231,7 +231,6 @@ def test_create_oog_from_call_refunds(
         timestamp=1000,
         prev_randao=0x20000,
         base_fee_per_gas=10,
-        gas_limit=4294967296,
     )
 
     pre[sender] = Account(balance=0x3D0900, nonce=1)
@@ -323,32 +322,27 @@ def test_create_oog_from_call_refunds(
     #   sstore(1, 1)
     #   sstore(1, 0)
     #   let initcodeaddr := 0x00000000000000000000000000000000000c0de1
-    #   //let initcodelength := extcodesize(initcodeaddr)
-    #   //extcodecopy(initcodeaddr, 0, 0, initcodelength)
-    #
-    #   // protection from solc version changing init code
-    #   let initcodelength := 15
-    #   mstore(0, 0x6001600055600060005560016000f30000000000000000000000000000000000)  # noqa: E501
-    #
-    #   pop(create2(0, 0, initcodelength, 0))
+    #   let initcodelength := extcodesize(initcodeaddr)
+    #   extcodecopy(initcodeaddr, 0, 0, initcodelength)
+    #   pop(create(0, 0, initcodelength))
     #   return(add(initcodelength, 1), 1)
     # }
-    contract_22 = pre.deploy_contract(  # noqa: F841
+    contract_19 = pre.deploy_contract(  # noqa: F841
         code=Op.PUSH1[0x1]
         + Op.PUSH1[0x0]
         + Op.SSTORE(key=Op.DUP2, value=Op.DUP2)
         + Op.SSTORE(key=Op.DUP3, value=Op.DUP1)
-        + Op.MSTORE(
-            offset=Op.DUP2,
-            value=0x6001600055600060005560016000F30000000000000000000000000000000000,  # noqa: E501
-        )
         + Op.DUP2
         + Op.SWAP1
-        + Op.PUSH1[0xF]
+        + Op.PUSH3[0xC0DE1]
+        + Op.EXTCODESIZE(address=Op.DUP1)
+        + Op.SWAP2
+        + Op.DUP3
+        + Op.SWAP2
+        + Op.DUP2
         + Op.SWAP1
-        + Op.DUP2 * 2
-        + Op.DUP1
-        + Op.POP(Op.CREATE2)
+        + Op.EXTCODECOPY
+        + Op.POP(Op.CREATE(value=Op.DUP1, offset=0x0, size=Op.DUP1))
         + Op.ADD
         + Op.RETURN,
         nonce=0,
@@ -936,7 +930,37 @@ def test_create_oog_from_call_refunds(
         address=Address(0x000000000000000000000000000000000000007A),  # noqa: E501
     )
 
-    expect_entries_: list[dict] = [
+    expect_entries_: list[dict] = []
+    if fork.is_eip_enabled(8037):
+        expect_entries_.append(
+            {
+                "indexes": {
+                    "data": [
+                        1,
+                        2,
+                        4,
+                        5,
+                        7,
+                        8,
+                        10,
+                        11,
+                        13,
+                        14,
+                        16,
+                        17,
+                        19,
+                        20,
+                        22,
+                        23,
+                    ],
+                    "gas": -1,
+                    "value": -1,
+                },
+                "network": [">=Cancun"],
+                "result": {sender: Account(nonce=2)},
+            }
+        )
+    expect_entries_ += [
         {
             "indexes": {"data": [0, 9, 3, 6], "gas": -1, "value": -1},
             "network": [">=Cancun"],

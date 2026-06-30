@@ -362,9 +362,12 @@ def generate_system_contract_error_test(
                     + gas_costs.COLD_STORAGE_ACCESS
                     + (gas_costs.VERY_LOW * 2)
                 )
+                effective_max_gas = max(
+                    max_gas_limit, fork.system_call_gas_limit()
+                )
                 modified_system_contract_code += sum(
                     Op.SSTORE(i, 1)
-                    for i in range(max_gas_limit // gas_used_per_storage)
+                    for i in range(effective_max_gas // gas_used_per_storage)
                 )
                 # If the gas limit is not divisible by the gas used per
                 # storage, we need to add some NO-OP (JUMPDEST) to the code
@@ -376,7 +379,7 @@ def generate_system_contract_error_test(
                 )
                 modified_system_contract_code += sum(
                     Op.JUMPDEST
-                    for _ in range(max_gas_limit % gas_used_per_storage)
+                    for _ in range(effective_max_gas % gas_used_per_storage)
                 )
 
                 if test_type == SystemContractTestType.OUT_OF_GAS_ERROR:
@@ -483,9 +486,9 @@ def gas_test(
     if cold_gas is None:
         cold_gas = subject_code.gas_cost(fork)
 
-    if cold_gas <= 0:
+    if cold_gas < 0:
         raise ValueError(
-            f"Target gas allocations (cold_gas) must be > 0, got {cold_gas}"
+            f"Target gas allocations (cold_gas) must be >= 0, got {cold_gas}"
         )
     if warm_gas is None:
         if subject_code_warm is not None:
@@ -503,18 +506,12 @@ def gas_test(
         balance=subject_balance,
         address=subject_address,
     )
-    # 2 times GAS, POP, CALL, 6 times PUSH1 - instructions charged for at every
-    # gas run
-    gas_costs = fork.gas_costs()
-    opcode_gas_cost = gas_costs.BASE
-    opcode_pop_cost = gas_costs.BASE
-    opcode_push_cost = gas_costs.VERY_LOW
+
+    # Auxiliary instructions charged for at every gas run
     gas_single_gas_run = (
-        2 * opcode_gas_cost
-        + opcode_pop_cost
-        + gas_costs.WARM_ACCESS
-        + 6 * opcode_push_cost
-    )
+        Op.GAS + Op.CALL(gas=Op.GAS, address_warm=True) + Op.POP
+    ).gas_cost(fork=fork)
+
     address_legacy_harness = pre.deploy_contract(
         code=(
             # warm subject and baseline without executing
@@ -624,8 +621,6 @@ def gas_test(
             LEGACY_CALL_SUCCESS
         )
 
-    if tx_gas is None:
-        tx_gas = gas_single_gas_run + cold_gas + 500_000
     tx = Transaction(
         to=address_legacy_harness, gas_limit=tx_gas, sender=sender
     )

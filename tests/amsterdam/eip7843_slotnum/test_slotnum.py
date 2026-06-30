@@ -48,7 +48,6 @@ def test_slotnum_value(
 
     tx = Transaction(
         sender=pre.fund_eoa(),
-        gas_limit=100_000,
         to=code_address,
     )
 
@@ -96,7 +95,6 @@ def test_slotnum_gas_cost(
 
     tx = Transaction(
         sender=pre.fund_eoa(),
-        gas_limit=100_000,
         to=caller_address,
     )
 
@@ -136,7 +134,7 @@ def test_slotnum_distinct_per_block(
     blocks = [
         Block(
             slot_number=slot,
-            txs=[Transaction(sender=sender, to=contract, gas_limit=100_000)],
+            txs=[Transaction(sender=sender, to=contract)],
         )
         for slot in slot_numbers
     ]

@@ -19,7 +19,7 @@ Gnosis diff
 """
 
 from dataclasses import dataclass
-from typing import Final, List, Optional, Tuple
+from typing import Final, List, Optional, Tuple, final
 
 from eth_abi import decode, encode
 from ethereum_rlp import rlp
@@ -55,6 +55,7 @@ from .exceptions import (
     NoBlobDataError,
     PriorityFeeGreaterThanMaxFeeError,
     TransactionTypeContractCreationError,
+    WrongChainIdError,
 )
 from .fork_types import VersionedHash
 from .state_tracker import (
@@ -73,9 +74,11 @@ from .state_tracker import (
 from .transactions import (
     AccessListTransaction,
     BlobTransaction,
+    FeeMarketCapableTransaction,
     FeeMarketTransaction,
     LegacyTransaction,
     Transaction,
+    chain_id,
     decode_transaction,
     encode_transaction,
     get_transaction_hash,
@@ -116,6 +119,7 @@ MAX_BLOB_GAS_PER_BLOCK: Final[U64] = U64(262144)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -464,10 +468,17 @@ def check_transaction(
     if tx_blob_gas_used > blob_gas_available:
         raise BlobGasLimitExceededError("blob gas limit exceeded")
 
-    sender_address = recover_sender(block_env.chain_id, tx)
+    tx_chain_id = chain_id(tx)
+    if tx_chain_id is not None and tx_chain_id != block_env.chain_id:
+        raise WrongChainIdError(
+            expected=block_env.chain_id,
+            actual=tx_chain_id,
+        )
+
+    sender_address = recover_sender(tx)
     sender_account = get_account(tx_state, sender_address)
 
-    if isinstance(tx, (FeeMarketTransaction, BlobTransaction)):
+    if isinstance(tx, FeeMarketCapableTransaction):
         if tx.max_fee_per_gas < tx.max_priority_fee_per_gas:
             raise PriorityFeeGreaterThanMaxFeeError(
                 "priority fee greater than max fee"

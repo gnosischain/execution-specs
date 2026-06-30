@@ -7,7 +7,6 @@ import fnmatch
 import json
 import os
 from contextlib import AbstractContextManager
-from dataclasses import astuple, dataclass
 from typing import Any, Final, TextIO, Type, TypeVar
 
 from ethereum_rlp import rlp
@@ -18,7 +17,11 @@ from ethereum import trace
 from ethereum.exceptions import EthereumException, InvalidBlock
 from ethereum.fork_criteria import ByBlockNumber, ByTimestamp, Unscheduled
 from ethereum.merkle_patricia_trie import copy_trie
-from ethereum_spec_tools.forks import Hardfork, TemporaryHardfork
+from ethereum_spec_tools.forks import (
+    ForkOverrides,
+    Hardfork,
+    TemporaryHardfork,
+)
 
 from ..loaders.fixture_loader import Load
 from ..utils import (
@@ -180,7 +183,7 @@ class ForkCache(AbstractContextManager):
     Stores references to temporary hardforks and cleans them up when exited.
     """
 
-    _cache: Final[dict[tuple[str, _ForkOverrides], TemporaryHardfork]]
+    _cache: Final[dict[tuple[str, ForkOverrides], TemporaryHardfork]]
 
     def __init__(self) -> None:
         self._cache = {}
@@ -207,7 +210,7 @@ class ForkCache(AbstractContextManager):
         Search the cache for a matching hardfork, or create one if it doesn't
         exist.
         """
-        overrides = _ForkOverrides(
+        overrides = ForkOverrides(
             fork_criteria=fork_criteria,
             blob_target_gas_per_block=blob_target_gas_per_block,
             gas_per_blob=gas_per_blob,
@@ -226,19 +229,7 @@ class ForkCache(AbstractContextManager):
         except KeyError:
             pass
 
-        clone = Hardfork.clone(
-            template=template,
-            fork_criteria=overrides.fork_criteria,
-            blob_target_gas_per_block=overrides.blob_target_gas_per_block,
-            gas_per_blob=overrides.gas_per_blob,
-            blob_min_gasprice=overrides.blob_min_gasprice,
-            blob_base_fee_update_fraction=(
-                overrides.blob_base_fee_update_fraction
-            ),
-            max_blob_gas_per_block=overrides.max_blob_gas_per_block,
-            blob_schedule_target=overrides.blob_schedule_target,
-            blob_schedule_max=overrides.blob_schedule_max,
-        )
+        clone = Hardfork.clone(template=template, overrides=overrides)
         self._cache[cache_key] = clone
         return clone
 

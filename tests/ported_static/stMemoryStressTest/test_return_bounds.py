@@ -73,7 +73,6 @@ def test_return_bounds(
         timestamp=1000,
         prev_randao=0x20000,
         base_fee_per_gas=10,
-        gas_limit=9223372036854775807,
     )
 
     # Source: lll
@@ -430,7 +429,7 @@ def test_return_bounds(
     tx_data = [
         Bytes(""),
     ]
-    tx_gas = [150000, 500000, 15000000]
+    tx_gas = [150000, None if fork.is_eip_enabled(8037) else 500000, 15000000]
     tx_value = [1]
 
     tx = Transaction(

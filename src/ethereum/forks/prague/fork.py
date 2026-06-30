@@ -20,7 +20,7 @@ Gnosis diff
 """
 
 from dataclasses import dataclass
-from typing import Final, List, Optional, Tuple
+from typing import Final, List, Optional, Tuple, final
 
 from eth_abi import decode, encode
 from ethereum_rlp import rlp
@@ -57,6 +57,7 @@ from .exceptions import (
     NoBlobDataError,
     PriorityFeeGreaterThanMaxFeeError,
     TransactionTypeContractCreationError,
+    WrongChainIdError,
 )
 from .fork_types import Authorization, VersionedHash
 from .requests import (
@@ -81,10 +82,11 @@ from .state_tracker import (
 )
 from .transactions import (
     BlobTransaction,
-    FeeMarketTransaction,
+    FeeMarketCapableTransaction,
     LegacyTransaction,
     SetCodeTransaction,
     Transaction,
+    chain_id,
     decode_transaction,
     encode_transaction,
     get_transaction_hash,
@@ -139,6 +141,7 @@ HISTORY_STORAGE_ADDRESS = hex_to_address(
 )
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -493,12 +496,17 @@ def check_transaction(
     if tx_blob_gas_used > blob_gas_available:
         raise BlobGasLimitExceededError("blob gas limit exceeded")
 
-    sender_address = recover_sender(block_env.chain_id, tx)
+    tx_chain_id = chain_id(tx)
+    if tx_chain_id is not None and tx_chain_id != block_env.chain_id:
+        raise WrongChainIdError(
+            expected=block_env.chain_id,
+            actual=tx_chain_id,
+        )
+
+    sender_address = recover_sender(tx)
     sender_account = get_account(tx_state, sender_address)
 
-    if isinstance(
-        tx, (FeeMarketTransaction, BlobTransaction, SetCodeTransaction)
-    ):
+    if isinstance(tx, FeeMarketCapableTransaction):
         if tx.max_fee_per_gas < tx.max_priority_fee_per_gas:
             raise PriorityFeeGreaterThanMaxFeeError(
                 "priority fee greater than max fee"
@@ -879,7 +887,7 @@ def process_transaction(
         encode_transaction(tx),
     )
 
-    intrinsic_gas, calldata_floor_gas_cost = validate_transaction(tx)
+    intrinsic = validate_transaction(tx)
 
     (
         sender,
@@ -902,7 +910,7 @@ def process_transaction(
 
     effective_gas_fee = tx.gas * effective_gas_price
 
-    gas = tx.gas - intrinsic_gas
+    gas = tx.gas - intrinsic.regular
     increment_nonce(tx_state, sender)
 
     sender_balance_after_gas_fee = (
@@ -951,7 +959,7 @@ def process_transaction(
     # Transactions with less execution_gas_used than the floor pay at the
     # floor cost.
     tx_gas_used_after_refund = max(
-        tx_gas_used_after_refund, calldata_floor_gas_cost
+        tx_gas_used_after_refund, intrinsic.calldata_floor
     )
 
     tx_gas_left = tx.gas - tx_gas_used_after_refund

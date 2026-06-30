@@ -413,6 +413,14 @@ class NethermindExceptionMapper(ExceptionMapper):
         ),
         TransactionException.NONCE_MISMATCH_TOO_LOW: (r"nonce too low"),
         TransactionException.NONCE_MISMATCH_TOO_HIGH: (r"nonce too high"),
+        TransactionException.INVALID_CHAINID: (
+            r"InvalidTxChainId|Signature is invalid."
+        ),
+        TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS: (
+            r"max fee per gas less than block base fee"
+        ),
+        TransactionException.NONCE_MISMATCH_TOO_LOW: (r"nonce too low"),
+        TransactionException.NONCE_MISMATCH_TOO_HIGH: (r"nonce too high"),
         TransactionException.TYPE_3_TX_WITH_FULL_BLOBS: (
             r"Transaction \d+ is not valid"
         ),

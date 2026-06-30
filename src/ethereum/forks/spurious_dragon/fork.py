@@ -12,7 +12,7 @@ Entry point for the Ethereum specification.
 """
 
 from dataclasses import dataclass
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, final
 
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes32
@@ -38,6 +38,7 @@ from ethereum.state import (
 from . import vm
 from .blocks import Block, Header, Log, Receipt
 from .bloom import logs_bloom
+from .exceptions import WrongChainIdError
 from .state_tracker import (
     BlockState,
     TransactionState,
@@ -53,6 +54,7 @@ from .state_tracker import (
 )
 from .transactions import (
     Transaction,
+    chain_id,
     get_transaction_hash,
     recover_sender,
     validate_transaction,
@@ -66,6 +68,7 @@ MINIMUM_DIFFICULTY = Uint(131072)
 MAX_OMMER_DEPTH = Uint(6)
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -393,7 +396,14 @@ def check_transaction(
     gas_available = block_env.block_gas_limit - block_output.block_gas_used
     if tx.gas > gas_available:
         raise GasUsedExceedsLimitError("gas used exceeds limit")
-    sender_address = recover_sender(block_env.chain_id, tx)
+    tx_chain_id = chain_id(tx)
+    if tx_chain_id is not None and tx_chain_id != block_env.chain_id:
+        raise WrongChainIdError(
+            expected=block_env.chain_id,
+            actual=tx_chain_id,
+        )
+
+    sender_address = recover_sender(tx)
     sender_account = get_account(tx_state, sender_address)
 
     max_gas_fee = tx.gas * tx.gas_price
@@ -676,10 +686,7 @@ def process_transaction(
     transaction_fee = tx_gas_used_after_refund * tx.gas_price
 
     # refund gas
-    sender_balance_after_refund = get_account(tx_state, sender).balance + U256(
-        gas_refund_amount
-    )
-    set_account_balance(tx_state, sender, sender_balance_after_refund)
+    create_ether(tx_state, sender, U256(gas_refund_amount))
 
     # transfer miner fees
     coinbase_balance_after_mining_fee = get_account(

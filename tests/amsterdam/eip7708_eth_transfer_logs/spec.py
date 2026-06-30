@@ -14,11 +14,10 @@ class ReferenceSpec:
 
 
 ref_spec_7708 = ReferenceSpec(
-    "EIPS/eip-7708.md", "43a7f15cd1105f308086bed6a61e3155039271fc"
+    "EIPS/eip-7708.md", "172188d7b090ed1afb876140f45e19ac00cba4bb"
 )
 
 
-@dataclass(frozen=True)
 class Spec:
     """
     Parameters from the EIP-7708 specifications as defined at

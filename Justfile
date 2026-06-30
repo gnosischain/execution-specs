@@ -130,7 +130,7 @@ fill *args:
 [group('integration tests')]
 fill-pypy *args:
     @mkdir -p "{{ output_dir }}/fill-pypy/tmp" "{{ output_dir }}/fill-pypy/logs"
-    uv run --python pypy3.11 fill \
+    uv run --python pypy3.11 --no-dev --group test fill \
         --skip-index \
         --output="{{ output_dir }}/fill-pypy/fixtures" \
         --no-html \
@@ -165,10 +165,19 @@ json-loader *args:
         --output="tests/json_loader/fixtures" \
         --cov-config=pyproject.toml \
         --cov=ethereum \
-        --cov-fail-under=82
+        --cov-branch \
+        --cov-report=term \
+        --durations=50 \
+        --cov-fail-under=85
     uv run pytest \
         -m "not slow" \
-        -n auto --maxprocesses 6 --dist=loadfile \
+        -n {{ xdist_workers }} --dist=loadfile \
+        --cov-config=pyproject.toml \
+        --cov=ethereum \
+        --cov-branch \
+        --cov-report=term \
+        --cov-report "xml:{{ output_dir }}/json-loader/coverage.xml" \
+        --durations=50 \
         --basetemp="{{ output_dir }}/json-loader/tmp" \
         "$@" \
         tests/json_loader
@@ -190,7 +199,7 @@ test-tests *args:
 [group('unit tests')]
 test-tests-pypy *args:
     @mkdir -p "{{ output_dir }}/test-tests-pypy/tmp"
-    cd packages/testing && uv run --python pypy3.11 pytest \
+    cd packages/testing && uv run --python pypy3.11 --no-dev --group test pytest \
         -n auto --maxprocesses 6 \
         --basetemp="{{ output_dir }}/test-tests-pypy/tmp" \
         --ignore=src/execution_testing/cli/pytest_commands/plugins/filler/tests/test_benchmarking.py \
@@ -214,23 +223,48 @@ test-ci-scripts *args:
 
 # --- Benchmarks ---
 
-# Fill benchmark tests with --gas-benchmark-values
+# Smoke-test benchmark tests: fill blockchain_test fixtures, then verify against EELS.
 [group('benchmark tests')]
 bench-gas *args:
     @mkdir -p "{{ output_dir }}/bench-gas/tmp" "{{ output_dir }}/bench-gas/logs"
+    @echo "==> Step 1/3: Generating pre-alloc groups (smoke-tests the BlockchainEngineX path)"
     uv run fill \
+        --generate-pre-alloc-groups \
         --evm-bin="{{ evm_bin }}" \
         --gas-benchmark-values 1 \
-        --generate-all-formats \
         --fork Osaka \
         -m "not slow" \
         -n auto --maxprocesses 10 --dist=loadgroup \
+        --output="{{ output_dir }}/bench-gas/pre-alloc" \
+        --basetemp="{{ output_dir }}/bench-gas/tmp" \
+        --log-to "{{ output_dir }}/bench-gas/logs" \
+        --clean \
+        "$@" \
+        tests/benchmark/compute
+    @echo "==> Step 2/3: Filling blockchain_test fixtures with configured EVM (EVM_BIN={{ evm_bin }})"
+    uv run fill \
+        --evm-bin="{{ evm_bin }}" \
+        --gas-benchmark-values 1 \
+        --fork Osaka \
+        -m "blockchain_test and (not derived_test) and (not slow)" \
+        -n auto --maxprocesses 10 --dist=loadgroup \
+        --durations=20 \
         --output="{{ output_dir }}/bench-gas/fixtures" \
         --basetemp="{{ output_dir }}/bench-gas/tmp" \
         --log-to "{{ output_dir }}/bench-gas/logs" \
         --clean \
         "$@" \
         tests/benchmark/compute
+    @echo "==> Step 3/3: Running filled fixtures against EELS via json_loader"
+    @rm -rf tests/json_loader/bench_gas_fixtures
+    ln -sfn "{{ output_dir }}/bench-gas/fixtures" tests/json_loader/bench_gas_fixtures
+    cd tests/json_loader && uv run --python pypy3.11 --no-dev --group test pytest \
+        --fork Osaka \
+        --allow-post-state-hash \
+        -n auto --maxprocesses 10 --dist=loadfile \
+        --durations=20 \
+        --basetemp="{{ output_dir }}/bench-gas/json-loader-tmp" \
+        bench_gas_fixtures
 
 # Fill benchmark tests with --fixed-opcode-count 1
 [group('benchmark tests')]
@@ -303,11 +337,6 @@ docs-serve *args:
 [group('docs')]
 docs-serve-fast *args:
     FAST_DOCS=True uv run mkdocs serve "$@"
-
-# Validate docs/CHANGELOG.md entries
-[group('docs')]
-changelog:
-    uv run validate_changelog
 
 # Lint markdown files (markdownlint)
 [group('docs')]

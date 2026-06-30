@@ -38,7 +38,8 @@ def test_slotnum_at_fork_transition(
     * block 3 (post-fork): slot 3 == ``post_fork_slot``.
     """
     sender = pre.fund_eoa()
-    contract = pre.deploy_contract(Op.SSTORE(Op.NUMBER, Op.SLOTNUM) + Op.STOP)
+    code = Op.SSTORE(Op.NUMBER, Op.SLOTNUM, new_value=1) + Op.STOP
+    contract = pre.deploy_contract(code)
 
     at_fork_slot = 200
     post_fork_slot = 201
@@ -47,7 +48,7 @@ def test_slotnum_at_fork_transition(
         Block(
             timestamp=ts,
             slot_number=slot,
-            txs=[Transaction(sender=sender, to=contract, gas_limit=100_000)],
+            txs=[Transaction(sender=sender, to=contract)],
         )
         for ts, slot in [
             (14_999, None),

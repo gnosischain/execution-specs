@@ -12,7 +12,7 @@ Entry point for the Ethereum specification.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple, final
 
 from eth_abi import decode
 from ethereum_rlp import rlp
@@ -44,6 +44,7 @@ from .bloom import logs_bloom
 from .exceptions import (
     InsufficientMaxFeePerGasError,
     PriorityFeeGreaterThanMaxFeeError,
+    WrongChainIdError,
 )
 from .state_tracker import (
     BlockState,
@@ -65,17 +66,16 @@ from .transactions import (
     FeeMarketTransaction,
     LegacyTransaction,
     Transaction,
+    chain_id,
     decode_transaction,
     encode_transaction,
     get_transaction_hash,
     recover_sender,
     validate_transaction,
 )
-from .utils.hexadecimal import hex_to_address
 from .utils.message import prepare_message
-from .vm import Message
 from .vm.gas import GasCosts
-from .vm.interpreter import MessageCallOutput, process_message_call
+from .vm.interpreter import process_message_call
 
 BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
@@ -93,6 +93,7 @@ FEE_COLLECTOR_ADDRESS = hex_to_address(
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -501,7 +502,14 @@ def check_transaction(
     gas_available = block_env.block_gas_limit - block_output.block_gas_used
     if tx.gas > gas_available:
         raise GasUsedExceedsLimitError("gas used exceeds limit")
-    sender_address = recover_sender(block_env.chain_id, tx)
+    tx_chain_id = chain_id(tx)
+    if tx_chain_id is not None and tx_chain_id != block_env.chain_id:
+        raise WrongChainIdError(
+            expected=block_env.chain_id,
+            actual=tx_chain_id,
+        )
+
+    sender_address = recover_sender(tx)
     sender_account = get_account(tx_state, sender_address)
 
     if isinstance(tx, FeeMarketTransaction):
