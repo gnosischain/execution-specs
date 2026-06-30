@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from os.path import realpath
-from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Sized
 
 if TYPE_CHECKING:
@@ -39,14 +37,10 @@ from ..base_fork import (
 from ..gas_costs import BASE, HIGH, LOW, MID, VERY_LOW, GasCosts
 from . import eips
 from .eips.amsterdam import AmsterdamEIPs
+from .eips.constantinople.block_rewards import BlockRewards
 from .helpers import ceiling_division
 
-CONTRACTS_DIR = Path(realpath(__file__)).parent / "contracts"
 SYSTEM_ADDRESS = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
-BLOCK_REWARDS_CONTRACT_ADDRESS = 0x2000000000000000000000000000000000000001
-BLOCK_REWARDS_CONTRACT_BYTECODE = (
-    CONTRACTS_DIR / "block_reward_contract.bin"
-).read_bytes()
 
 
 # All forks must be listed here !!! in the order they were introduced !!!
@@ -1427,33 +1421,14 @@ class Constantinople(
 
 
 class ConstantinopleFix(
+    BlockRewards,
     Constantinople,
     solc_name="constantinople",
     ruleset_name="PETERSBURG",
 ):
     """Constantinople Fix fork — first active Gnosis mainnet fork."""
 
-    @classmethod
-    def system_contracts(cls) -> List[Address]:
-        """Block rewards contract is present from ConstantinopleFix onwards."""
-        return [
-            Address(
-                BLOCK_REWARDS_CONTRACT_ADDRESS,
-                label="BLOCK_REWARDS_CONTRACT_ADDRESS",
-            ),
-        ] + super().system_contracts()
-
-    @classmethod
-    def pre_allocation_blockchain(cls) -> Mapping:
-        """
-        Pre-allocates the block rewards contract.
-        """
-        return {
-            BLOCK_REWARDS_CONTRACT_ADDRESS: {
-                "nonce": 1,
-                "code": BLOCK_REWARDS_CONTRACT_BYTECODE,
-            }
-        }
+    pass
 
 
 class Istanbul(
