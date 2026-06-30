@@ -45,6 +45,7 @@ from .exceptions import WrongChainIdError
 from .state_tracker import (
     BlockState,
     TransactionState,
+    account_exists,
     account_exists_and_is_empty,
     destroy_account,
     destroy_touched_empty_accounts,
@@ -67,9 +68,11 @@ from .transactions import (
     recover_sender,
     validate_transaction,
 )
+from .utils.hexadecimal import hex_to_address
 from .utils.message import prepare_message
+from .vm import Message
 from .vm.gas import GasCosts
-from .vm.interpreter import process_message_call
+from .vm.interpreter import MessageCallOutput, process_message_call
 
 BLOCK_REWARD = U256(2 * 10**18)
 MINIMUM_DIFFICULTY = Uint(131072)
