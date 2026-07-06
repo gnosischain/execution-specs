@@ -152,10 +152,10 @@ Uses `ethereum-types` package for domain types: `U256`, `Uint`, `Bytes`, `Addres
 
 ## Branches
 
-- There is no main branch. Default branch = most active fork (currently forks/amsterdam). Run git remote show origin | grep HEAD to check.
-- `mainnet` — stable specs for forks live on mainnet
-- `forks/amsterdam` — PRs target this default branch
-- PRs strictly follow the template in `.github/PULL_REQUEST_TEMPLATE.md`. In the Checklist section, include unchecked items that don't apply — only remove them if they are truly irrelevant to the PR type.
+- **There is no `main` branch.** Default branch = most active fork (currently `forks/amsterdam`). Run `git remote show origin | grep HEAD` to check.
+- `mainnet` = stable specs for forks live on mainnet
+- PRs target the default branch
+- PRs strictly follow the template in `.github/PULL_REQUEST_TEMPLATE.md`.
 
 ## PR Reviews
 
