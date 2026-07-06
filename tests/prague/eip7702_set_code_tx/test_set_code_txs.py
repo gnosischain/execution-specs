@@ -3232,6 +3232,22 @@ def test_set_code_to_system_contract(
                 # subtracted from the latest block number
                 caller_payload = Hash(1)
                 caller_code_storage[call_return_data_size_slot] = 32
+            case Address(
+                0x2000000000000000000000000000000000000001
+            ):  # Gnosis block rewards (AuRa)
+                # reward(address[],uint16[]) with benefactors=[0], kind=[0].
+                # The test block-reward contract accepts any caller and
+                # returns two empty arrays (4 * 32 = 128 bytes).
+                caller_payload = Bytes(
+                    bytes.fromhex("f91c2898")
+                    + (64).to_bytes(32, "big")
+                    + (128).to_bytes(32, "big")
+                    + (1).to_bytes(32, "big")
+                    + (0).to_bytes(32, "big")
+                    + (1).to_bytes(32, "big")
+                    + (0).to_bytes(32, "big")
+                )
+                caller_code_storage[call_return_data_size_slot] = 128
             case _:
                 raise ValueError(
                     f"Not implemented system contract: {system_contract}"
