@@ -909,7 +909,7 @@ class BlockchainTest(BaseTest):
                 )
             ),
             blob_gas_used=blob_gas_used,
-            transactions_trie=Transaction.list_root(txs),
+            transactions_root=Transaction.list_root(txs),
             extra_data=(
                 block.extra_data if block.extra_data is not None else b""
             ),

@@ -26,7 +26,6 @@ from ..forks.forks import (
     Paris,
     Prague,
     Shanghai,
-    SpuriousDragon,
 )
 from ..forks.transition import (
     BerlinToLondonAt5,
