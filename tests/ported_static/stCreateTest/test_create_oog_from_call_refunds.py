@@ -322,27 +322,32 @@ def test_create_oog_from_call_refunds(
     #   sstore(1, 1)
     #   sstore(1, 0)
     #   let initcodeaddr := 0x00000000000000000000000000000000000c0de1
-    #   let initcodelength := extcodesize(initcodeaddr)
-    #   extcodecopy(initcodeaddr, 0, 0, initcodelength)
-    #   pop(create(0, 0, initcodelength))
+    #   //let initcodelength := extcodesize(initcodeaddr)
+    #   //extcodecopy(initcodeaddr, 0, 0, initcodelength)
+    #
+    #   // protection from solc version changing init code
+    #   let initcodelength := 15
+    #   mstore(0, 0x6001600055600060005560016000f30000000000000000000000000000000000)  # noqa: E501
+    #
+    #   pop(create2(0, 0, initcodelength, 0))
     #   return(add(initcodelength, 1), 1)
     # }
-    contract_19 = pre.deploy_contract(  # noqa: F841
+    contract_22 = pre.deploy_contract(  # noqa: F841
         code=Op.PUSH1[0x1]
         + Op.PUSH1[0x0]
         + Op.SSTORE(key=Op.DUP2, value=Op.DUP2)
         + Op.SSTORE(key=Op.DUP3, value=Op.DUP1)
+        + Op.MSTORE(
+            offset=Op.DUP2,
+            value=0x6001600055600060005560016000F30000000000000000000000000000000000,  # noqa: E501
+        )
         + Op.DUP2
         + Op.SWAP1
-        + Op.PUSH3[0xC0DE1]
-        + Op.EXTCODESIZE(address=Op.DUP1)
-        + Op.SWAP2
-        + Op.DUP3
-        + Op.SWAP2
-        + Op.DUP2
+        + Op.PUSH1[0xF]
         + Op.SWAP1
-        + Op.EXTCODECOPY
-        + Op.POP(Op.CREATE(value=Op.DUP1, offset=0x0, size=Op.DUP1))
+        + Op.DUP2 * 2
+        + Op.DUP1
+        + Op.POP(Op.CREATE2)
         + Op.ADD
         + Op.RETURN,
         nonce=0,
