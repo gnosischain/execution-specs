@@ -35,10 +35,21 @@ from .helpers import (
 from .phase_manager import TestPhase, TestPhaseManager
 from .receipt_types import TransactionLog, TransactionReceipt
 from .request_types import (
+    BuilderDepositRequest,
+    BuilderExitRequest,
     ConsolidationRequest,
     DepositRequest,
     Requests,
     WithdrawalRequest,
+)
+from .system_contract_request_types import (
+    FeeSystemContractRequest,
+    SystemContractInteractionBase,
+    SystemContractInteractionContract,
+    SystemContractInteractionMeasuredOutOfGasContract,
+    SystemContractInteractionTransaction,
+    SystemContractRequest,
+    relay_contract_code,
 )
 from .transaction_types import (
     AuthorizationTuple,
@@ -66,6 +77,8 @@ __all__ = (
     "Blob",
     "BlockAccessList",
     "BlockAccessListExpectation",
+    "BuilderDepositRequest",
+    "BuilderExitRequest",
     "ChainConfig",
     "ChainConfigDefaults",
     "ConsolidationRequest",
@@ -73,9 +86,15 @@ __all__ = (
     "Environment",
     "EnvironmentDefaults",
     "EOA",
+    "FeeSystemContractRequest",
     "NetworkWrappedTransaction",
     "Removable",
     "Requests",
+    "SystemContractInteractionBase",
+    "SystemContractInteractionContract",
+    "SystemContractInteractionMeasuredOutOfGasContract",
+    "SystemContractInteractionTransaction",
+    "SystemContractRequest",
     "TestParameterGroup",
     "TestPhase",
     "TestPhaseManager",
@@ -95,4 +114,5 @@ __all__ = (
     "contract_address_from_hash",
     "eoa_from_hash",
     "keccak256",
+    "relay_contract_code",
 )

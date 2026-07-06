@@ -657,8 +657,8 @@ def test_code_deposit_oog_preserves_parent_reservoir(
     init_code = Op.RETURN(0, deploy_size)
 
     # Limited regular gas forwarded to the factory.  After CREATE
-    # takes 63/64, the factory retains ~15 K for its SSTOREs.
-    child_gas = 1_000_000
+    # takes 63/64, the factory retains ~23 K for its SSTOREs.
+    child_gas = 1_500_000
 
     factory_storage = Storage()
     factory = pre.deploy_contract(
@@ -790,8 +790,9 @@ def test_parent_state_gas_after_child_failure(
     # Factory bytecode shape costs, derived from fork.gas_costs():
     #   pre-CREATE: PUSH32 + PUSH1 + MSTORE (with 1-word expansion)
     #               + 3 PUSHes for CREATE inputs
-    #   post-CREATE: PUSH key + SSTORE (no-op) + 2 PUSHes + SSTORE
-    #                (zero-to-nonzero regular)
+    #   post-CREATE: PUSH key + SSTORE (cold no-op: access cost only)
+    #                + 2 PUSHes + SSTORE (cold zero-to-nonzero:
+    #                access + write, the compound COLD_STORAGE_WRITE)
     factory_pre_create_regular = (
         gas_costs.VERY_LOW * 2
         + gas_costs.OPCODE_MSTORE_BASE
@@ -801,7 +802,6 @@ def test_parent_state_gas_after_child_failure(
     factory_post_create_regular = (
         gas_costs.VERY_LOW
         + gas_costs.COLD_STORAGE_ACCESS
-        + gas_costs.WARM_ACCESS
         + gas_costs.VERY_LOW * 2
         + gas_costs.COLD_STORAGE_WRITE
     )
@@ -2282,6 +2282,44 @@ def test_create_tx_collision_refunds_reservoir(
     )
 
 
+@pytest.mark.valid_from("EIP8037")
+def test_create_onto_alive_refunds_to_gas_left(
+    state_test: StateTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Verify a refunded CREATE NEW_ACCOUNT charge returns to gas_left.
+
+    A CREATE2 onto an already-alive (pre-funded, code-less) address
+    spills the NEW_ACCOUNT charge from the empty reservoir into
+    gas_left, succeeds, and refunds it. `gas_limit` leaves exactly
+    `NEW_ACCOUNT` after the create, so the following SSTORE runs only
+    if the refund returned to gas_left (LIFO) rather than the reservoir.
+    """
+    salt = 0
+    create = Op.POP(Op.CREATE2(0, 0, 0, salt))
+    storage = Storage()
+    contract = pre.deploy_contract(
+        code=create + Op.SSTORE(storage.store_next(1), 1)
+    )
+    target = compute_create2_address(address=contract, salt=salt, initcode=b"")
+    pre.fund_address(target, amount=1)
+
+    gas_limit = (
+        fork.transaction_intrinsic_cost_calculator()()
+        + create.regular_cost(fork)
+        + fork.gas_costs().NEW_ACCOUNT
+    )
+    tx = Transaction(to=contract, gas_limit=gas_limit, sender=pre.fund_eoa())
+
+    post = {
+        contract: Account(storage=storage),
+        target: Account(nonce=1, balance=1),
+    }
+    state_test(pre=pre, post=post, tx=tx)
+
+
 @pytest.mark.parametrize(
     "initcode_size_delta",
     [
@@ -2427,18 +2465,20 @@ def test_selfdestruct_in_create_tx_initcode(
     create_state_gas = fork.create_state_gas(code_size=0)
 
     beneficiary = 0xDEAD
-    initcode = Op.SELFDESTRUCT(beneficiary)
+    # `account_new` folds the beneficiary's `ACCOUNT_WRITE` regular
+    # cost and account-creation state gas into `gas_cost`.
+    initcode = Op.SELFDESTRUCT(beneficiary, account_new=True)
 
     sender = pre.fund_eoa()
     intrinsic_calc = fork.transaction_intrinsic_cost_calculator()
     intrinsic_total = intrinsic_calc(
-        calldata=bytes(initcode), contract_creation=True
+        calldata=bytes(initcode), contract_creation=True, sends_value=True
     )
 
     expected_state = create_state_gas + gas_costs.NEW_ACCOUNT
 
     initcode_gas = initcode.gas_cost(fork)
-    gas_limit = intrinsic_total + initcode_gas + gas_costs.NEW_ACCOUNT + 1000
+    gas_limit = intrinsic_total + initcode_gas + 1000
 
     tx = Transaction(
         sender=sender,

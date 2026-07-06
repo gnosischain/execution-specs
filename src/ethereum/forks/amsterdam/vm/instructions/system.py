@@ -28,7 +28,6 @@ from ...state_tracker import (
     increment_nonce,
     is_account_alive,
     move_ether,
-    set_account_balance,
 )
 from ...utils.address import (
     compute_contract_address,
@@ -43,7 +42,6 @@ from .. import (
     Evm,
     Message,
     credit_state_gas_refund,
-    emit_burn_log,
     emit_transfer_log,
     incorporate_child_on_error,
     incorporate_child_on_success,
@@ -196,7 +194,7 @@ def create(evm: Evm) -> None:
     init_code_gas = init_code_cost(Uint(memory_size))
     charge_gas(
         evm,
-        GasCosts.REGULAR_GAS_CREATE + extend_memory.cost + init_code_gas,
+        GasCosts.CREATE_ACCESS + extend_memory.cost + init_code_gas,
     )
 
     # OPERATION
@@ -250,7 +248,7 @@ def create2(evm: Evm) -> None:
     init_code_gas = init_code_cost(Uint(memory_size))
     charge_gas(
         evm,
-        GasCosts.REGULAR_GAS_CREATE
+        GasCosts.CREATE_ACCESS
         + GasCosts.OPCODE_KECCAK256_PER_WORD * call_data_words
         + extend_memory.cost
         + init_code_gas,
@@ -671,16 +669,18 @@ def selfdestruct(evm: Evm) -> None:
         evm.accessed_addresses.add(beneficiary)
 
     state_gas = StateGas(Uint(0))
+    account_write_gas = Uint(0)
     if (
         not is_account_alive(tx_state, beneficiary)
         and get_account(tx_state, evm.message.current_target).balance != 0
     ):
         state_gas = StateGasCosts.NEW_ACCOUNT
+        account_write_gas = GasCosts.ACCOUNT_WRITE
 
     # Charge regular gas before state gas so that a regular-gas OOG
     # does not consume state gas that would inflate the parent's
     # reservoir on frame failure.
-    charge_gas(evm, gas_cost)
+    charge_gas(evm, gas_cost + account_write_gas)
     charge_state_gas(evm, state_gas)
 
     originator = evm.message.current_target
@@ -689,16 +689,12 @@ def selfdestruct(evm: Evm) -> None:
     # Transfer balance
     move_ether(tx_state, originator, beneficiary, originator_balance)
 
-    # Emit transfer or burn log
-    if originator in tx_state.created_accounts and beneficiary == originator:
-        emit_burn_log(evm, originator, originator_balance)
-    elif beneficiary != originator:
+    # Emit transfer log
+    if beneficiary != originator:
         emit_transfer_log(evm, originator, beneficiary, originator_balance)
 
     # Register account for deletion iff created in same transaction
     if originator in tx_state.created_accounts:
-        # If beneficiary and originator are the same then the ether is burnt.
-        set_account_balance(tx_state, originator, U256(0))
         evm.accounts_to_delete.add(originator)
 
     # HALT the execution
