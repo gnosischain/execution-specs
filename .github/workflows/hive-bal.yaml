@@ -50,7 +50,7 @@ on:
         type: string
         default: |
           {
-            "geth": "ghcr.io/chetna-mittal/geth:latest",
+            "geth": "ghcr.io/adityasripal/geth:v1.17.4-gc",
             "reth": "ghcr.io/gnosischain/reth_gnosis:latest",
             "nethermind": "nethermind/nethermind:latest",
             "erigon": "erigontech/erigon:latest"

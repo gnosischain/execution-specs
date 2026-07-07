@@ -1,16 +1,16 @@
 # Hive client configuration file with latest release images
 
 # Geth (Go-Ethereum)
-# GHCR: https://ghcr.io/chetna-mittal/geth
-- client: go-ethereum-gnosis
+# GHCR: https://ghcr.io/adityasripal/geth:v1.17.4-gc
+- client: go-ethereum
   nametag: ""
   build_args:
-    baseimage: ghcr.io/chetna-mittal/geth
+    baseimage: ghcr.io/adityasripal/geth:v1.17.4-gc
     tag: latest
 
 # Nethermind
 # Docker Hub: https://hub.docker.com/r/nethermind/nethermind
-- client: nethermind-gnosis
+- client: nethermind
   nametag: ""
   build_args:
     baseimage: docker.io/nethermind/nethermind
@@ -18,7 +18,7 @@
 
 # Reth (Gnosis)
 # GHCR: https://ghcr.io/gnosischain/reth_gnosis
-- client: reth-gnosis
+- client: reth
   nametag: ""
   build_args:
     baseimage: ghcr.io/gnosischain/reth_gnosis
@@ -26,7 +26,7 @@
 
 # Erigon
 # Docker Hub: https://hub.docker.com/r/erigontech/erigon
-- client: erigon-gnosis
+- client: erigon
   nametag: ""
   build_args:
     baseimage: docker.io/erigontech/erigon
