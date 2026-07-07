@@ -309,7 +309,7 @@ omit = [
 # `ethereum.forks` is a namespace package (no `__init__.py`); without this
 # option, coverage skips it when reporting never-imported files at 0%, so
 # forks absent from a run silently drop out of the coverage denominator.
-include_namespace_packages = true
+include_namespace_packages = false
 
 [tool.docc]
 context = [
