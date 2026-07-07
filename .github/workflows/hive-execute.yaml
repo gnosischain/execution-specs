@@ -32,7 +32,7 @@ jobs:
       - name: Cache Docker images
         uses: ./.github/actions/cache-docker-images
         with:
-          images: "ghcr.io/chetna-mittal/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
+          images: "ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
 
   test-execute-remote:
     name: Execute Remote E2E
