@@ -49,7 +49,7 @@ on:
               "erigon": "erigontech/erigon@main"
             },
             "images": {
-              "geth": "ghcr.io/adityasripal/geth:v1.17.4-gc.1",
+              "geth": "ghcr.io/gnosischain/geth:latest",
               "reth": "ghcr.io/gnosischain/reth_gnosis:latest",
               "nethermind": "nethermind/nethermind:latest",
               "erigon": "erigontech/erigon:latest"
