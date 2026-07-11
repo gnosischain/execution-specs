@@ -1350,7 +1350,14 @@ def test_create_tx_header_gas_used(
         intrinsic_total = intrinsic_cost(
             calldata=bytes(initcode), contract_creation=True
         )
-        expected_gas_used = intrinsic_total - gas_costs.NEW_ACCOUNT
+        # Block regular gas applies the calldata floor, which tops up
+        # the small regular remainder left after the NEW_ACCOUNT refund.
+        expected_gas_used = max(
+            intrinsic_total - gas_costs.NEW_ACCOUNT,
+            fork.transaction_data_floor_cost_calculator()(
+                data=bytes(initcode), contract_creation=True
+            ),
+        )
     else:
         # For a minimal CREATE tx deploying Op.STOP (1 byte),
         # state gas (new account) dominates regular gas.
@@ -2123,7 +2130,9 @@ def test_create_account_charge_reduces_child_gas(
 @pytest.mark.parametrize(
     "init_code",
     [
-        pytest.param(Op.REVERT(0, 0), id="revert"),
+        pytest.param(
+            Op.REVERT(0, 10_000, new_memory_size=10_000), id="revert"
+        ),
         pytest.param(Op.INVALID, id="halt"),
     ],
 )
@@ -2139,6 +2148,9 @@ def test_failed_create_tx_refunds_intrinsic_new_account(
     refunded on creation-tx revert/halt. Block state-gas excludes it
     so header gas_used reflects only the regular component, and the
     sender's receipt reflects the same refund via cumulative_gas_used.
+
+    Gas consumed must be above the floor for the test to work, hence
+    the increased memory consumption in some of the initcodes.
     """
     intrinsic_calc = fork.transaction_intrinsic_cost_calculator()
     create_state_gas = fork.create_state_gas(code_size=0)
@@ -2147,7 +2159,7 @@ def test_failed_create_tx_refunds_intrinsic_new_account(
         calldata=bytes(init_code), contract_creation=True
     )
     intrinsic_regular = intrinsic_total - create_state_gas
-    gas_limit = intrinsic_total + 1000
+    gas_limit = intrinsic_total + init_code.regular_cost(fork) + 1000
 
     if init_code == Op.INVALID:
         regular_consumed = gas_limit - intrinsic_total
@@ -2156,6 +2168,12 @@ def test_failed_create_tx_refunds_intrinsic_new_account(
 
     expected_gas_used = intrinsic_regular + regular_consumed
     expected_cumulative = intrinsic_total + regular_consumed - create_state_gas
+    # A tiny init code can leave the decomposed calldata floor above the
+    # regular gas consumed, pinning gas_used to the floor.
+    data_floor_calc = fork.transaction_data_floor_cost_calculator()
+    floor = data_floor_calc(data=init_code, contract_creation=True)
+    assert expected_gas_used > floor
+    assert expected_cumulative > floor
 
     tx = Transaction(
         to=None,

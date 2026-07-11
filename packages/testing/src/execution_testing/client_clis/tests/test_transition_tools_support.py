@@ -83,18 +83,9 @@ def test_t8n_support(fork: Fork, installed_t8n: TransitionTool) -> None:
         pytest.skip("EvmOneTransitionTool skipped for now")
     if fork in [MuirGlacier, ArrowGlacier, GrayGlacier]:
         return
-    if isinstance(installed_t8n, ExecutionSpecsTransitionTool) and fork in [
-        Frontier,
-        Homestead,
-        TangerineWhistle,
-        SpuriousDragon,
-        Byzantium,
-        Constantinople,
-        ConstantinopleFix,
-        Istanbul,
-        Berlin,
-        London,
-    ]:
+    if isinstance(
+        installed_t8n, (ExecutionSpecsTransitionTool, EvmOneTransitionTool)
+    ) and fork in [Constantinople]:
         return
     env = Environment()
     sender = TestAddress

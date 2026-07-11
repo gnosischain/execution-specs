@@ -136,10 +136,10 @@ CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS = hex_to_address(
     "0x0000BBdDc7CE488642fb579F8B00f3a590007251"
 )
 BUILDER_DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
-    "0x0000884d2AA32eAa155F59A2f24eFa73D9008282"
+    "0x0000BFF46984E3725691FA540A8C7589300D8282"
 )
 BUILDER_EXIT_CONTRACT_ADDRESS = hex_to_address(
-    "0x000014574A74c805590AFF9499fc7A690f008282"
+    "0x000064D678505AD48F8CCB093BC65613800E8282"
 )
 HISTORY_STORAGE_ADDRESS = hex_to_address(
     "0x0000F90827F1C53a10cb7A02335B175320002935"
@@ -1147,9 +1147,14 @@ def process_transaction(
         + tx_output.state_gas_used
         - int(tx_output.state_refund)
     )
+    # The calldata floor binds the regular-gas dimension: subtract state gas
+    # first so the floor is not discounted by a transaction's state spending.
     # Defensive guard for Uint conversion: State refunds never exceed
     # the state charges so the value is non-negative.
-    tx_regular_gas = tx_gas_used_before_refund - Uint(max(0, tx_state_gas))
+    tx_regular_gas = max(
+        tx_gas_used_before_refund - Uint(max(0, tx_state_gas)),
+        intrinsic.calldata_floor,
+    )
     block_output.block_gas_used += tx_regular_gas
     block_output.block_state_gas_used += Uint(max(0, tx_state_gas))
     block_output.blob_gas_used += tx_blob_gas_used
