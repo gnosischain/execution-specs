@@ -122,6 +122,7 @@ fill *args:
         --basetemp="{{ output_dir }}/fill/tmp" \
         --log-to "{{ output_dir }}/fill/logs" \
         --clean \
+        --from ConstantinopleFix \
         --until "{{ latest_fork }}" \
         --durations=50 \
         "$@" \
