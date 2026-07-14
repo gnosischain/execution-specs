@@ -330,7 +330,6 @@ class Alloc(BaseAlloc):
         return [
             address
             for address, account in self.root.items()
-            if not account
             if not account and address != SYSTEM_ADDRESS
         ]
 
