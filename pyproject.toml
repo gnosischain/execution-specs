@@ -29,6 +29,7 @@ dependencies = [
     "cryptography>=45.0.1,<46",
     "platformdirs>=4.2,<5",
     "libcst>=1.8,<2",
+    "eth-abi>=5.2.0,<6",
 ]
 
 [tool.setuptools.package-dir]
@@ -309,7 +310,7 @@ omit = [
 # `ethereum.forks` is a namespace package (no `__init__.py`); without this
 # option, coverage skips it when reporting never-imported files at 0%, so
 # forks absent from a run silently drop out of the coverage denominator.
-include_namespace_packages = false
+include_namespace_packages = true
 
 [tool.docc]
 context = [
