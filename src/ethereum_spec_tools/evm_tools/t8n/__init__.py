@@ -388,9 +388,6 @@ class T8N(Load):
                 data=block_env.block_hashes[-1],  # The parent hash
             )
 
-        if self.fork.has_process_block_rewards:
-            self.fork.process_block_rewards(block_env)
-
         if self.fork.has_beacon_roots_address:
             self.fork.process_unchecked_system_transaction(
                 block_env=block_env,
@@ -437,13 +434,16 @@ class T8N(Load):
                     U256(self.options.state_reward), block_env
                 )
 
+        if self.fork.has_compute_requests_hash:
+            self.fork.process_general_purpose_requests(block_env, block_output)
+
+        if self.fork.has_process_block_rewards:
+            self.fork.process_block_rewards(block_env)
+
         if self.fork.has_withdrawal:
             self.fork.process_withdrawals(
                 block_env, block_output, self.env.withdrawals
             )
-
-        if self.fork.has_compute_requests_hash:
-            self.fork.process_general_purpose_requests(block_env, block_output)
 
         if self.fork.has_hash_block_access_list:
             block_output.block_access_list = self.fork.build_block_access_list(
