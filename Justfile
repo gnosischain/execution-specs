@@ -160,7 +160,7 @@ json-loader *args:
     @mkdir -p "{{ output_dir }}/json-loader/tmp"
     uv run fill \
         -m "eels_base_coverage and not derived_test" \
-        --from Paris \
+        --from ConstantinopleFix \
         --until "{{ latest_fork }}" \
         -n {{ xdist_workers }} --dist=loadgroup \
         --skip-index \
@@ -256,9 +256,8 @@ bench-gas *args:
         --clean \
         "$@" \
         tests/benchmark/compute
-    @echo "==> Step 2/3: Filling blockchain_test fixtures with configured EVM (EVM_BIN={{ evm_bin }})"
+    @echo "==> Step 2/3: Filling blockchain_test fixtures with EELS"
     uv run fill \
-        --evm-bin="{{ evm_bin }}" \
         --gas-benchmark-values 1 \
         --fork Osaka \
         -m "blockchain_test and (not derived_test) and (not slow)" \

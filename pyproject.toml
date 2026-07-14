@@ -301,9 +301,15 @@ markers = [
 
 [tool.coverage.run]
 omit = [
+    "*/ethereum/forks/amsterdam/*",
+    "*/ethereum/forks/byzantium/*",
     "*/ethereum/forks/*_glacier/*",
     "*/ethereum/forks/dao_fork/*",
     "*/ethereum/forks/bpo*/*",
+    "*/ethereum/forks/frontier/*",
+    "*/ethereum/forks/homestead/*",
+    "*/ethereum/forks/spurious_dragon/*",
+    "*/ethereum/forks/tangerine_whistle/*",
 ]
 
 [tool.coverage.report]
