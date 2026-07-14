@@ -1,5 +1,9 @@
 {
     "000/my_chain_id_test/Cancun/tx_type_1": {
+        "_info": {
+            "hash": "0x0c9cdd9849022dfb46f20fc00a646394a58e0fc8847f6e3cf578dff67378e6bc",
+            "fixture_format": "state_test"
+        },
         "env": {
             "currentCoinbase": "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
             "currentGasLimit": "0x02540be400",
@@ -25,6 +29,18 @@
             }
         },
         "transaction": {
+            "chainId": "0x01",
+            "accessLists": [
+                [
+                    {
+                        "address": "0x0000000000000000000000000000000000001234",
+                        "storageKeys": [
+                            "0x0000000000000000000000000000000000000000000000000000000000000000",
+                            "0x0000000000000000000000000000000000000000000000000000000000000001"
+                        ]
+                    }
+                ]
+            ],
             "nonce": "0x00",
             "gasPrice": "0x0a",
             "gasLimit": [
