@@ -98,6 +98,7 @@ FEE_COLLECTOR_ADDRESS = hex_to_address(
 )
 MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
+BLOCK_REWARD_SYSTEM_TRANSACTION_GAS = Uint(2**64 - 1)
 
 
 @final
@@ -505,6 +506,7 @@ def process_unchecked_system_transaction(
     block_env: vm.BlockEnvironment,
     target_address: Address,
     data: Bytes,
+    gas: Uint = SYSTEM_TRANSACTION_GAS,
 ) -> MessageCallOutput:
     """
     Process a system transaction without checking if the contract contains
@@ -518,6 +520,8 @@ def process_unchecked_system_transaction(
         Address of the contract to call.
     data :
         Data to pass to the contract.
+    gas :
+        Gas available to the system call.
 
     Returns
     -------
@@ -526,6 +530,8 @@ def process_unchecked_system_transaction(
 
     """
     system_tx_state = TransactionState(parent=block_env.state)
+    if not account_exists(system_tx_state, SYSTEM_ADDRESS):
+        set_account(system_tx_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
     system_contract_code = get_code(
         system_tx_state,
         get_account(system_tx_state, target_address).code_hash,
@@ -533,8 +539,8 @@ def process_unchecked_system_transaction(
 
     tx_env = vm.TransactionEnvironment(
         origin=SYSTEM_ADDRESS,
-        gas_price=block_env.base_fee_per_gas,
-        gas=SYSTEM_TRANSACTION_GAS,
+        gas_price=Uint(0),
+        gas=gas,
         access_list_addresses=set(),
         access_list_storage_keys=set(),
         state=system_tx_state,
@@ -547,7 +553,7 @@ def process_unchecked_system_transaction(
         tx_env=tx_env,
         caller=SYSTEM_ADDRESS,
         target=target_address,
-        gas=SYSTEM_TRANSACTION_GAS,
+        gas=gas,
         value=U256(0),
         data=data,
         code=system_contract_code,
@@ -602,10 +608,10 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
-    process_block_rewards(block_env)
-
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
+
+    process_block_rewards(block_env)
 
     process_withdrawals(block_env, block_output, withdrawals)
 
@@ -770,13 +776,6 @@ def process_withdrawals(
     Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
     wd_state = TransactionState(parent=block_env.state)
-    deposit_contract = get_account(wd_state, DEPOSIT_CONTRACT_ADDRESS)
-    if deposit_contract.code_hash == EMPTY_CODE_HASH:
-        return
-
-    if not account_exists(wd_state, SYSTEM_ADDRESS):
-        set_account(wd_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
-
     amounts = []
     addresses = []
     for i, wd in enumerate(withdrawals):
@@ -787,6 +786,10 @@ def process_withdrawals(
         )
         amounts.append(int(wd.amount))
         addresses.append(wd.address)
+
+    deposit_contract = get_account(wd_state, DEPOSIT_CONTRACT_ADDRESS)
+    if deposit_contract.code_hash == EMPTY_CODE_HASH:
+        return
 
     payload = encode(
         ["uint256", "uint64[]", "address[]"],
@@ -830,13 +833,11 @@ def process_block_rewards(
     if account.code_hash == EMPTY_CODE_HASH:
         return
 
-    if not account_exists(reward_state, SYSTEM_ADDRESS):
-        set_account(reward_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
-
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         data=data,
+        gas=BLOCK_REWARD_SYSTEM_TRANSACTION_GAS,
     )
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
