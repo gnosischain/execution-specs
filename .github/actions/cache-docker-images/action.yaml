@@ -5,7 +5,7 @@ inputs:
   images:
     description: "Space-separated list of Docker images to cache"
     required: true
-    default: "ghcr.io/chetna-mittal/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
+    default: "ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
   cache-key-prefix:
     description: "Prefix for the cache key"
     required: false
