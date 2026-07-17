@@ -300,7 +300,6 @@ coeffs
 cofactor
 cofactors
 coinbase
-coincurve
 collectonly
 commandline
 commonpath
