@@ -71,7 +71,7 @@ There are two phases in the test pipeline: **fill** (generate fixtures from the 
 
 **Core test pipeline** (`test.yaml`): Runs on PRs. Fill only — no consume. Jobs: `static`, `py3` (fill Paris->Osaka), `pypy3`, `tests_pytest_py3`, `tests_pytest_pypy3`. Setup action (`.github/actions/setup-env/`) installs Rust, build-essential, tox, and downloads geth.
 
-**Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Intended to consume fixtures against `go-ethereum-gnosis` via Hive (4 modes: Engine, RLP, Sync, Dev Mode). Uses `gnosischain/hive` repo (branch `master`) and `latest.yaml` client config.
+**Hive integration** (`hive-consume.yaml`): Runs on PRs touching hive paths or `forks/**` pushes. Intended to consume fixtures against `go-ethereum` via Hive (4 modes: Engine, RLP, Sync, Dev Mode). Uses `gnosischain/hive` repo (branch `master`) and `latest.yaml` client config.
 
 **Manual hive workflows** (workflow_dispatch only, not automated on PRs):
 
@@ -84,7 +84,7 @@ There are two phases in the test pipeline: **fill** (generate fixtures from the 
 |------------------------------------|-----------------------------------|-------------------------------------------------------------------------------------|
 | test.yaml                          | PR, push to master                | Core pipeline: static checks, py3 fill, pypy3 fill, framework unit tests            |
 | test-docs.yaml                     | PR, push                          | mkdocs build, markdownlint, changelog validation                                    |
-| hive-consume.yaml                  | PR (hive paths), push to forks/** | Hive integration: Engine/RLP/Sync simulators + Dev Mode against go-ethereum-gnosis  |
+| hive-consume.yaml                  | PR (hive paths), push to forks/** | Hive integration: Engine/RLP/Sync simulators + Dev Mode against go-ethereum  |
 | benchmark.yaml                     | push to forks/**                  | Gas benchmarks, fixed opcode benchmarks                                             |
 | eest_hive_gnosis.yaml              | manual                            | Fill + consume against a single Gnosis client                                       |
 | eest_hive_gnosis_multi_client.yaml | manual                            | Fill once, then consume against 4 Gnosis clients (reth/geth/nethermind/erigon)      |

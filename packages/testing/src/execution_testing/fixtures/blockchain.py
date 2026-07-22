@@ -22,7 +22,6 @@ from typing import (
 
 import ethereum_rlp as eth_rlp
 import pytest
-from coincurve.keys import PrivateKey
 from ethereum_types.numeric import Uint
 from pydantic import (
     AliasChoices,
@@ -34,6 +33,7 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core import PydanticUndefined
+from spec256k1 import PrivateKey
 
 from execution_testing.base_types import (
     Address,
@@ -318,7 +318,7 @@ class FixtureHeader(CamelModel):
             )
         sealing_hash = Bytes(eth_rlp.encode(sealing_list)).keccak256()
         privkey = PrivateKey(TestPrivateKey.to_bytes(32, "big"))
-        return privkey.sign_recoverable(bytes(sealing_hash), hasher=None)
+        return privkey.sign_recoverable(bytes(sealing_hash))
 
     @cached_property
     def rlp(self) -> Bytes:
