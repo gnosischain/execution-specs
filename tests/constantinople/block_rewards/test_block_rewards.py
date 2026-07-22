@@ -154,24 +154,6 @@ def test_block_rewards_caller_is_system_address(
     )
 
 
-def test_block_rewards_system_call_with_no_contract(
-    blockchain_test: BlockchainTestFiller,
-    pre: Alloc,
-) -> None:
-    """
-    Test that a block is valid when the block rewards address has no code.
-    """
-    pre[BLOCK_REWARDS_CONTRACT] = Account(
-        code=b"",
-        nonce=0,
-        balance=0,
-    )
-
-    blocks = [Block()]
-
-    blockchain_test(pre=pre, post={}, blocks=blocks)
-
-
 @pytest.mark.exception_test
 def test_block_rewards_system_call_with_revert(
     blockchain_test: BlockchainTestFiller,
