@@ -1723,8 +1723,8 @@ def test_create_child_halt_refunds_state_gas(
     Verify CREATE/CREATE2 child halt refunds parent's account gas.
 
     Exceptional halts (invalid opcode, EIP-3541 invalid prefix)
-    consume all forwarded gas as `regular_gas_used`, so block
-    accounting cannot strictly discriminate via header gas. Tight
+    consume all forwarded regular gas, so block accounting cannot
+    strictly discriminate via header gas. Tight
     gas tuning via a caller wrapper leaves the factory with just
     enough `gas_left` to pay the probe SSTORE's regular portion
     but not enough to spill the state portion, so the probe SSTORE
@@ -1758,8 +1758,8 @@ def test_create_child_halt_refunds_state_gas(
         ),
     )
 
-    # Tight gas tuning: child halt consumes all forwarded gas as
-    # regular_gas_used. Factory retains
+    # Tight gas tuning: child halt consumes all forwarded regular
+    # gas. Factory retains
     # ~(forwarded - pre_sstore_regular) / 64 after CREATE. Target
     # the discrimination window `(probe_regular,
     # probe_regular + sstore_state_gas)` so the probe SSTORE
@@ -2177,7 +2177,7 @@ def test_failed_create_tx_refills_top_frame_new_account(
     initcode then fails the whole creation rolls back and no account
     persists:
 
-    * REVERT preserves ``gas_left`` and ``refill_frame_state_gas`` returns
+    * REVERT preserves ``gas_left`` and ``restore_state_gas`` returns
       the spilled ``NEW_ACCOUNT`` to it, so the state block nets to zero
       and only the regular consumption counts as work. The calldata floor
       tops up the billed amount and the block-level regular gas alike, so
@@ -2908,75 +2908,50 @@ def test_create_collision_burned_gas_counted_in_block_regular(
     """
     init_code = Op.STOP
     mstore_value, size = init_code_at_high_bytes(init_code)
-    salt = 0
-
-    create_call = (
-        create_opcode(value=0, offset=0, size=size, salt=salt)
-        if create_opcode == Op.CREATE2
-        else create_opcode(value=0, offset=0, size=size)
-    )
-    factory_code = Op.MSTORE(0, mstore_value) + Op.POP(create_call) + Op.STOP
+    factory_create_code = Op.MSTORE(
+        0, mstore_value, new_memory_size=32
+    ) + create_opcode(value=0, offset=0, size=size, account_new=False)
+    factory_post_create_code = Op.POP + Op.STOP
+    factory_code = factory_create_code + factory_post_create_code
     factory = pre.deploy_contract(code=factory_code)
 
     collision_target = compute_create_address(
         address=factory,
         nonce=1,
-        salt=salt,
+        salt=0,
         initcode=bytes(init_code),
         opcode=create_opcode,
     )
     pre.deploy_contract(code=Op.STOP, address=collision_target)
 
+    # CPSB-agnostic baseline: block_state_gas is zero for this tx (the
+    # existent collision target is not charged), so header.gas_used
+    # equals the regular-gas total. Decompose the parent + inner frame
+    # accounting from fork APIs so the baseline tracks future cost
+    # changes automatically.
+    gas_used_until_collision = (
+        fork.transaction_intrinsic_cost_calculator()()
+        + factory_create_code.gas_cost(fork)
+    )
     # Fixed-size budget so the forwarded create_message_gas is
     # deterministic and the baseline below is reproducible.
-    gas_limit = 250_000
+    gas_limit = gas_used_until_collision * 2
+    # Remaining gas can be derived due to the fixed gas limit
+    gas_at_create = gas_limit - gas_used_until_collision
+    # Inner burns 63/64 of the available gas on collision; the parent
+    # retains 1/64. Post-CREATE consumes from the retained pool. A
+    # mutation that drops the burned forwarded gas from regular
+    # accounting would reduce this baseline.
+    retained = gas_at_create // 64
+    gas_post_create = factory_post_create_code.gas_cost(fork)
+    assert retained >= gas_post_create
+    baseline_gas_used = gas_limit - retained + gas_post_create
 
     tx = Transaction(
         to=factory,
         gas_limit=gas_limit,
         sender=pre.fund_eoa(),
     )
-
-    # CPSB-agnostic baseline: block_state_gas is zero for this tx (the
-    # collision refunds the NEW_ACCOUNT state charge), so header.gas_used
-    # equals the regular-gas total. Decompose the parent + inner frame
-    # accounting from fork APIs so the baseline tracks future cost
-    # changes automatically.
-    intrinsic = fork.transaction_intrinsic_cost_calculator()()
-    new_account = fork.gas_costs().NEW_ACCOUNT
-    create_base = fork.gas_costs().OPCODE_CREATE_BASE
-    # POP + STOP run in the parent frame after CREATE returns; their
-    # cost comes out of the 1/64 retained gas.
-    post_create_static = (Op.POP + Op.STOP).gas_cost(fork)
-    # factory_code.gas_cost(fork) folds NEW_ACCOUNT into the CREATE op
-    # (state gas is treated as part of the opcode total). Strip it
-    # back out and split off the post-CREATE tail to isolate the
-    # pre-CREATE static gas.
-    factory_pre_create = (
-        factory_code.gas_cost(fork)
-        - new_account
-        - create_base
-        - post_create_static
-    )
-    # MSTORE writes the initcode at memory[0:32] (one word).
-    memory_expansion = fork.memory_expansion_gas_calculator()(new_bytes=32)
-    # gas_left at the moment NEW_ACCOUNT spills into the regular pool
-    # (reservoir is empty for tx_gas_limit < TX_MAX_GAS_LIMIT).
-    gas_at_create_after_state = (
-        gas_limit
-        - intrinsic
-        - factory_pre_create
-        - memory_expansion
-        - create_base
-        - new_account
-    )
-    # Inner burns 63/64 of the available gas on collision; the parent
-    # retains 1/64. The state-spill of NEW_ACCOUNT is refunded back to
-    # gas_left on collision (nets zero). Post-CREATE consumes from the
-    # retained pool. A mutation that drops the burned forwarded gas
-    # from regular accounting would reduce this baseline.
-    retained = gas_at_create_after_state // 64
-    baseline_gas_used = gas_limit - retained - new_account + post_create_static
 
     blockchain_test(
         pre=pre,
