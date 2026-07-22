@@ -1,7 +1,7 @@
 benchmark:
   impl: geth
   repo: gnosischain/go-ethereum
-  ref: release-1.17.3-gc
+  ref: release-1.17.4-gc
   evm-bin: evm
   xdist: auto
 eels:
@@ -17,12 +17,6 @@ evmone:
   evm-bin: evmone
   xdist: auto
   targets: ["evmone-cli"]
-benchmark:
-  impl: geth
-  repo: gnosischain/go-ethereum
-  ref: release-1.17.3-gc
-  evm-bin: evm
-  xdist: auto
 besu:
   impl: besu
   repo: hyperledger/besu
