@@ -43,7 +43,7 @@ on:
         default: |
           {
             "repos": {
-              "geth": "gnosischain/go-ethereum@release-1.17.3-gc",
+              "geth": "gnosischain/go-ethereum@release-1.17.4-gc",
               "reth": "gnosischain/reth_gnosis@master",
               "nethermind": "NethermindEth/nethermind@master",
               "erigon": "erigontech/erigon@main"
@@ -166,6 +166,7 @@ jobs:
           client_config: ${{ needs.prepare.outputs.client_config }}
           extra_flags: >-
             ${{ env.GLOBAL_EXTRA_FLAGS }}
+            ${{ inputs.client_source == 'git' && '--docker.nocache=^hive/clients/' || '--docker.pull --docker.nocache=^hive/clients/' }}
             ${{ matrix.simulator == 'gnosis/rpc-compat' && env.RPC_COMPAT_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-engine' && env.EELS_ENGINE_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-rlp' && env.EELS_RLP_FLAGS || '' }}
