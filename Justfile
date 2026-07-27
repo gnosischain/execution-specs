@@ -273,8 +273,9 @@ bench-gas *args:
         --clean \
         "$@" \
         tests/benchmark/compute
-    @echo "==> Step 2/3: Filling blockchain_test fixtures with EELS"
+    @echo "==> Step 2/3: Filling blockchain_test fixtures with configured EVM (EVM_BIN={{ evm_bin }})"
     uv run fill \
+        --evm-bin="{{ evm_bin }}" \
         --gas-benchmark-values 1 \
         --fork Amsterdam \
         -m "blockchain_test and (not derived_test) and (not slow)" \
