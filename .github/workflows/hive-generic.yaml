@@ -166,6 +166,7 @@ jobs:
           client_config: ${{ needs.prepare.outputs.client_config }}
           extra_flags: >-
             ${{ env.GLOBAL_EXTRA_FLAGS }}
+            ${{ inputs.client_source == 'git' && '--docker.nocache=^hive/clients/' || '--docker.pull --docker.nocache=^hive/clients/' }}
             ${{ matrix.simulator == 'gnosis/rpc-compat' && env.RPC_COMPAT_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-engine' && env.EELS_ENGINE_FLAGS || '' }}
             ${{ matrix.simulator == 'gnosis/eels/consume-rlp' && env.EELS_RLP_FLAGS || '' }}
