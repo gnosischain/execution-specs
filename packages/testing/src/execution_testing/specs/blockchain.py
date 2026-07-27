@@ -348,6 +348,8 @@ class Block(Header):
     """EIP-7928: Block-level access lists (serialized)."""
     engine_new_payload_block_access_list: Bytes | None = None
     """EIP-7928: override only the engine newPayload blockAccessList field."""
+    engine_new_payload_slot_number: HexNumber | None = None
+    """EIP-7843: override only the engine payload slotNumber field."""
     expected_gas_used: int | None = None
     """Expected gas used for the block."""
 
@@ -450,7 +452,7 @@ class BuiltBlock(CamelModel):
 
     header: FixtureHeader
     env: Environment
-    alloc: LazyAlloc
+    alloc: LazyAlloc | Alloc
     state_root: Hash
     txs: List[Transaction]
     ommers: List[FixtureHeader]
@@ -463,6 +465,7 @@ class BuiltBlock(CamelModel):
     fork: Fork
     block_access_list: BlockAccessList | None
     engine_new_payload_block_access_list: Bytes | None = None
+    engine_new_payload_slot_number: HexNumber | None = None
 
     def cumulative_gas_used(self) -> int:
         """Return the last receipt's cumulative gas used."""
@@ -544,6 +547,10 @@ class BuiltBlock(CamelModel):
         the ``block_access_list`` body. So a header modifier that touches the
         BAL hash needs to drive a matching change on the payload body.
         """
+        if self.engine_new_payload_slot_number is not None:
+            return FixtureExecutionPayloadModifier(
+                slot_number=self.engine_new_payload_slot_number,
+            )
         if self.engine_new_payload_block_access_list is not None:
             return FixtureExecutionPayloadModifier(
                 block_access_list=self.engine_new_payload_block_access_list,
@@ -1050,6 +1057,9 @@ class BlockchainTest(BaseTest):
             engine_new_payload_block_access_list=(
                 block.engine_new_payload_block_access_list
             ),
+            engine_new_payload_slot_number=(
+                block.engine_new_payload_slot_number
+            ),
         )
         built_block: BuiltBlock
         if transition_tool_output.engine_payload is not None:
@@ -1070,6 +1080,7 @@ class BlockchainTest(BaseTest):
                 and block.requests is None
                 and not block.skip_exception_verification
                 and block.engine_new_payload_block_access_list is None
+                and block.engine_new_payload_slot_number is None
                 and not (
                     block.expected_block_access_list is not None
                     and block.expected_block_access_list._modifier is not None
@@ -1093,7 +1104,7 @@ class BlockchainTest(BaseTest):
             print_traces(t8n.get_traces())
             pprint(transition_tool_output.result)
             pprint(previous_alloc)
-            pprint(transition_tool_output.alloc.get())
+            pprint(transition_tool_output.alloc.materialize())
             raise e
 
         if len(rejected_txs) > 0 and block.exception is None:
@@ -1188,13 +1199,13 @@ class BlockchainTest(BaseTest):
             if block.expected_post_state:
                 self.verify_post_state(
                     t8n,
-                    t8n_state=alloc.get()
+                    t8n_state=alloc.materialize()
                     if isinstance(alloc, LazyAlloc)
                     else alloc,
                     expected_state=block.expected_post_state,
                 )
         self.check_exception_test(exception=invalid_blocks > 0)
-        alloc = alloc.get() if isinstance(alloc, LazyAlloc) else alloc
+        alloc = alloc.materialize() if isinstance(alloc, LazyAlloc) else alloc
         self.verify_post_state(t8n, t8n_state=alloc)
         fixture = BlockchainFixture(
             fork=self.fork,
@@ -1278,7 +1289,7 @@ class BlockchainTest(BaseTest):
             if block.expected_post_state:
                 self.verify_post_state(
                     t8n,
-                    t8n_state=alloc.get()
+                    t8n_state=alloc.materialize()
                     if isinstance(alloc, LazyAlloc)
                     else alloc,
                     expected_state=block.expected_post_state,
@@ -1292,7 +1303,7 @@ class BlockchainTest(BaseTest):
             " The framework should never try to execute this test case."
         )
 
-        alloc = alloc.get() if isinstance(alloc, LazyAlloc) else alloc
+        alloc = alloc.materialize() if isinstance(alloc, LazyAlloc) else alloc
         self.verify_post_state(t8n, t8n_state=alloc)
 
         # Create base fixture data, common to all fixture formats
