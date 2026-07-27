@@ -12,7 +12,7 @@ chain.
 from dataclasses import dataclass
 from typing import Tuple, final
 
-from ethereum_types.bytes import Bytes, Bytes8, Bytes32
+from ethereum_types.bytes import Bytes
 from ethereum_types.frozen import slotted_freezable
 from ethereum_types.numeric import U256, Uint
 
@@ -141,7 +141,7 @@ class Header:
     Arbitrary data included by the miner.
     """
 
-    mix_digest: Bytes32
+    mix_digest: Bytes
     """
     Mix hash used in the mining process, which is a cryptographic commitment
     to the block's contents. It [validates][u] that PoW was done on the correct
@@ -150,7 +150,7 @@ class Header:
     [u]: ref:ethereum.forks.istanbul.fork.validate_proof_of_work
     """
 
-    nonce: Bytes8
+    nonce: Bytes
     """
     Nonce used in the mining process, which is a value that miners
     increment to find a valid block hash. This is also used to [validate][v]

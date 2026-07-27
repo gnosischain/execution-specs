@@ -8,7 +8,7 @@ import pytest
 from _pytest.config import Config
 from ethereum_rlp import rlp
 from ethereum_rlp.exceptions import RLPException
-from ethereum_types.numeric import U64
+from ethereum_types.numeric import U64, Uint
 
 from ethereum.crypto.hash import keccak256
 from ethereum.exceptions import EthereumException, StateWithEmptyAccount
@@ -51,7 +51,15 @@ def add_block_to_chain(
             "validate_proof_of_work",
             autospec=True,
         ) as mocked_pow_validator:
-            load.fork.state_transition(chain, block)
+            if load.fork.is_aura:
+                with patch.object(
+                    fork_module,
+                    "calculate_block_difficulty",
+                    return_value=Uint((1 << 128) - 2),
+                ):
+                    load.fork.state_transition(chain, block)
+            else:
+                load.fork.state_transition(chain, block)
             mocked_pow_validator.assert_has_calls(
                 [call(block.header)],
                 any_order=False,
