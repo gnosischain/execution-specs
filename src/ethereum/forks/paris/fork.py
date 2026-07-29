@@ -18,7 +18,7 @@ Gnosis diff
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, final
 
 from eth_abi import decode
 from ethereum_rlp import rlp
@@ -35,13 +35,8 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 from ethereum.merkle_patricia_trie import root, trie_set
-from ethereum.state import (
-    EMPTY_ACCOUNT,
-    EMPTY_CODE_HASH,
-    Address,
-    State,
-    apply_changes_to_state,
-)
+from ethereum.state import EMPTY_ACCOUNT, EMPTY_CODE_HASH, Address
+from ethereum.state_mpt import State, apply_changes_to_state
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt, encode_receipt
@@ -49,6 +44,7 @@ from .bloom import logs_bloom
 from .exceptions import (
     InsufficientMaxFeePerGasError,
     PriorityFeeGreaterThanMaxFeeError,
+    WrongChainIdError,
 )
 from .state_tracker import (
     BlockState,
@@ -68,6 +64,7 @@ from .transactions import (
     FeeMarketTransaction,
     LegacyTransaction,
     Transaction,
+    chain_id,
     decode_transaction,
     encode_transaction,
     get_transaction_hash,
@@ -93,9 +90,10 @@ BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
 FEE_COLLECTOR_ADDRESS = hex_to_address(
     "0x1559000000000000000000000000000000000000"
 )
-SYSTEM_TRANSACTION_GAS = Uint(30000000)
+SYSTEM_TRANSACTION_GAS = Uint(2**64 - 1)
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -217,11 +215,7 @@ def state_transition(chain: BlockChain, block: Block) -> None:
         transactions=block.transactions,
     )
     block_diff = extract_block_diff(block_state)
-    block_state_root, _ = chain.state.compute_state_root_and_trie_changes(
-        block_diff.account_changes,
-        block_diff.storage_changes,
-        block_diff.storage_clears,
-    )
+    block_state_root = chain.state.compute_state_root(block_diff)
     transactions_root = root(block_output.transactions_trie)
     receipt_root = root(block_output.receipts_trie)
     block_logs_bloom = logs_bloom(block_output.block_logs)
@@ -411,7 +405,14 @@ def check_transaction(
     gas_available = block_env.block_gas_limit - block_output.block_gas_used
     if tx.gas > gas_available:
         raise GasUsedExceedsLimitError("gas used exceeds limit")
-    sender_address = recover_sender(block_env.chain_id, tx)
+    tx_chain_id = chain_id(tx)
+    if tx_chain_id is not None and tx_chain_id != block_env.chain_id:
+        raise WrongChainIdError(
+            expected=block_env.chain_id,
+            actual=tx_chain_id,
+        )
+
+    sender_address = recover_sender(tx)
     sender_account = get_account(tx_state, sender_address)
 
     if isinstance(tx, FeeMarketTransaction):
@@ -510,6 +511,8 @@ def process_unchecked_system_transaction(
 
     """
     system_tx_state = TransactionState(parent=block_env.state)
+    if not account_exists(system_tx_state, SYSTEM_ADDRESS):
+        set_account(system_tx_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
     system_contract_code = get_code(
         system_tx_state,
         get_account(system_tx_state, target_address).code_hash,
@@ -517,7 +520,7 @@ def process_unchecked_system_transaction(
 
     tx_env = vm.TransactionEnvironment(
         origin=SYSTEM_ADDRESS,
-        gas_price=block_env.base_fee_per_gas,
+        gas_price=Uint(0),
         gas=SYSTEM_TRANSACTION_GAS,
         access_list_addresses=set(),
         access_list_storage_keys=set(),
@@ -581,10 +584,10 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
-    process_block_rewards(block_env)
-
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
+
+    process_block_rewards(block_env)
 
     return block_output
 
@@ -762,9 +765,6 @@ def process_block_rewards(
     account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
     if account.code_hash == EMPTY_CODE_HASH:
         return
-
-    if not account_exists(reward_state, SYSTEM_ADDRESS):
-        set_account(reward_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,

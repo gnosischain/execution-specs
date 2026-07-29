@@ -11,7 +11,9 @@ from execution_testing import (
     BlockAccessListExpectation,
     BlockchainTestFiller,
     BlockException,
+    Bytes,
     EIPChecklist,
+    EngineAPIError,
     Environment,
     Hash,
     Header,
@@ -93,6 +95,10 @@ def test_invalid_pre_fork_block_with_bal_hash_field(
     """
     Reject a pre-Amsterdam block whose header carries
     `block_access_list_hash`.
+
+    The engine fixture sends a pre-Amsterdam `newPayload` carrying an
+    empty `blockAccessList` param; the client's reconstructed header
+    omits the hash, so the block hash check fails.
     """
     sender = pre.fund_eoa()
     receiver = pre.fund_eoa(amount=0)
@@ -113,6 +119,42 @@ def test_invalid_pre_fork_block_with_bal_hash_field(
     )
 
 
+@pytest.mark.valid_at_transition_to("Amsterdam")
+@pytest.mark.blockchain_test_engine_only
+@pytest.mark.exception_test
+def test_bal_invalid_engine_payload_field_before_fork(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+) -> None:
+    """
+    Reject a pre-Amsterdam `newPayload` that carries a `blockAccessList`.
+
+    The block and its header are otherwise valid, so the spurious payload
+    field is the only defect: clients that silently drop unknown
+    `newPayloadV4` fields would answer VALID and must fail this test.
+    """
+    sender = pre.fund_eoa()
+    receiver = pre.nonexistent_account()
+
+    tx = Transaction(sender=sender, to=receiver, value=100)
+
+    blockchain_test(
+        pre=pre,
+        post={},
+        blocks=[
+            Block(
+                timestamp=FORK_TIMESTAMP - 1,
+                txs=[tx],
+                # A valid empty-BAL encoding: field presence alone, not
+                # decodability, must trigger the rejection.
+                engine_new_payload_block_access_list=Bytes(b"\xc0"),
+                exception=BlockException.INCORRECT_BLOCK_FORMAT,
+                engine_api_error_code=EngineAPIError.InvalidParams,
+            ),
+        ],
+    )
+
+
 @EIPChecklist.BlockHeaderField.Test.ForkTransition.After()
 @pytest.mark.valid_at_transition_to("Amsterdam")
 @pytest.mark.exception_test
@@ -123,6 +165,9 @@ def test_invalid_post_fork_block_without_bal_hash_field(
     """
     Reject an Amsterdam activation block whose header is missing
     `block_access_list_hash`.
+
+    The engine fixture sends `newPayloadV5` with the `blockAccessList`
+    param omitted, which must return `-32602: Invalid params`.
     """
     sender = pre.fund_eoa()
     receiver = pre.fund_eoa(amount=0)
@@ -139,10 +184,8 @@ def test_invalid_post_fork_block_without_bal_hash_field(
                 rlp_modifier=Header(
                     block_access_list_hash=Header.REMOVE_FIELD,
                 ),
-                exception=[
-                    BlockException.INVALID_BAL_HASH,
-                    BlockException.INVALID_BLOCK_HASH,
-                ],
+                exception=BlockException.INVALID_BAL_HASH,
+                engine_api_error_code=EngineAPIError.InvalidParams,
             ),
         ],
     )
@@ -179,10 +222,7 @@ def test_fork_transition_bal_size_constraint(
       `BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED`.
     """
     amsterdam = fork.transitions_to()
-    min_gas_limit = (
-        amsterdam.empty_block_bal_item_count()
-        * amsterdam.gas_costs().BLOCK_ACCESS_LIST_ITEM
-    )
+    min_gas_limit = amsterdam.minimum_block_gas_limit()
     over_budget_gas_limit = min_gas_limit - 1
 
     pre_fork_block = Block(

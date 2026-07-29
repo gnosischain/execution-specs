@@ -19,6 +19,6 @@ changes to the blob fee schedule.
 [EIP-7892]: https://eips.ethereum.org/EIPS/eip-7892
 """  # noqa: E501
 
-from ethereum.fork_criteria import ByTimestamp, ForkCriteria
+from ethereum.fork_criteria import ForkCriteria, Unscheduled
 
-FORK_CRITERIA: ForkCriteria = ByTimestamp(1767747671)
+FORK_CRITERIA: ForkCriteria = Unscheduled(order_index=-1)

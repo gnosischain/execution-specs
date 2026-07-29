@@ -268,6 +268,7 @@ def test_from_paris_until_paris_option_no_validity_marker(
     )
 
 
+@pytest.mark.skip(reason="Ethereum BPO schedules are not active on Gnosis")
 def test_transition_fork_until_excludes_target(
     pytester: pytest.Pytester,
 ) -> None:

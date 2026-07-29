@@ -22,7 +22,6 @@ from .benchmark import (
     BenchmarkCodeGenerator,
     ExtCallGenerator,
     JumpLoopGenerator,
-    StubConfig,
 )
 from .checklists import EIPChecklist
 from .exceptions import (
@@ -32,6 +31,7 @@ from .exceptions import (
 )
 from .fixtures import BaseFixture, FixtureCollector
 from .forks import Fork, GasCosts, RefundTypes, TransitionFork
+from .recipient_type import RecipientType
 from .specs import (
     BaseTest,
     BenchmarkTest,
@@ -63,13 +63,21 @@ from .test_types import (
     Blob,
     BlockAccessList,
     BlockAccessListExpectation,
+    BuilderDepositRequest,
+    BuilderExitRequest,
     ChainConfig,
     ConsolidationRequest,
     DepositRequest,
     Environment,
+    FeeSystemContractRequest,
     NetworkWrappedTransaction,
     Removable,
     Requests,
+    SystemContractInteractionBase,
+    SystemContractInteractionContract,
+    SystemContractInteractionMeasuredOutOfGasContract,
+    SystemContractInteractionTransaction,
+    SystemContractRequest,
     TestParameterGroup,
     TestPhaseManager,
     Transaction,
@@ -84,6 +92,7 @@ from .test_types import (
     compute_create_address,
     compute_deterministic_create2_address,
     keccak256,
+    relay_contract_code,
 )
 from .tools import (
     CalldataCase,
@@ -100,6 +109,7 @@ from .tools import (
     SequentialAddressLayout,
     Switch,
     TransactionWithCost,
+    TxOutcome,
     While,
     WhileGas,
     extend_with_defaults,
@@ -147,6 +157,8 @@ __all__ = (
     "BlockchainTest",
     "BlockchainTestFiller",
     "BlockException",
+    "BuilderDepositRequest",
+    "BuilderExitRequest",
     "Bytecode",
     "Bytes",
     "BytesConcatenation",
@@ -163,6 +175,7 @@ __all__ = (
     "EngineAPIError",
     "Environment",
     "EOA",
+    "FeeSystemContractRequest",
     "FixedIterationsBytecode",
     "FixtureCollector",
     "Fork",
@@ -182,6 +195,7 @@ __all__ = (
     "OpcodeCallArg",
     "Opcodes",
     "ParameterSet",
+    "RecipientType",
     "ReferenceSpec",
     "ReferenceSpecTypes",
     "RefundTypes",
@@ -191,8 +205,12 @@ __all__ = (
     "StateTest",
     "StateTestFiller",
     "Storage",
-    "StubConfig",
     "Switch",
+    "SystemContractInteractionBase",
+    "SystemContractInteractionContract",
+    "SystemContractInteractionMeasuredOutOfGasContract",
+    "SystemContractInteractionTransaction",
+    "SystemContractRequest",
     "TestAddress",
     "TestAddress2",
     "TestParameterGroup",
@@ -207,6 +225,7 @@ __all__ = (
     "TransactionTestFiller",
     "TransactionType",
     "TransactionWithCost",
+    "TxOutcome",
     "TransitionFork",
     "While",
     "WhileGas",
@@ -226,4 +245,5 @@ __all__ = (
     "generate_system_contract_deploy_test",
     "generate_system_contract_error_test",
     "keccak256",
+    "relay_contract_code",
 )

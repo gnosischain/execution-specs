@@ -10,7 +10,7 @@ chain.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, final
 
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes, Bytes8, Bytes32
@@ -29,6 +29,7 @@ from .transactions import (
 )
 
 
+@final
 @slotted_freezable
 @dataclass
 class Withdrawal:
@@ -62,6 +63,7 @@ class Withdrawal:
     """
 
 
+@final
 @slotted_freezable
 @dataclass
 class Header:
@@ -105,12 +107,12 @@ class Header:
     Root hash ([`keccak256`]) of the state trie after executing all
     transactions in this block. It represents the state of the Ethereum Virtual
     Machine (EVM) after all transactions in this block have been processed. It
-    is computed using [`compute_state_root_and_trie_changes()`][changes],
+    is computed using [`compute_state_root()`][changes],
     which computes the root of the Merkle-Patricia [Trie] representing the
     Ethereum world state after applying the block's state changes.
 
     [`keccak256`]: ref:ethereum.crypto.hash.keccak256
-    [changes]: ref:ethereum.state.State.compute_state_root_and_trie_changes
+    [changes]: ref:ethereum.state_mpt.State.compute_state_root
     [Trie]: ref:ethereum.merkle_patricia_trie.Trie
     """  # noqa: E501
 
@@ -210,6 +212,7 @@ class Header:
     """
 
 
+@final
 @slotted_freezable
 @dataclass
 class Block:
@@ -263,6 +266,7 @@ class Block:
     """
 
 
+@final
 @slotted_freezable
 @dataclass
 class Log:
@@ -295,6 +299,7 @@ class Log:
     """
 
 
+@final
 @slotted_freezable
 @dataclass
 class Receipt:

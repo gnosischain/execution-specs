@@ -12,6 +12,7 @@ from execution_testing import (
     Address,
     Alloc,
     Environment,
+    Header,
     StateTestFiller,
     Transaction,
 )
@@ -136,4 +137,12 @@ def test_transaction_collision_to_empty_but_code(
         error=_exc,
     )
 
-    state_test(env=env, pre=pre, post=post, tx=tx)
+    state_test(
+        env=env,
+        pre=pre,
+        post=post,
+        tx=tx,
+        blockchain_test_header_verify=Header(
+            gas_used=tx_gas[g],
+        ),
+    )

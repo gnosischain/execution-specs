@@ -13,7 +13,7 @@ The abstract computer which runs the code stored in an
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple, final
 
 from ethereum_types.bytes import Bytes, Bytes0, Bytes32
 from ethereum_types.numeric import U64, U256, Uint
@@ -29,16 +29,17 @@ from ..blocks import Log, Receipt, Withdrawal
 from ..fork_types import Authorization, VersionedHash
 from ..state_tracker import BlockState, TransactionState
 from ..transactions import LegacyTransaction
+from .gas import GasMeter
 
 __all__ = ("Environment", "Evm", "Message")
 TRANSFER_TOPIC = keccak256(b"Transfer(address,address,uint256)")
-BURN_TOPIC = keccak256(b"Burn(address,uint256)")
 SYSTEM_ADDRESS = Address(
     bytes.fromhex("fffffffffffffffffffffffffffffffffffffffe")
 )
 CALL_SUCCESS = U256(1)
 
 
+@final
 @dataclass
 class BlockEnvironment:
     """
@@ -60,6 +61,7 @@ class BlockEnvironment:
     slot_number: U64
 
 
+@final
 @dataclass
 class BlockOutput:
     """
@@ -68,7 +70,12 @@ class BlockOutput:
     Contains the following:
 
     block_gas_used : `ethereum.base_types.Uint`
-        Gas used for executing all transactions.
+        Execution gas used for executing all transactions. EIP-8037
+        names this counter `block_execution_gas_used`.
+    block_state_gas_used : `ethereum.base_types.Uint`
+        State gas used for executing all transactions.
+    cumulative_gas_used : `ethereum.base_types.Uint`
+        Cumulative gas paid by users (post-refund, post-floor).
     transactions_trie : `ethereum.fork_types.Root`
         Trie of all the transactions in the block.
     receipts_trie : `ethereum.fork_types.Root`
@@ -89,6 +96,7 @@ class BlockOutput:
     """
 
     block_gas_used: Uint = Uint(0)
+    block_state_gas_used: Uint = Uint(0)
     cumulative_gas_used: Uint = Uint(0)
     transactions_trie: Trie[Bytes, Optional[Bytes | LegacyTransaction]] = (
         field(default_factory=lambda: Trie(secured=False, default=None))
@@ -106,15 +114,19 @@ class BlockOutput:
     block_access_list: BlockAccessList = field(default_factory=list)
 
 
+@final
 @dataclass
 class TransactionEnvironment:
     """
-    Items that are used by contract creation or message call.
+    Items that are used while processing a transaction.
     """
 
     origin: Address
+    recipient: Bytes0 | Address
+    value: U256
     gas_price: Uint
     gas: Uint
+    state_gas_reservoir: Uint
     access_list_addresses: Set[Address]
     access_list_storage_keys: Set[Tuple[Address, Bytes32]]
     state: TransactionState
@@ -124,6 +136,7 @@ class TransactionEnvironment:
     tx_hash: Optional[Hash32]
 
 
+@final
 @dataclass
 class Message:
     """
@@ -136,10 +149,11 @@ class Message:
     target: Bytes0 | Address
     current_target: Address
     gas: Uint
+    state_gas_reservoir: Uint
     value: U256
     data: Bytes
     code_address: Optional[Address]
-    code: Bytes
+    code: Optional[Bytes]
     depth: Uint
     should_transfer_value: bool
     is_static: bool
@@ -149,6 +163,7 @@ class Message:
     parent_evm: Optional["Evm"]
 
 
+@final
 @dataclass
 class Evm:
     """The internal state of the virtual machine."""
@@ -157,10 +172,9 @@ class Evm:
     stack: List[U256]
     memory: bytearray
     code: Bytes
-    gas_left: Uint
+    gas_meter: GasMeter
     valid_jump_destinations: Set[Uint]
     logs: Tuple[Log, ...]
-    refund_counter: int
     running: bool
     message: Message
     output: Bytes
@@ -171,9 +185,19 @@ class Evm:
     accessed_storage_keys: Set[Tuple[Address, Bytes32]]
 
 
-def incorporate_child_on_success(evm: Evm, child_evm: Evm) -> None:
+def incorporate_child(evm: Evm, child_evm: Evm) -> None:
     """
-    Incorporate the state of a successful `child_evm` into the parent `evm`.
+    Incorporate the state of a returning `child_evm` into the parent
+    `evm`.
+
+    Gas flows back to the parent regardless of the child's fate. A
+    failed child settles its own meter before returning -- its state
+    gas rolled back to the baseline, its [spill] refilled, and its
+    refunds discarded -- so absorbing the meter unconditionally
+    reclaims exactly the gas the child gives back. Everything else the
+    child accumulated -- logs, scheduled self-destructs, refunds, and
+    warmed access sets -- survives only on success, dying with a
+    failed child's reverted state.
 
     Parameters
     ----------
@@ -182,28 +206,34 @@ def incorporate_child_on_success(evm: Evm, child_evm: Evm) -> None:
     child_evm :
         The child evm to incorporate.
 
-    """
-    evm.gas_left += child_evm.gas_left
-    evm.logs += child_evm.logs
-    evm.refund_counter += child_evm.refund_counter
-    evm.accounts_to_delete.update(child_evm.accounts_to_delete)
-    evm.accessed_addresses.update(child_evm.accessed_addresses)
-    evm.accessed_storage_keys.update(child_evm.accessed_storage_keys)
-
-
-def incorporate_child_on_error(evm: Evm, child_evm: Evm) -> None:
-    """
-    Incorporate the state of an unsuccessful `child_evm` into the parent `evm`.
-
-    Parameters
-    ----------
-    evm :
-        The parent `EVM`.
-    child_evm :
-        The child evm to incorporate.
+    [spill]: ref:ethereum.forks.amsterdam.vm.gas.GasMeter.state_gas_spilled
 
     """
-    evm.gas_left += child_evm.gas_left
+    child_meter = child_evm.gas_meter
+    # Only the top frame commits state gas; a child never carries any.
+    assert child_meter.state_gas_committed_spill == Uint(0)
+
+    if child_evm.error:
+        # A failed child arrives settled: rolled back to its baseline,
+        # spill refilled, refunds discarded.
+        assert child_meter.state_gas_spilled == Uint(0)
+        assert child_meter.refund_counter == 0
+        assert child_meter.state_gas_left == child_meter.state_gas_baseline
+
+    # Gas returns to the parent regardless of the child's fate.
+    # Note that upon failure, the child already arrives settled.
+    gas_meter = evm.gas_meter
+    gas_meter.gas_left += child_meter.gas_left
+    gas_meter.state_gas_left += child_meter.state_gas_left
+    gas_meter.state_gas_spilled += child_meter.state_gas_spilled
+    gas_meter.refund_counter += child_meter.refund_counter
+
+    # Everything else survives only on success.
+    if not child_evm.error:
+        evm.logs += child_evm.logs
+        evm.accounts_to_delete.update(child_evm.accounts_to_delete)
+        evm.accessed_addresses.update(child_evm.accessed_addresses)
+        evm.accessed_storage_keys.update(child_evm.accessed_storage_keys)
 
 
 def emit_transfer_log(
@@ -240,40 +270,6 @@ def emit_transfer_log(
             Hash32(padded_recipient),
         ),
         data=transfer_amount.to_be_bytes32(),
-    )
-
-    evm.logs = evm.logs + (log_entry,)
-
-
-def emit_burn_log(
-    evm: Evm,
-    account: Address,
-    amount: U256,
-) -> None:
-    """
-    Emit a LOG2 for ETH burn per EIP-7708.
-
-    Parameters
-    ----------
-    evm :
-        The state of the ethereum virtual machine
-    account :
-        The account address whose ETH is being burned
-    amount :
-        The amount of ETH being burned
-
-    """
-    if amount == 0:
-        return
-
-    padded_account = left_pad_zero_bytes(account, 32)
-    log_entry = Log(
-        address=SYSTEM_ADDRESS,
-        topics=(
-            BURN_TOPIC,
-            Hash32(padded_account),
-        ),
-        data=amount.to_be_bytes32(),
     )
 
     evm.logs = evm.logs + (log_entry,)

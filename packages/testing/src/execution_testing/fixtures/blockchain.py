@@ -22,7 +22,6 @@ from typing import (
 
 import ethereum_rlp as eth_rlp
 import pytest
-from coincurve.keys import PrivateKey
 from ethereum_types.numeric import Uint
 from pydantic import (
     AliasChoices,
@@ -34,6 +33,7 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core import PydanticUndefined
+from spec256k1 import PrivateKey
 
 from execution_testing.base_types import (
     Address,
@@ -174,17 +174,17 @@ class FixtureHeader(CamelModel):
     state_root: Hash
     transactions_root: Hash = Field(
         Hash(EmptyTrieRoot),
-        alias="transactionsRoot",
+        alias="transactionsTrie",
         validation_alias=AliasChoices("transactionsTrie", "transactionsRoot"),
     )
     receipts_root: Hash = Field(
         Hash(EmptyTrieRoot),
-        alias="receiptsRoot",
+        alias="receiptTrie",
         validation_alias=AliasChoices("receiptTrie", "receiptsRoot"),
     )
     logs_bloom: Bloom = Field(
         Bloom(0),
-        alias="logsBloom",
+        alias="bloom",
         validation_alias=AliasChoices("bloom", "logsBloom"),
     )
     difficulty: ZeroPaddedHexNumber = ZeroPaddedHexNumber(0)
@@ -277,11 +277,17 @@ class FixtureHeader(CamelModel):
     @cached_property
     def rlp_encode_list(self) -> List:
         """Compute the RLP of the header."""
-        # Gnosis only: non-zero difficulty signals an Aura-sealed block
-        aura = (
-            self.fork is not None
-            and not self.fork.header_zero_difficulty_required()
-        )
+        # Gnosis only: non-zero difficulty signals an Aura-sealed block.
+        # `fork` is excluded from serialization, so it is None when a fixture
+        # is loaded from file; fall back to the fixed Aura difficulty marker
+        # in that case to keep the hash stable across the round-trip.
+        if self.fork is not None:
+            aura = not self.fork.header_zero_difficulty_required()
+        else:
+            aura = (
+                self.difficulty is not None
+                and int(self.difficulty) == (1 << 128) - 2
+            )
         header_list: List[bytes | Uint] = []
         for field in self.__class__.model_fields:
             if field == "fork":
@@ -318,7 +324,7 @@ class FixtureHeader(CamelModel):
             )
         sealing_hash = Bytes(eth_rlp.encode(sealing_list)).keccak256()
         privkey = PrivateKey(TestPrivateKey.to_bytes(32, "big"))
-        return privkey.sign_recoverable(bytes(sealing_hash), hasher=None)
+        return privkey.sign_recoverable(bytes(sealing_hash))
 
     @cached_property
     def rlp(self) -> Bytes:
@@ -414,19 +420,18 @@ class FixtureHeader(CamelModel):
                 env.withdrawals
             )
         environment_values["extra_data"] = env.extra_data
-        extras = {
+        extras: Dict[str, Any] = {
             "state_root": state_root,
-            "requests_hash": Requests()
-            if fork.header_requests_required()
-            else None,
-            "block_access_list_hash": (
-                BlockAccessList().rlp_hash
-                if fork.header_bal_hash_required()
-                else None
-            ),
-            "slot_number": 0 if fork.header_slot_number_required() else None,
             "fork": fork,
         }
+        if fork.header_requests_required():
+            extras["requests_hash"] = Requests()
+        if fork.header_bal_hash_required():
+            extras["block_access_list_hash"] = BlockAccessList().rlp_hash
+        if fork.header_slot_number_required():
+            extras["slot_number"] = (
+                int(env.slot_number) if env.slot_number is not None else 0
+            )
         return cls(**environment_values, **extras)
 
 
@@ -504,6 +509,7 @@ class FixtureExecutionPayloadModifier(CamelModel):
     )
 
     block_access_list: Removable | Bytes | None = None
+    slot_number: Removable | HexNumber | None = None
 
     REMOVE_FIELD: ClassVar[Removable] = Removable()
     """Sentinel to specify that a payload field should be removed."""
@@ -604,6 +610,7 @@ class FixtureEngineNewPayload(CamelModel):
             suggested_fee_recipient=execution_payload.fee_recipient,
             withdrawals=execution_payload.withdrawals,
             parent_beacon_block_root=parent_beacon_block_root,
+            slot_number=execution_payload.slot_number,
         )
 
     @staticmethod

@@ -10,7 +10,7 @@ on:
       client:
         description: "Client passed to --client"
         required: true
-        default: "nethermind"
+        default: "reth"
       test_dirs:
         description: "Comma-separated list of EIP numbers or directory names"
         required: true

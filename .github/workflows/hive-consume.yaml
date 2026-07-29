@@ -31,7 +31,7 @@ on:
       docker_images:
         description: "Space-separated list of Docker images to cache"
         required: false
-        default: "ghcr.io/chetna-mittal/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
+        default: "ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
       client:
         description: "Hive client to test (e.g., go-ethereum, reth)"
         required: false
@@ -46,7 +46,7 @@ on:
         description: "Space-separated list of Docker images to cache"
         required: false
         type: string
-        default: "ghcr.io/chetna-mittal/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
+        default: "ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine"
       client:
         description: "Hive client to test (e.g., go-ethereum, reth)"
         required: false
@@ -77,7 +77,7 @@ jobs:
       - name: Cache Docker images
         uses: ./.github/actions/cache-docker-images
         with:
-          images: ${{ inputs.docker_images || 'ghcr.io/chetna-mittal/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine' }}
+          images: ${{ inputs.docker_images || 'ghcr.io/gnosischain/geth:latest docker.io/alpine:latest docker.io/library/golang:1-alpine' }}
 
   test-hive:
     name: ${{ matrix.name }}
@@ -138,7 +138,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: gnosischain/hive
-          ref: fix/neth-client
+          ref: master
           path: hive
 
       # Redirect Go's caches to a per-job temp dir so the setup-go cache
@@ -160,10 +160,6 @@ jobs:
         uses: ./execution-specs/.github/actions/setup-uv
         with:
           cache-dependency-glob: "execution-specs/uv.lock"
-
-      - name: Setup environment
-        if: matrix.mode == 'dev'
-        uses: ./execution-specs/.github/actions/setup-env
 
       - name: Load cached Docker images
         uses: ./execution-specs/.github/actions/load-docker-images

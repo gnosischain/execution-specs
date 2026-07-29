@@ -8,19 +8,15 @@ https://eips.ethereum.org/EIPS/eip-6110
 """
 
 from hashlib import sha256
-from os.path import realpath
-from pathlib import Path
 from typing import Mapping
 
 from ....base_fork import BaseFork
+from ....bytecode import load_contract_bytecode
 
-BYTECODE_FILE = (
-    Path(realpath(__file__)).parent.parent.parent
-    / "contracts"
-    / "deposit_contract.bin"
-)
 DEPOSIT_CONTRACT_ADDRESS = 0xBABE2BED00000000000000000000000000000003
-DEPOSIT_CONTRACT_BYTECODE = BYTECODE_FILE.read_bytes()
+DEPOSIT_CONTRACT_BYTECODE = load_contract_bytecode(
+    __name__, "deposit_contract.bin"
+)
 
 
 class EIP6110(BaseFork):
@@ -44,5 +40,6 @@ class EIP6110(BaseFork):
                 "nonce": 1,
                 "code": DEPOSIT_CONTRACT_BYTECODE,
                 "storage": storage,
-            }
-        } | super(EIP6110, cls).pre_allocation_blockchain()  # type: ignore
+            },
+            **super(EIP6110, cls).pre_allocation_blockchain(),
+        }

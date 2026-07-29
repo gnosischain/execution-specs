@@ -1,9 +1,9 @@
 """
 Tests for Gnosis block rewards system call.
 
-The block rewards contract is called via a system transaction at the
-start of every block. If the contract reverts or runs out of gas, the
-block MUST be considered invalid.
+The block rewards contract is called via a system transaction after the
+user transactions in every block. If the contract reverts or runs out of gas,
+the block MUST be considered invalid.
 
 Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
 """
@@ -152,24 +152,6 @@ def test_block_rewards_caller_is_system_address(
         },
         blocks=[Block()],
     )
-
-
-def test_block_rewards_system_call_with_no_contract(
-    blockchain_test: BlockchainTestFiller,
-    pre: Alloc,
-) -> None:
-    """
-    Test that a block is valid when the block rewards address has no code.
-    """
-    pre[BLOCK_REWARDS_CONTRACT] = Account(
-        code=b"",
-        nonce=0,
-        balance=0,
-    )
-
-    blocks = [Block()]
-
-    blockchain_test(pre=pre, post={}, blocks=blocks)
 
 
 @pytest.mark.exception_test

@@ -40,21 +40,6 @@ class EIP7928(
         )
 
     @classmethod
-    def empty_block_bal_item_count(cls) -> int:
-        """
-        Return the BAL item count for an empty EIP-7928 block.
-
-        Six system contracts produce 17 items:
-          EIP-4788 beacon roots:           1 address + 1 write + 1 read = 3
-          EIP-2935 history storage:        1 address + 1 write          = 2
-          EIP-7002 withdrawal requests:    1 address + 4 reads          = 5
-          EIP-7251 consolidation requests: 1 address + 4 reads          = 5
-          Withdrawal system call:          1 read                       = 1
-          Block rewards system call:       1 read                       = 1
-        """
-        return 17
-
-    @classmethod
     def engine_execution_payload_block_access_list(cls) -> bool:
         """
         From EIP-7928, engine execution payload includes `block_access_list`
