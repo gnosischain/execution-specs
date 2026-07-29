@@ -30,13 +30,8 @@ from ethereum.exceptions import (
 )
 from ethereum.forks.bpo5.blocks import Header as PreviousHeader
 from ethereum.merkle_patricia_trie import root, trie_set
-from ethereum.state import (
-    EMPTY_CODE_HASH,
-    Address,
-    BlockDiff,
-    State,
-    apply_changes_to_state,
-)
+from ethereum.state import EMPTY_CODE_HASH, Address, BlockDiff
+from ethereum.state_mpt import State, apply_changes_to_state
 
 from . import vm
 from .block_access_lists import (
@@ -103,7 +98,7 @@ from .vm.eoa_delegation import is_valid_delegation
 from .vm.gas import (
     GasCosts,
     StateGasCosts,
-    allocate_execution_gas,
+    allocate_evm_gas,
     calculate_blob_gas_price,
     calculate_data_fee,
     calculate_excess_blob_gas,
@@ -343,9 +338,7 @@ def execute_block(
         withdrawals=block.withdrawals,
     )
     block_diff = extract_block_diff(block_state)
-    block_state_root, _ = pre_state.compute_state_root_and_trie_changes(
-        block_diff.account_changes, block_diff.storage_changes
-    )
+    block_state_root = pre_state.compute_state_root(block_diff)
     transactions_root = root(block_output.transactions_trie)
     receipt_root = root(block_output.receipts_trie)
     block_logs_bloom = logs_bloom(block_output.block_logs)
@@ -568,7 +561,7 @@ def check_transaction(
         is empty.
 
     """
-    regular_gas_available = (
+    execution_gas_available = (
         block_env.block_gas_limit - block_output.block_gas_used
     )
     state_gas_available = (
@@ -577,8 +570,8 @@ def check_transaction(
     blob_gas_available = MAX_BLOB_GAS_PER_BLOCK - block_output.blob_gas_used
 
     # EIP-8037 per-dimension inclusion check.
-    if min(TX_MAX_GAS_LIMIT, tx.gas) > regular_gas_available:
-        raise GasUsedExceedsLimitError("regular gas used exceeds limit")
+    if min(TX_MAX_GAS_LIMIT, tx.gas) > execution_gas_available:
+        raise GasUsedExceedsLimitError("execution gas used exceeds limit")
 
     if tx.gas > state_gas_available:
         raise GasUsedExceedsLimitError("state gas used exceeds limit")
@@ -1055,9 +1048,9 @@ def process_transaction(
 
     effective_gas_fee = tx.gas * effective_gas_price
 
-    # Split execution gas into a regular grant (capped by the remaining
-    # regular-gas budget) and a state gas reservoir.
-    allocation = allocate_execution_gas(tx.gas, intrinsic)
+    # Split the EVM gas into an execution-gas grant (capped by the
+    # remaining execution-gas budget) and a state gas reservoir.
+    allocation = allocate_evm_gas(tx.gas, intrinsic)
 
     increment_nonce(tx_state, sender)
 
@@ -1084,7 +1077,7 @@ def process_transaction(
         recipient=tx.to,
         value=tx.value,
         gas_price=effective_gas_price,
-        gas=allocation.regular_gas,
+        gas=allocation.execution_gas,
         state_gas_reservoir=allocation.state_gas_reservoir,
         access_list_addresses=access_list_addresses,
         access_list_storage_keys=access_list_storage_keys,
@@ -1120,7 +1113,7 @@ def process_transaction(
     # transfer miner fees
     create_ether(tx_state, block_env.coinbase, U256(transaction_fee))
 
-    block_output.block_gas_used += settlement.regular_gas_used
+    block_output.block_gas_used += settlement.execution_gas_used
     block_output.block_state_gas_used += settlement.state_gas_used
     block_output.blob_gas_used += tx_blob_gas_used
 
