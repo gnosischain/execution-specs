@@ -18,6 +18,7 @@ from execution_testing import (
     Hash,
     Op,
     RecipientType,
+    RefundTypes,
     Transaction,
     compute_create_address,
 )
@@ -558,6 +559,15 @@ def test_auth_transaction(
     intrinsic_cost_calc = fork.transaction_intrinsic_cost_calculator()
     top_frame_calc = fork.transaction_top_frame_gas_calculator()
 
+    # Before EIP-2780 each authorization whose authority already exists
+    # is refunded, capped per transaction by the max refund quotient.
+    refund_per_existing_authority = (
+        fork.gas_costs().REFUND_AUTH_PER_EXISTING_ACCOUNT
+        if not empty_authority
+        and RefundTypes.AUTHORIZATION_EXISTING_AUTHORITY in fork.refund_types()
+        else 0
+    )
+
     code = Op.INVALID * fork.max_code_size()
     auth_target = (
         Address(0) if zero_delegation else pre.deploy_contract(code=code)
@@ -667,7 +677,11 @@ def test_auth_transaction(
         # frame (rolling back every delegation) and fails the post
         # check.
         tx_gas = auth_tx_gas(auths_in_this_tx)
-        expected_gas_usage += tx_gas
+        refund = min(
+            auths_in_this_tx * refund_per_existing_authority,
+            tx_gas // fork.max_refund_quotient(),
+        )
+        expected_gas_usage += tx_gas - refund
 
         receiver = pre.fund_eoa(0 if empty_account else 1)
 
