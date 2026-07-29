@@ -37,9 +37,9 @@ from ethereum.exceptions import (
     InvalidSenderError,
     NonceMismatchError,
 )
-from ethereum.forks.bpo5.blocks import Header as PreviousHeader
+from ethereum.forks.osaka.blocks import Header as PreviousHeader
 from ethereum.merkle_patricia_trie import root, trie_set
-from ethereum.state import EMPTY_CODE_HASH, Address, BlockDiff
+from ethereum.state import EMPTY_ACCOUNT, EMPTY_CODE_HASH, Address, BlockDiff
 from ethereum.state_mpt import State, apply_changes_to_state
 
 from . import vm
@@ -76,6 +76,7 @@ from .requests import (
 from .state_tracker import (
     BlockState,
     TransactionState,
+    account_exists,
     clear_account_preserving_balance,
     create_ether,
     extract_block_diff,
@@ -135,6 +136,7 @@ BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
+BLOCK_REWARD_SYSTEM_TRANSACTION_GAS = Uint(2**64 - 1)
 SYSTEM_MAX_SSTORES_PER_CALL = Uint(16)
 """
 Upper bound on the number of new storage slots a single system call is
@@ -780,6 +782,7 @@ def process_unchecked_system_transaction(
     block_env: vm.BlockEnvironment,
     target_address: Address,
     data: Bytes,
+    gas: Uint = SYSTEM_TRANSACTION_GAS,
 ) -> MessageCallOutput:
     """
     Process a system transaction without checking if the contract contains
@@ -793,6 +796,8 @@ def process_unchecked_system_transaction(
         Address of the contract to call.
     data :
         Data to pass to the contract.
+    gas :
+        Gas available to the system call.
 
     Returns
     -------
@@ -801,6 +806,8 @@ def process_unchecked_system_transaction(
 
     """
     system_tx_state = TransactionState(parent=block_env.state)
+    if not account_exists(system_tx_state, SYSTEM_ADDRESS):
+        set_account(system_tx_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
     system_contract_code = get_code(
         system_tx_state,
         get_account(system_tx_state, target_address).code_hash,
@@ -810,8 +817,8 @@ def process_unchecked_system_transaction(
         origin=SYSTEM_ADDRESS,
         recipient=target_address,
         value=U256(0),
-        gas_price=block_env.base_fee_per_gas,
-        gas=SYSTEM_TRANSACTION_GAS,
+        gas_price=Uint(0),
+        gas=gas,
         state_gas_reservoir=(
             StateGasCosts.STORAGE_SET * SYSTEM_MAX_SSTORES_PER_CALL
         ),
@@ -829,7 +836,7 @@ def process_unchecked_system_transaction(
         tx_env=tx_env,
         caller=SYSTEM_ADDRESS,
         target=target_address,
-        gas=SYSTEM_TRANSACTION_GAS,
+        gas=gas,
         state_gas_reservoir=(
             StateGasCosts.STORAGE_SET * SYSTEM_MAX_SSTORES_PER_CALL
         ),
@@ -888,8 +895,6 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
-    process_block_rewards(block_env)
-
     process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BEACON_ROOTS_ADDRESS,
@@ -905,27 +910,19 @@ def apply_body(
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 
-    # Gnosis: populate withdrawals trie here because
-    # process_withdrawals() is a system call that doesn't
-    # receive block_output (upstream does this internally).
-    for i, wd in enumerate(withdrawals):
-        trie_set(
-            block_output.withdrawals_trie,
-            rlp.encode(Uint(i)),
-            rlp.encode(wd),
-        )
-
     # EIP-7928: Post-execution operations use index N+1
     block_env.block_access_list_builder.block_access_index = BlockAccessIndex(
         ulen(transactions) + Uint(1)
     )
 
-    process_withdrawals(block_env, withdrawals)
-
     process_general_purpose_requests(
         block_env=block_env,
         block_output=block_output,
     )
+
+    process_block_rewards(block_env)
+
+    process_withdrawals(block_env, block_output, withdrawals)
 
     block_output.block_access_list = build_block_access_list(
         block_env.block_access_list_builder, block_env.state
@@ -1146,6 +1143,29 @@ def process_transaction(
     # transfer miner fees
     create_ether(tx_state, block_env.coinbase, U256(transaction_fee))
 
+    # Transfer the base fee to the Gnosis fee collector.
+    base_fee = U256(settlement.gas_used * block_env.base_fee_per_gas)
+    if base_fee != 0:
+        fee_collector_balance = get_account(
+            tx_state, FEE_COLLECTOR_ADDRESS
+        ).balance
+        set_account_balance(
+            tx_state,
+            FEE_COLLECTOR_ADDRESS,
+            fee_collector_balance + base_fee,
+        )
+
+    # Transfer the blob fee to the Gnosis fee collector.
+    if blob_gas_fee != 0:
+        blob_fee_collector_balance = get_account(
+            tx_state, BLOB_FEE_COLLECTOR
+        ).balance
+        set_account_balance(
+            tx_state,
+            BLOB_FEE_COLLECTOR,
+            blob_fee_collector_balance + U256(blob_gas_fee),
+        )
+
     block_output.block_gas_used += settlement.execution_gas_used
     block_output.block_state_gas_used += settlement.state_gas_used
     block_output.blob_gas_used += tx_blob_gas_used
@@ -1174,6 +1194,7 @@ def process_transaction(
 
 def process_withdrawals(
     block_env: vm.BlockEnvironment,
+    block_output: vm.BlockOutput,
     withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
@@ -1182,18 +1203,20 @@ def process_withdrawals(
     Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
     wd_state = TransactionState(parent=block_env.state)
+    amounts = []
+    addresses = []
+    for i, withdrawal in enumerate(withdrawals):
+        trie_set(
+            block_output.withdrawals_trie,
+            rlp.encode(Uint(i)),
+            rlp.encode(withdrawal),
+        )
+        amounts.append(int(withdrawal.amount))
+        addresses.append(withdrawal.address)
+
     deposit_contract = get_account(wd_state, DEPOSIT_CONTRACT_ADDRESS)
     if deposit_contract.code_hash == EMPTY_CODE_HASH:
         return
-
-    if not account_exists(wd_state, SYSTEM_ADDRESS):
-        set_account(wd_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
-
-    amounts = []
-    addresses = []
-    for w in withdrawals:
-        amounts.append(int(w.amount))
-        addresses.append(w.address)
 
     payload = encode(
         ["uint256", "uint64[]", "address[]"],
@@ -1208,9 +1231,7 @@ def process_withdrawals(
     if out.error:
         raise InvalidBlock(f"Withdrawal system call failed: {out.error}")
 
-    incorporate_tx_into_block(
-        wd_state, block_env.block_access_list_builder
-    )
+    incorporate_tx_into_block(wd_state, block_env.block_access_list_builder)
 
 
 def process_block_rewards(
@@ -1239,13 +1260,11 @@ def process_block_rewards(
     if account.code_hash == EMPTY_CODE_HASH:
         return
 
-    if not account_exists(reward_state, SYSTEM_ADDRESS):
-        set_account(reward_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
-
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         data=data,
+        gas=BLOCK_REWARD_SYSTEM_TRANSACTION_GAS,
     )
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")

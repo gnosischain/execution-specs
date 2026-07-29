@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Final, List, Tuple, final
 
 from ethereum_types.numeric import U64, U256, Uint, ulen
 
-from ethereum.forks.bpo5.blocks import Header as PreviousHeader
+from ethereum.forks.osaka.blocks import Header as PreviousHeader
 from ethereum.trace import GasAndRefund, StateGasAndRefund, evm_trace
 from ethereum.utils.numeric import ceil32, taylor_exponential
 
