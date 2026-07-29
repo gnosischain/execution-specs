@@ -481,7 +481,7 @@ class BuiltBlock(CamelModel):
         Return the block-header gas used.
 
         Under EIP-8037 this is the maximum across the independent gas
-        dimensions (regular vs state), i.e. the value that counts against the
+        dimensions (execution vs state), i.e. the value that counts against the
         block gas limit, as opposed to ``cumulative_gas_used`` which is their
         combined sum.
         """
@@ -880,7 +880,7 @@ class BlockchainTest(BaseTest):
             ]
         txs = [tx.with_signature_and_sender() for tx in txs]
 
-        if failing_tx_count := len([tx for tx in txs if tx.error]) > 0:
+        if (failing_tx_count := len([tx for tx in txs if tx.error])) > 0:
             if failing_tx_count > 1:
                 raise Exception(
                     "test correctness: only one transaction can produce "
