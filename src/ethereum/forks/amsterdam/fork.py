@@ -808,6 +808,8 @@ def process_unchecked_system_transaction(
     system_tx_state = TransactionState(parent=block_env.state)
     if not account_exists(system_tx_state, SYSTEM_ADDRESS):
         set_account(system_tx_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
+    # Exclude the synthetic caller unless the system call itself accesses it.
+    system_tx_state.account_reads.discard(SYSTEM_ADDRESS)
     system_contract_code = get_code(
         system_tx_state,
         get_account(system_tx_state, target_address).code_hash,
