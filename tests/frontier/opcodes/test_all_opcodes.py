@@ -338,4 +338,5 @@ def test_constant_gas(
         subject_code=opcode,
         subject_code_warm=warm_opcode,
         tear_down_code=prepare_suffix(opcode),
+        out_of_gas_testing=opcode.gas_cost(fork) > 0,
     )

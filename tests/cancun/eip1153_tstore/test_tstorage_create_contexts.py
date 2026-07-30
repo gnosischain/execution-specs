@@ -17,6 +17,7 @@ from execution_testing import (
     compute_create_address,
 )
 from execution_testing import Macros as Om
+from execution_testing.forks.helpers import Fork
 
 from . import CreateOpcodeParams, PytestParameterEnum
 from .spec import ref_spec_1153
@@ -269,6 +270,7 @@ def test_tstore_rollback_on_failed_create(
     state_test: StateTestFiller,
     pre: Alloc,
     create_opcode: Op,
+    fork: Fork,
 ) -> None:
     """
     Test TSTORE is rolled back after failed CREATE/CREATE2 initcode.
@@ -307,9 +309,9 @@ def test_tstore_rollback_on_failed_create(
 
     initcode = (
         Op.TLOAD(1)
-        + Op.PUSH2(0x600A)
+        + Op.PUSH4(max_code_size + 0x0A)
         + Op.SUB
-        + Op.TSTORE(1, 0x6000)
+        + Op.TSTORE(1, max_code_size)
         + Op.PUSH1(0)
         + Op.RETURN
     )

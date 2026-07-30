@@ -532,9 +532,9 @@ def gas_test(
     if cold_gas is None:
         cold_gas = subject_code.gas_cost(fork)
 
-    if cold_gas <= 0:
+    if cold_gas < 0:
         raise ValueError(
-            f"Target gas allocations (cold_gas) must be > 0, got {cold_gas}"
+            f"Target gas allocations (cold_gas) must be >= 0, got {cold_gas}"
         )
     if warm_gas is None:
         if subject_code_warm is not None:
