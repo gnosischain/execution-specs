@@ -17,10 +17,12 @@ from execution_testing import (
     BlockchainTestFiller,
     Bytecode,
     Environment,
+    Fork,
     Op,
     Transaction,
     compute_create_address,
 )
+from execution_testing.forks import Amsterdam
 
 # Fee collector address as defined in Prague fork
 FEE_COLLECTOR_ADDRESS = Address("0x1559000000000000000000000000000000000000")
@@ -49,12 +51,36 @@ def env(base_fee_per_gas: int) -> Environment:
     )
 
 
+@pytest.fixture
+def block_base_fee_per_gas(fork: Fork, env: Environment) -> int:
+    """Base fee of the tested block, which follows the genesis block."""
+    return fork.base_fee_per_gas_calculator()(
+        parent_base_fee_per_gas=int(env.base_fee_per_gas or 0),
+        parent_gas_used=0,
+        parent_gas_limit=env.gas_limit,
+    )
+
+
+@pytest.fixture
+def tx_gas_used(fork: Fork) -> int:
+    """
+    Return the gas the factory transaction consumes.
+
+    Amsterdam prices contract creation and storage through EIP-8037 state
+    gas and folds the transfer cost into EIP-2780's value transfer cost,
+    so the transaction costs more than it does on earlier forks.
+    """
+    return 218_075 if fork >= Amsterdam else 60_875
+
+
 def test_fee_collector_with_selfdestructed_coinbase(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
     sender: EOA,
     env: Environment,
     base_fee_per_gas: int,
+    block_base_fee_per_gas: int,
+    tx_gas_used: int,
 ) -> None:
     """
     Test that fee collector receives fees when coinbase is self-destructed.
@@ -128,7 +154,9 @@ def test_fee_collector_with_selfdestructed_coinbase(
     blockchain_test(
         pre=pre,
         post={
-            FEE_COLLECTOR_ADDRESS: Account(balance=0x3071DEA82840),
+            FEE_COLLECTOR_ADDRESS: Account(
+                balance=tx_gas_used * block_base_fee_per_gas
+            ),
             created_contract_address: Account.NONEXISTENT,
         },
         blocks=[block],
