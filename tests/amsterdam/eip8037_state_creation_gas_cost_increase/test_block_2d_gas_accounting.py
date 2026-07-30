@@ -560,7 +560,7 @@ def test_tx_gas_limit_block_boundary(
         blob_versioned_hashes = add_kzg_version(
             [Hash(1)], EIP4844_Spec.BLOB_COMMITMENT_VERSION_KZG
         )
-        extra_fee_args["max_fee_per_blob_gas"] = 1
+        extra_fee_args["max_fee_per_blob_gas"] = 1_000_000_000
     elif tx_type == 4:
         authorization_list = [
             AuthorizationTuple(

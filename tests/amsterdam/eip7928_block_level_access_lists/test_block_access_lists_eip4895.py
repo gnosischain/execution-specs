@@ -625,7 +625,7 @@ def test_bal_withdrawal_to_coinbase(
     Ensure BAL captures tx fee but not withdrawal to coinbase address.
 
     Block with 1 transaction and 1 withdrawal to coinbase/fee recipient.
-    Coinbase receives both transaction fees.
+    Coinbase receives the transaction tip only.
     Withdrawal is not captured in BAL and balance is not credited.
     """
     alice = pre.fund_eoa()
@@ -672,7 +672,7 @@ def test_bal_withdrawal_to_coinbase(
 
     tip_to_coinbase = priority_fee * total_intrinsic_gas
     withdrawal_amount = 10
-    coinbase_final_balance = tip_to_coinbase + (withdrawal_amount * GWEI)
+    coinbase_final_balance = tip_to_coinbase
 
     block = Block(
         txs=[tx],

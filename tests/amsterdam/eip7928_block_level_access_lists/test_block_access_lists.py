@@ -9,6 +9,7 @@ from execution_testing import (
     Address,
     Alloc,
     AuthorizationTuple,
+    BalAccountAbsentValues,
     BalAccountExpectation,
     BalBalanceChange,
     BalCodeChange,
@@ -3720,11 +3721,11 @@ def test_bal_gas_limit_boundary(
     post-tx system work (CL withdrawals, queue processing).
 
     Orthogonal axes:
-    - `with_tx`: alice → bob transfer adds 3 items (alice + bob +
-      coinbase warmed via EIP-3651).
-    - `with_cl_withdrawal`: EIP-4895 withdrawal to a recipient adds 1
-      item, processed between txs and the rest of the post-tx system
-      work. Together they catch clients that validate the cap before
+    - `with_tx`: alice → bob transfer adds 4 items (alice + bob +
+      coinbase warmed via EIP-3651 + the Gnosis fee collector).
+    - `with_cl_withdrawal`: on Gnosis, the withdrawal recipient adds no
+      item because payouts are handled by the deposit contract system
+      call. The axis still catches clients that validate the cap before
       `process_withdrawals` runs.
     """
     # Match framework's DEFAULT_BASE_FEE so gas_price == base_fee
@@ -3745,8 +3746,9 @@ def test_bal_gas_limit_boundary(
         # charge that would otherwise inflate the tx's gas needs past
         # the BAL-sized ``block_gas_limit``.
         bob = pre.fund_eoa(amount=1)
-        # alice (sender) + bob (recipient) + coinbase (EIP-3651 warm).
-        extra_items += 3
+        # alice (sender) + bob (recipient) + coinbase (EIP-3651 warm) +
+        # the Gnosis fee collector.
+        extra_items += 4
         txs.append(
             Transaction(
                 sender=alice,
@@ -3767,22 +3769,12 @@ def test_bal_gas_limit_boundary(
 
     if with_cl_withdrawal:
         charlie = pre.fund_eoa(amount=0)
-        withdrawal_amount_wei = 10**9  # 1 gwei
-        # CL withdrawal recipient adds 1 item; processed at
-        # block_access_index = len(txs) + 1 (post-tx).
-        extra_items += 1
+        # On Gnosis, the CL withdrawal recipient adds no item because the
+        # deposit contract system call handles payouts.
         withdrawals.append(
             Withdrawal(index=0, validator_index=0, address=charlie, amount=1)
         )
-        expected_accounts[charlie] = BalAccountExpectation(
-            balance_changes=[
-                BalBalanceChange(
-                    block_access_index=len(txs) + 1,
-                    post_balance=withdrawal_amount_wei,
-                )
-            ],
-        )
-        post[charlie] = Account(balance=withdrawal_amount_wei)
+        expected_accounts[charlie] = None
 
     total_items = fork.empty_block_bal_item_count() + extra_items
     gas_limit = (

@@ -705,17 +705,17 @@ def test_bal_invalid_missing_tx_account(
 
 
 @pytest.mark.valid_from("Amsterdam")
+@pytest.mark.exception_test
 def test_bal_invalid_missing_withdrawal_account_empty_block(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
 ) -> None:
     """
-    Test that an empty block containing only a withdrawal produces
-    a valid block with an empty BAL.
+    Test that clients reject blocks where BAL contains a surplus account
+    named only by a withdrawal.
 
-    Charlie receives 10 gwei withdrawal in an empty block (no transactions).
-    Charlie is not captured in BAL because the withdrawal is a no-op.
-    The block is valid with an empty BAL.
+    On Gnosis, Charlie is not credited directly by the withdrawal.
+    BAL is corrupted by appending Charlie's entry.
     """
     charlie = pre.fund_eoa(amount=0)
 
@@ -737,13 +737,18 @@ def test_bal_invalid_missing_withdrawal_account_empty_block(
                 ],
                 exception=BlockException.INVALID_BLOCK_ACCESS_LIST,
                 expected_block_access_list=BlockAccessListExpectation(
-                    account_expectations=beacon_root_system_call_expectations(
-                        block_timestamp,
-                        beacon_root,
-                    )
+                    account_expectations={charlie: None}
                 ).modify(
                     append_account(
-                        BalAccountChange(address=SYSTEM_ADDRESS),
+                        BalAccountChange(
+                            address=charlie,
+                            balance_changes=[
+                                BalBalanceChange(
+                                    block_access_index=1,
+                                    post_balance=10 * 10**9,
+                                )
+                            ],
+                        ),
                     )
                 ),
             )
@@ -1390,11 +1395,10 @@ def test_bal_invalid_withdrawal_balance_value(
 ) -> None:
     """
     Test that clients reject blocks where BAL contains an incorrect
-    balance value for an account modified only by a withdrawal.
+    balance value for an account named only by a withdrawal.
 
-    Charlie receives a 10 gwei withdrawal in an empty block.
-    BAL is corrupted by changing Charlie's post-balance to 999 instead
-    of the correct 10_000_000_000 (10 gwei in wei).
+    On Gnosis, Charlie is not credited directly by the withdrawal.
+    BAL is corrupted by appending Charlie with a post-balance of 999.
     """
     charlie = pre.fund_eoa(amount=0)
 
@@ -1416,18 +1420,19 @@ def test_bal_invalid_withdrawal_balance_value(
                 ],
                 exception=BlockException.INVALID_BLOCK_ACCESS_LIST,
                 expected_block_access_list=BlockAccessListExpectation(
-                    account_expectations={
-                        charlie: BalAccountExpectation(
+                    account_expectations={charlie: None}
+                ).modify(
+                    append_account(
+                        BalAccountChange(
+                            address=charlie,
                             balance_changes=[
                                 BalBalanceChange(
                                     block_access_index=1,
-                                    post_balance=10 * 10**9,
+                                    post_balance=999,
                                 )
                             ],
                         ),
-                    }
-                ).modify(
-                    modify_balance(charlie, block_access_index=1, balance=999)
+                    )
                 ),
             )
         ],

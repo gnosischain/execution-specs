@@ -34,6 +34,11 @@ class EIP4895(
         return True
 
     @classmethod
+    def empty_block_bal_item_count(cls) -> int:
+        """Count the Gnosis withdrawal system call target."""
+        return super(EIP4895, cls).empty_block_bal_item_count() + 1
+
+    @classmethod
     def system_contracts(cls) -> List[Address]:
         """Deposit contract is present from Shanghai onwards."""
         return [
