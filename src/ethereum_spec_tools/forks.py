@@ -223,6 +223,11 @@ class Hardfork:
             if hasattr(mod, "FORK_CRITERIA"):
                 forks.append(cls(mod))
 
+        # Gnosis activates Amsterdam directly after Osaka, without BPO forks.
+        forks = [
+            fork for fork in forks if not fork.short_name.startswith("bpo")
+        ]
+
         # Timestamps are bigger than block numbers, so this always works.
         forks.sort(key=lambda fork: fork.criteria)
 

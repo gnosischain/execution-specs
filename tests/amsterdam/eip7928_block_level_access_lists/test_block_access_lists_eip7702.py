@@ -1463,9 +1463,6 @@ def test_bal_selfdestruct_to_7702_delegation(
     )
 
 
-GWEI = 10**9
-
-
 def test_bal_withdrawal_to_7702_delegation(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
@@ -1509,10 +1506,6 @@ def test_bal_withdrawal_to_7702_delegation(
         ],
     )
 
-    alice_final_balance = alice_initial_balance + (
-        withdrawal_amount_gwei * GWEI
-    )
-
     account_expectations = {
         alice: BalAccountExpectation(
             # tx1: nonce change for auth, code change for delegation
@@ -1523,12 +1516,8 @@ def test_bal_withdrawal_to_7702_delegation(
                     new_code=Spec7702.delegation_designation(oracle),
                 )
             ],
-            # tx2 (withdrawal): balance change
-            balance_changes=[
-                BalBalanceChange(
-                    block_access_index=2, post_balance=alice_final_balance
-                )
-            ],
+            # NO balance_changes: on Gnosis, withdrawals go through a system
+            # contract call — there is no direct balance credit in the BAL.
         ),
         bob: BalAccountExpectation(
             balance_changes=[
@@ -1562,7 +1551,7 @@ def test_bal_withdrawal_to_7702_delegation(
         alice: Account(
             nonce=1,
             code=Spec7702.delegation_designation(oracle),
-            balance=alice_final_balance,
+            balance=alice_initial_balance,
         ),
         bob: Account(balance=10),
         relayer: Account(nonce=1),

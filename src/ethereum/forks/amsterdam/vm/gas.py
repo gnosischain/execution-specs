@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Final, List, Tuple, final
 
 from ethereum_types.numeric import U64, U256, Uint, ulen
 
-from ethereum.forks.bpo5.blocks import Header as PreviousHeader
+from ethereum.forks.osaka.blocks import Header as PreviousHeader
 from ethereum.trace import GasAndRefund, StateGasAndRefund, evm_trace
 from ethereum.utils.numeric import ceil32, taylor_exponential
 
@@ -124,12 +124,12 @@ class GasCosts:
 
     # Blobs
     PER_BLOB: Final[U64] = U64(2**17)
-    BLOB_SCHEDULE_TARGET: Final[U64] = U64(14)
+    BLOB_SCHEDULE_TARGET: Final[U64] = U64(1)
     BLOB_TARGET_GAS_PER_BLOCK: Final[U64] = PER_BLOB * BLOB_SCHEDULE_TARGET
     BLOB_BASE_COST: Final[Uint] = Uint(2**13)
-    BLOB_SCHEDULE_MAX: Final[U64] = U64(21)
-    BLOB_MIN_GASPRICE: Final[Uint] = Uint(1)
-    BLOB_BASE_FEE_UPDATE_FRACTION: Final[Uint] = Uint(11684671)
+    BLOB_SCHEDULE_MAX: Final[U64] = U64(2)
+    BLOB_MIN_GASPRICE: Final[Uint] = Uint(1000000000)
+    BLOB_BASE_FEE_UPDATE_FRACTION: Final[Uint] = Uint(1112826)
 
     # Block Access Lists
     BLOCK_ACCESS_LIST_ITEM: Final[Uint] = Uint(2000)

@@ -146,10 +146,6 @@ class GlacierForksHygiene(Lint):
             if fork_name.endswith("_glacier") and item == "BOMB_DELAY_BLOCKS":
                 previous_item.value.value = self.delay_blocks[fork_name]
 
-            if fork_name.startswith("bpo"):
-                if item.startswith("GasCosts.BLOB_"):
-                    continue
-
             if not compare_ast(previous_item, current_item):
                 add_diagnostic(
                     diagnostics,

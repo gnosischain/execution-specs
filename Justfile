@@ -16,7 +16,7 @@ xdist_workers := env("PYTEST_XDIST_AUTO_NUM_WORKERS", "6")
 # `-n auto` mode, does not warn on non-numeric values such as "auto".
 export PYTEST_XDIST_AUTO_NUM_WORKERS := ""
 evm_bin := env("EVM_BIN", "evm")
-latest_fork := "Osaka"
+latest_fork := "Amsterdam"
 
 # Use the faster sys.monitoring coverage core (default on 3.14, opt-in below).
 export COVERAGE_CORE := "sysmon"
@@ -253,7 +253,7 @@ bench-gas *args:
         --generate-pre-alloc-groups \
         --evm-bin="{{ evm_bin }}" \
         --gas-benchmark-values 1 \
-        --fork Osaka \
+        --fork Amsterdam \
         -m "not slow" \
         -n auto --maxprocesses 10 --dist=loadgroup \
         --output="{{ output_dir }}/bench-gas/pre-alloc" \
@@ -266,7 +266,7 @@ bench-gas *args:
     uv run fill \
         --evm-bin="{{ evm_bin }}" \
         --gas-benchmark-values 1 \
-        --fork Osaka \
+        --fork Amsterdam \
         -m "blockchain_test and (not derived_test) and (not slow)" \
         -n auto --maxprocesses 10 --dist=loadgroup \
         --durations=20 \
@@ -280,7 +280,7 @@ bench-gas *args:
     @rm -rf tests/json_loader/bench_gas_fixtures
     ln -sfn "{{ output_dir }}/bench-gas/fixtures" tests/json_loader/bench_gas_fixtures
     cd tests/json_loader && uv run --python pypy3.11 --no-dev --group test pytest \
-        --fork Osaka \
+        --fork Amsterdam \
         --allow-post-state-hash \
         -n auto --maxprocesses 10 --dist=loadfile \
         --durations=20 \
@@ -294,7 +294,7 @@ bench-opcode *args:
     uv run fill \
         --evm-bin="{{ evm_bin }}" \
         --fixed-opcode-count 1 \
-        --fork Osaka \
+        --fork Amsterdam \
         -m "repricing and not slow" \
         -n auto --maxprocesses 10 --dist=loadgroup \
         -k "not test_alt_bn128 and not test_bls12_381 and not test_modexp and not uncachable" \
@@ -313,7 +313,7 @@ bench-opcode-config *args:
     uv run fill \
         --evm-bin="{{ evm_bin }}" \
         --fixed-opcode-count \
-        --fork Osaka \
+        --fork Amsterdam \
         -m "repricing and not slow" \
         -n auto --maxprocesses 10 --dist=loadgroup \
         -k "not test_alt_bn128 and not test_bls12_381 and not test_modexp and not uncachable" \
@@ -364,6 +364,11 @@ docs-serve *args:
 [group('docs')]
 docs-serve-fast *args:
     FAST_DOCS=True uv run mkdocs serve "$@"
+
+# Validate docs/CHANGELOG.md entries
+[group('docs')]
+changelog:
+    uv run validate_changelog
 
 # Lint markdown files (markdownlint)
 [group('docs')]
