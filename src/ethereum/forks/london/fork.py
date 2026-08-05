@@ -16,7 +16,7 @@ from typing import List, Optional, Set, Tuple, final
 
 from eth_abi import decode
 from ethereum_rlp import rlp
-from ethereum_types.bytes import Bytes
+from ethereum_types.bytes import Bytes, Bytes8
 from ethereum_types.numeric import U64, U256, Uint
 
 from ethereum.crypto.hash import Hash32, keccak256
@@ -445,7 +445,10 @@ def validate_proof_of_work(header: Header) -> None:
     # calculating cache for every block validation.
     cache = generate_cache(header.number)
     mix_digest, result = hashimoto_light(
-        header_hash, header.nonce, cache, dataset_size(header.number)
+        header_hash,
+        Bytes8(header.nonce),
+        cache,
+        dataset_size(header.number),
     )
     if mix_digest != header.mix_digest:
         raise InvalidBlock

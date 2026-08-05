@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Tuple
 
 from ethereum_rlp import rlp
+from ethereum_types.bytes import Bytes
 from ethereum_types.numeric import U256
 
 from ethereum.crypto.hash import Hash32, keccak256
@@ -152,6 +153,18 @@ class Load(BaseLoad):
 
     def json_to_header(self, raw: Any) -> Any:
         """Converts json header data to a header object."""
+        if self.fork.is_aura:
+            number = hex_to_uint(raw.get("number"))
+            mix_digest = Bytes(number.to_be_bytes())
+            nonce = (
+                Bytes(b"\x00" * 65)
+                if number == 0
+                else hex_to_bytes(raw.get("nonce"))
+            )
+        else:
+            mix_digest = hex_to_bytes32(raw.get("mixHash"))
+            nonce = hex_to_bytes8(raw.get("nonce"))
+
         parameters = [
             hex_to_hash(raw.get("parentHash")),
             hex_to_hash(raw.get("uncleHash") or raw.get("sha3Uncles")),
@@ -172,8 +185,8 @@ class Load(BaseLoad):
             hex_to_uint(raw.get("gasUsed")),
             hex_to_u256(raw.get("timestamp")),
             hex_to_bytes(raw.get("extraData")),
-            hex_to_bytes32(raw.get("mixHash")),
-            hex_to_bytes8(raw.get("nonce")),
+            mix_digest,
+            nonce,
         ]
 
         if "baseFeePerGas" in raw:

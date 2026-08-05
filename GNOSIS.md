@@ -62,9 +62,11 @@ Implementation: `packages/testing/src/execution_testing/test_types/block_types.p
 |---|---|---|---|---|
 | `just fill` | `ConstantinopleFix` | `Osaka` (latest) | AuRa (pre-merge), standard (post-merge) | Gnosis Hive client tests |
 | `just fill-pypy` | `ConstantinopleFix` | `Osaka` (latest) | AuRa (pre-merge), standard (post-merge) | PyPy fill verification |
-| `just json-loader` | `Paris` | `Osaka` (latest) | Standard only | EELS Python spec validation |
+| `just json-loader` | `ConstantinopleFix` | `Osaka` (latest) | AuRa (pre-merge), standard (post-merge) | EELS Python spec validation |
 
-Pre-merge forks are excluded from `json-loader` because EELS validates headers using standard Ethereum rules (8-byte `Bytes8` nonce, PoW difficulty check) which are incompatible with AuRa headers.
+The JSON loader recognizes the active pre-merge forks as AuRa, decodes their
+variable-length step and seal fields, and validates the fixed AuRa difficulty
+instead of Ethereum PoW.
 
 The `just fill` recipe (and `fill-pypy`) starts from `ConstantinopleFix` because:
 

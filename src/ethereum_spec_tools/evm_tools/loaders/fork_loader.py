@@ -50,6 +50,16 @@ class ForkLoad:
         return self.hardfork.consensus.is_pos()
 
     @property
+    def is_aura(self) -> bool:
+        """Whether the fork uses Gnosis AuRa header encoding."""
+        return self.hardfork.short_name in {
+            "constantinople",
+            "istanbul",
+            "berlin",
+            "london",
+        }
+
+    @property
     def BEACON_ROOTS_ADDRESS(self) -> Any:
         """BEACON_ROOTS_ADDRESS of the given fork."""
         return self._module("fork").BEACON_ROOTS_ADDRESS
