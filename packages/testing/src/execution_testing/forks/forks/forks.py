@@ -1442,7 +1442,7 @@ class ConstantinopleFix(
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:
         """
-        Pre-allocates the block rewards contract.
+        Pre-allocate the block rewards contract.
         """
         return {
             BLOCK_REWARDS_CONTRACT_ADDRESS: {
@@ -1586,6 +1586,7 @@ class Osaka(
 class BPO1(
     Osaka,
     bpo_fork=True,
+    ignore=True,
     update_blob_constants={
         "BLOB_BASE_FEE_UPDATE_FRACTION": 8346193,
         "TARGET_BLOBS_PER_BLOCK": 10,
@@ -1600,6 +1601,7 @@ class BPO1(
 class BPO2(
     BPO1,
     bpo_fork=True,
+    ignore=True,
     update_blob_constants={
         "BLOB_BASE_FEE_UPDATE_FRACTION": 11684671,
         "TARGET_BLOBS_PER_BLOCK": 14,
@@ -1615,6 +1617,7 @@ class BPO3(
     BPO2,
     bpo_fork=True,
     deployed=False,
+    ignore=True,
     update_blob_constants={
         "BLOB_BASE_FEE_UPDATE_FRACTION": 20609697,
         "TARGET_BLOBS_PER_BLOCK": 21,
@@ -1632,6 +1635,7 @@ class BPO3(
 class BPO4(
     BPO3,
     bpo_fork=True,
+    ignore=True,
     update_blob_constants={
         "BLOB_BASE_FEE_UPDATE_FRACTION": 13739630,
         "TARGET_BLOBS_PER_BLOCK": 14,
@@ -1649,6 +1653,7 @@ class BPO4(
 class BPO5(
     BPO4,
     bpo_fork=True,
+    ignore=True,
 ):
     """
     Pseudo BPO5 fork - Blob Parameter Only fork 5.

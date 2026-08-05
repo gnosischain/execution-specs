@@ -931,11 +931,7 @@ class BlockchainTest(BaseTest):
             **(
                 transition_tool_output.result.model_dump(
                     exclude_none=True,
-                    exclude={"blob_gas_used", "transactions_root"},
-                )
-                | env.model_dump(
-                    exclude_none=True,
-                    exclude={"blob_gas_used", "slot_number"},
+                    exclude={"blob_gas_used", "transactions_trie"},
                 )
                 | env.model_dump(
                     exclude_none=True,
@@ -943,7 +939,7 @@ class BlockchainTest(BaseTest):
                 )
             ),
             blob_gas_used=blob_gas_used,
-            transactions_trie=Transaction.list_root(txs),
+            transactions_root=Transaction.list_root(txs),
             extra_data=(
                 block.extra_data if block.extra_data is not None else b""
             ),

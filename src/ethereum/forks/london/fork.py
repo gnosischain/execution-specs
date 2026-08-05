@@ -78,7 +78,6 @@ BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
 MINIMUM_DIFFICULTY = Uint(131072)
 INITIAL_BASE_FEE = Uint(1000000000)
-MINIMUM_DIFFICULTY = Uint(131072)
 MAX_OMMER_DEPTH = Uint(6)
 BOMB_DELAY_BLOCKS = 9700000
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
@@ -89,7 +88,7 @@ BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
 FEE_COLLECTOR_ADDRESS = hex_to_address(
     "0x1559000000000000000000000000000000000000"
 )
-SYSTEM_TRANSACTION_GAS = Uint(30000000)
+SYSTEM_TRANSACTION_GAS = Uint(2**64 - 1)
 
 
 @final
@@ -604,6 +603,8 @@ def process_unchecked_system_transaction(
 
     """
     system_tx_state = TransactionState(parent=block_env.state)
+    if not account_exists(system_tx_state, SYSTEM_ADDRESS):
+        set_account(system_tx_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
     system_contract_code = get_code(
         system_tx_state,
         get_account(system_tx_state, target_address).code_hash,
@@ -611,7 +612,7 @@ def process_unchecked_system_transaction(
 
     tx_env = vm.TransactionEnvironment(
         origin=SYSTEM_ADDRESS,
-        gas_price=block_env.base_fee_per_gas,
+        gas_price=Uint(0),
         gas=SYSTEM_TRANSACTION_GAS,
         access_list_addresses=set(),
         access_list_storage_keys=set(),
@@ -675,10 +676,10 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
-    process_block_rewards(block_env)
-
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
+
+    process_block_rewards(block_env)
 
     return block_output
 
@@ -939,9 +940,6 @@ def process_block_rewards(
     account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
     if account.code_hash == EMPTY_CODE_HASH:
         return
-
-    if not account_exists(reward_state, SYSTEM_ADDRESS):
-        set_account(reward_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,

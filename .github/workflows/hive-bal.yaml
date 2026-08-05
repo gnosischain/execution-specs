@@ -40,7 +40,7 @@ on:
         type: string
         default: |
           {
-            "geth": "gnosischain/go-ethereum@release-1.17.3-gc",
+            "geth": "gnosischain/go-ethereum@release-1.17.4-gc",
             "reth": "gnosischain/reth_gnosis@master",
             "nethermind": "NethermindEth/nethermind@master",
             "erigon": "erigontech/erigon@main"
@@ -121,7 +121,7 @@ jobs:
         with:
           client_repos: |
             {
-              "geth": "gnosischain/go-ethereum@release-1.17.3-gc",
+              "geth": "gnosischain/go-ethereum@release-1.17.4-gc",
               "reth": "gnosischain/reth_gnosis@master",
               "nethermind": "NethermindEth/nethermind@master",
               "erigon": "erigontech/erigon@main"

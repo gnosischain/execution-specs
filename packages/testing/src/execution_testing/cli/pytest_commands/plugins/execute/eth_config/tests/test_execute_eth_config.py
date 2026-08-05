@@ -73,26 +73,33 @@ EXPECTED_PRAGUE = json.loads("""
     "SHA256": "0x0000000000000000000000000000000000000002"
     },
     "systemContracts": {
-    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x00000961ef480eb55e80d19ad83579a64c007002",
-    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x0000bbddc7ce488642fb579f8b00f3a590007251",
-    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
     "BEACON_ROOTS_ADDRESS": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
     "BLOCK_REWARDS_CONTRACT_ADDRESS":
-                        "0x2000000000000000000000000000000000000001",
-    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003"
+                             "0x2000000000000000000000000000000000000001",
+    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
+                             "0x0000bbddc7ce488642fb579f8b00f3a590007251",
+    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003",
+    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
+    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
+                             "0x00000961ef480eb55e80d19ad83579a64c007002"
   }
 }
 """)
 EXPECTED_PRAGUE_FORK_ID = ForkHash("0x0929e24e")
+EXPECTED_BPO_PRAGUE = EXPECTED_PRAGUE | {
+    "blobSchedule": {
+        "baseFeeUpdateFraction": 5007716,
+        "max": 9,
+        "target": 6,
+    }
+}
 EXPECTED_BPO1 = json.loads("""
 {
     "activationTime": 1753477608,
     "blobSchedule": {
-    "baseFeeUpdateFraction": 1112826,
-    "max": 2,
-    "target": 1
+    "baseFeeUpdateFraction": 5007716,
+    "max": 12,
+    "target": 9
     },
     "chainId": "0x88bb0",
     "forkId": "0x5e2e4e84",
@@ -117,15 +124,15 @@ EXPECTED_BPO1 = json.loads("""
     "SHA256": "0x0000000000000000000000000000000000000002"
     },
     "systemContracts": {
-    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x00000961ef480eb55e80d19ad83579a64c007002",
-    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x0000bbddc7ce488642fb579f8b00f3a590007251",
-    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
     "BEACON_ROOTS_ADDRESS": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
     "BLOCK_REWARDS_CONTRACT_ADDRESS":
-                        "0x2000000000000000000000000000000000000001",
-    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003"
+                           "0x2000000000000000000000000000000000000001",
+    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x0000bbddc7ce488642fb579f8b00f3a590007251",
+    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003",
+    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
+    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x00000961ef480eb55e80d19ad83579a64c007002"
   }
 }
 """)
@@ -134,9 +141,9 @@ EXPECTED_BPO2 = json.loads("""
 {
     "activationTime": 1753575912,
     "blobSchedule": {
-    "baseFeeUpdateFraction": 1112826,
-    "max": 2,
-    "target": 1
+    "baseFeeUpdateFraction": 5007716,
+    "max": 15,
+    "target": 12
     },
     "chainId": "0x88bb0",
     "forkId": "0x9d7b6bfb",
@@ -161,15 +168,15 @@ EXPECTED_BPO2 = json.loads("""
     "SHA256": "0x0000000000000000000000000000000000000002"
     },
     "systemContracts": {
-    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x00000961ef480eb55e80d19ad83579a64c007002",
-    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x0000bbddc7ce488642fb579f8b00f3a590007251",
-    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
     "BEACON_ROOTS_ADDRESS": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
     "BLOCK_REWARDS_CONTRACT_ADDRESS":
-                        "0x2000000000000000000000000000000000000001",
-    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003"
+                           "0x2000000000000000000000000000000000000001",
+    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x0000bbddc7ce488642fb579f8b00f3a590007251",
+    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003",
+    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
+    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x00000961ef480eb55e80d19ad83579a64c007002"
   }
 }
 """)
@@ -178,9 +185,9 @@ EXPECTED_BPO3 = json.loads("""
 {
     "activationTime": 1753674216,
     "blobSchedule": {
-    "baseFeeUpdateFraction": 1112826,
-    "max": 2,
-    "target": 1
+    "baseFeeUpdateFraction": 5007716,
+    "max": 18,
+    "target": 15
     },
     "chainId": "0x88bb0",
     "forkId": "0xbebdd3a1",
@@ -205,15 +212,15 @@ EXPECTED_BPO3 = json.loads("""
     "SHA256": "0x0000000000000000000000000000000000000002"
     },
     "systemContracts": {
-    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x00000961ef480eb55e80d19ad83579a64c007002",
-    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x0000bbddc7ce488642fb579f8b00f3a590007251",
-    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
     "BEACON_ROOTS_ADDRESS": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
     "BLOCK_REWARDS_CONTRACT_ADDRESS":
-                        "0x2000000000000000000000000000000000000001",
-    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003"
+                           "0x2000000000000000000000000000000000000001",
+    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x0000bbddc7ce488642fb579f8b00f3a590007251",
+    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003",
+    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
+    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x00000961ef480eb55e80d19ad83579a64c007002"
   }
 }
 """)
@@ -222,9 +229,9 @@ EXPECTED_BPO4 = json.loads("""
 {
     "activationTime": 1753772520,
     "blobSchedule": {
-    "baseFeeUpdateFraction": 1112826,
-    "max": 2,
-    "target": 1
+    "baseFeeUpdateFraction": 5007716,
+    "max": 9,
+    "target": 6
     },
     "chainId": "0x88bb0",
     "forkId": "0x190c2054",
@@ -249,15 +256,15 @@ EXPECTED_BPO4 = json.loads("""
     "SHA256": "0x0000000000000000000000000000000000000002"
     },
     "systemContracts": {
-    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x00000961ef480eb55e80d19ad83579a64c007002",
-    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x0000bbddc7ce488642fb579f8b00f3a590007251",
-    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
     "BEACON_ROOTS_ADDRESS": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
     "BLOCK_REWARDS_CONTRACT_ADDRESS":
-                        "0x2000000000000000000000000000000000000001",
-    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003"
+                           "0x2000000000000000000000000000000000000001",
+    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x0000bbddc7ce488642fb579f8b00f3a590007251",
+    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003",
+    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
+    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x00000961ef480eb55e80d19ad83579a64c007002"
   }
 }
 """)
@@ -266,9 +273,9 @@ EXPECTED_BPO5 = json.loads("""
 {
     "activationTime": 1753889256,
     "blobSchedule": {
-    "baseFeeUpdateFraction": 1112826,
-    "max": 2,
-    "target": 1
+    "baseFeeUpdateFraction": 5007716,
+    "max": 20,
+    "target": 15
     },
     "chainId": "0x88bb0",
     "forkId": "0xd3a4880b",
@@ -293,15 +300,15 @@ EXPECTED_BPO5 = json.loads("""
     "SHA256": "0x0000000000000000000000000000000000000002"
     },
     "systemContracts": {
-    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x00000961ef480eb55e80d19ad83579a64c007002",
-    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
-                        "0x0000bbddc7ce488642fb579f8b00f3a590007251",
-    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
     "BEACON_ROOTS_ADDRESS": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
     "BLOCK_REWARDS_CONTRACT_ADDRESS":
-                        "0x2000000000000000000000000000000000000001",
-    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003"
+                           "0x2000000000000000000000000000000000000001",
+    "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x0000bbddc7ce488642fb579f8b00f3a590007251",
+    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003",
+    "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
+    "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
+                           "0x00000961ef480eb55e80d19ad83579a64c007002"
   }
 }
 """)
@@ -338,9 +345,11 @@ EXPECTED_OSAKA = json.loads("""
     },
     "systemContracts": {
     "BEACON_ROOTS_ADDRESS": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+    "BLOCK_REWARDS_CONTRACT_ADDRESS":
+                           "0x2000000000000000000000000000000000000001",
     "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
                            "0x0000bbddc7ce488642fb579f8b00f3a590007251",
-    "DEPOSIT_CONTRACT_ADDRESS": "0x00000000219ab540356cbb839cbe05303d7705fa",
+    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003",
     "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
     "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
                            "0x00000961ef480eb55e80d19ad83579a64c007002"
@@ -382,13 +391,15 @@ EXPECTED_AMSTERDAM = json.loads("""
     },
     "systemContracts": {
     "BEACON_ROOTS_ADDRESS": "0x000f3df6d732807ef1319fb7b8bb8522d0beac02",
+    "BLOCK_REWARDS_CONTRACT_ADDRESS":
+                           "0x2000000000000000000000000000000000000001",
     "BUILDER_DEPOSIT_CONTRACT_ADDRESS":
                            "0x0000bff46984e3725691fa540a8c7589300d8282",
     "BUILDER_EXIT_CONTRACT_ADDRESS":
                            "0x000064d678505ad48f8ccb093bc65613800e8282",
     "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS":
                            "0x0000bbddc7ce488642fb579f8b00f3a590007251",
-    "DEPOSIT_CONTRACT_ADDRESS": "0x00000000219ab540356cbb839cbe05303d7705fa",
+    "DEPOSIT_CONTRACT_ADDRESS": "0xbabe2bed00000000000000000000000000000003",
     "HISTORY_STORAGE_ADDRESS": "0x0000f90827f1c53a10cb7a02335b175320002935",
     "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS":
                            "0x00000961ef480eb55e80d19ad83579a64c007002"
@@ -504,29 +515,29 @@ HoodiWithBPOs:
     BPO4:               1753889256
   blobSchedule:
     Cancun:
-      target: 1
-      max: 2
-      baseFeeUpdateFraction: 1112826
+      target: 3
+      max: 6
+      baseFeeUpdateFraction: 3338477
     Prague:
-      target: 1
-      max: 2
-      baseFeeUpdateFraction: 1112826
+      target: 6
+      max: 9
+      baseFeeUpdateFraction: 5007716
     Osaka:
-      target: 1
-      max: 2
-      baseFeeUpdateFraction: 1112826
+      target: 9
+      max: 12
+      baseFeeUpdateFraction: 5007716
     BPO1:
-      target: 1
-      max: 2
-      baseFeeUpdateFraction: 1112826
+      target: 12
+      max: 15
+      baseFeeUpdateFraction: 5007716
     BPO2:
-      target: 1
-      max: 2
-      baseFeeUpdateFraction: 1112826
+      target: 15
+      max: 18
+      baseFeeUpdateFraction: 5007716
     BPO3:
-      target: 1
-      max: 2
-      baseFeeUpdateFraction: 1112826
+      target: 6
+      max: 9
+      baseFeeUpdateFraction: 5007716
     BPO4:
       target: 15
       max: 20
@@ -615,7 +626,7 @@ def eth_config(network: NetworkConfig, current_time: int) -> EthConfigResponse:
             "HoodiWithBPOs",
             1742999832,
             EthConfigResponse(
-                current=EXPECTED_PRAGUE,
+                current=EXPECTED_BPO_PRAGUE,
                 next=EXPECTED_BPO1,
                 last=EXPECTED_BPO5,
             ),

@@ -739,13 +739,6 @@ def calculate_intrinsic_cost(
             tokens_in_access_list += (
                 ulen(access.slots) * ACCESS_LIST_STORAGE_KEY_FLOOR_TOKENS
             )
-            tokens_in_access_list += ACCESS_LIST_ADDRESS_FLOOR_TOKENS
-            tokens_in_access_list += (
-                ulen(access.slots) * ACCESS_LIST_STORAGE_KEY_FLOOR_TOKENS
-            )
-
-    # Data token floor cost for access list bytes.
-    access_list_cost += tokens_in_access_list * GasCosts.TX_DATA_TOKEN_FLOOR
 
     # Data token floor cost for access list bytes.
     access_list_cost += tokens_in_access_list * GasCosts.TX_DATA_TOKEN_FLOOR

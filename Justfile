@@ -138,6 +138,7 @@ fill *args: (_tmp-logs "fill")
         --basetemp="{{ output_dir }}/fill/tmp" \
         --log-to "{{ output_dir }}/fill/logs" \
         --clean \
+        --from ConstantinopleFix \
         --until "{{ latest_fork }}" \
         --durations=50 \
         "$@" \
@@ -185,7 +186,7 @@ fill-pypy *args: (_tmp-logs "fill-pypy")
 json-loader *args: (_tmp "json-loader")
     uv run fill \
         -m "eels_base_coverage and not derived_test" \
-        --from Paris \
+        --from ConstantinopleFix \
         --until "{{ latest_fork }}" \
         -n {{ xdist_workers }} --dist=loadgroup \
         --skip-index \
@@ -278,7 +279,7 @@ bench-gas *args: (_tmp-logs "bench-gas")
         --generate-pre-alloc-groups \
         --evm-bin="{{ evm_bin }}" \
         --gas-benchmark-values 1 \
-        --fork Amsterdam \
+        --fork Osaka \
         -m "not slow" \
         -n auto --maxprocesses 10 --dist=loadgroup \
         --output="{{ output_dir }}/bench-gas/pre-alloc" \
@@ -291,7 +292,7 @@ bench-gas *args: (_tmp-logs "bench-gas")
     uv run fill \
         --evm-bin="{{ evm_bin }}" \
         --gas-benchmark-values 1 \
-        --fork Amsterdam \
+        --fork Osaka \
         -m "blockchain_test and (not derived_test) and (not slow)" \
         -n auto --maxprocesses 10 --dist=loadgroup \
         --durations=20 \
@@ -305,7 +306,7 @@ bench-gas *args: (_tmp-logs "bench-gas")
     @rm -rf tests/json_loader/bench_gas_fixtures
     ln -sfn "{{ output_dir }}/bench-gas/fixtures" tests/json_loader/bench_gas_fixtures
     cd tests/json_loader && uv run --python pypy3.11 --no-dev --group test pytest \
-        --fork Amsterdam \
+        --fork Osaka \
         --allow-post-state-hash \
         -n auto --maxprocesses 10 --dist=loadfile \
         --durations=20 \
@@ -318,7 +319,7 @@ bench-opcode *args: (_tmp-logs "bench-opcode")
     uv run fill \
         --evm-bin="{{ evm_bin }}" \
         --fixed-opcode-count 1 \
-        --fork Amsterdam \
+        --fork Osaka \
         -m "repricing and not slow" \
         -n auto --maxprocesses 10 --dist=loadgroup \
         -k "not test_alt_bn128 and not test_bls12_381 and not test_modexp and not uncachable" \
@@ -336,7 +337,7 @@ bench-opcode-config *args: (_tmp-logs "bench-opcode-config")
     uv run fill \
         --evm-bin="{{ evm_bin }}" \
         --fixed-opcode-count \
-        --fork Amsterdam \
+        --fork Osaka \
         -m "repricing and not slow" \
         -n auto --maxprocesses 10 --dist=loadgroup \
         -k "not test_alt_bn128 and not test_bls12_381 and not test_modexp and not uncachable" \

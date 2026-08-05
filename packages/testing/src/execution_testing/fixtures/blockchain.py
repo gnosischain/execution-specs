@@ -174,17 +174,17 @@ class FixtureHeader(CamelModel):
     state_root: Hash
     transactions_root: Hash = Field(
         Hash(EmptyTrieRoot),
-        alias="transactionsRoot",
+        alias="transactionsTrie",
         validation_alias=AliasChoices("transactionsTrie", "transactionsRoot"),
     )
     receipts_root: Hash = Field(
         Hash(EmptyTrieRoot),
-        alias="receiptsRoot",
+        alias="receiptTrie",
         validation_alias=AliasChoices("receiptTrie", "receiptsRoot"),
     )
     logs_bloom: Bloom = Field(
         Bloom(0),
-        alias="logsBloom",
+        alias="bloom",
         validation_alias=AliasChoices("bloom", "logsBloom"),
     )
     difficulty: ZeroPaddedHexNumber = ZeroPaddedHexNumber(0)
@@ -277,11 +277,17 @@ class FixtureHeader(CamelModel):
     @cached_property
     def rlp_encode_list(self) -> List:
         """Compute the RLP of the header."""
-        # Gnosis only: non-zero difficulty signals an Aura-sealed block
-        aura = (
-            self.fork is not None
-            and not self.fork.header_zero_difficulty_required()
-        )
+        # Gnosis only: non-zero difficulty signals an Aura-sealed block.
+        # `fork` is excluded from serialization, so it is None when a fixture
+        # is loaded from file; fall back to the fixed Aura difficulty marker
+        # in that case to keep the hash stable across the round-trip.
+        if self.fork is not None:
+            aura = not self.fork.header_zero_difficulty_required()
+        else:
+            aura = (
+                self.difficulty is not None
+                and int(self.difficulty) == (1 << 128) - 2
+            )
         header_list: List[bytes | Uint] = []
         for field in self.__class__.model_fields:
             if field == "fork":

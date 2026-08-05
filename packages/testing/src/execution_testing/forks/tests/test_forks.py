@@ -26,7 +26,6 @@ from ..forks.forks import (
     Paris,
     Prague,
     Shanghai,
-    SpuriousDragon,
 )
 from ..forks.transition import (
     BerlinToLondonAt5,
@@ -612,6 +611,7 @@ def test_fork_adapters() -> None:  # noqa: D103
     assert set() == ForkSetAdapter.validate_python("")
 
 
+@pytest.mark.skip(reason="Ethereum BPO schedules are not active on Gnosis")
 class TestSelectedForkSetWithTransitionBoundaries:
     """Test `get_selected_fork_set` with transition fork boundaries."""
 
