@@ -25,6 +25,7 @@ from execution_testing.base_types import (
     AccessList,
     Address,
     BlobSchedule,
+    StateCommitment,
 )
 from execution_testing.base_types.conversions import BytesConvertible
 from execution_testing.vm import (
@@ -354,7 +355,6 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
     is_transition_fork: ClassVar[bool] = False
 
     _transition_tool_name: ClassVar[Optional[str]] = None
-    _solc_name: ClassVar[Optional[str]] = None
     _ignore: ClassVar[bool] = False
     _bpo_fork: ClassVar[bool] = False
     _children: ClassVar[Set[Type["BaseFork"]]] = set()
@@ -379,7 +379,6 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         cls,
         *,
         transition_tool_name: Optional[str] = None,
-        solc_name: Optional[str] = None,
         ignore: bool = False,
         bpo_fork: bool = False,
         ruleset_name: Optional[str] = None,
@@ -396,7 +395,6 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         forks.
         """
         cls._transition_tool_name = transition_tool_name
-        cls._solc_name = solc_name
         cls._ignore = ignore
         cls._bpo_fork = bpo_fork
         cls._ruleset_name = ruleset_name
@@ -480,6 +478,11 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         else:
             if base_fork_class is not BaseFork:
                 cls._deployed = base_fork_class._deployed
+
+    @classmethod
+    def state_commitment(cls) -> StateCommitment:
+        """Return the state-commitment scheme for the state root."""
+        return StateCommitment.MPT
 
     # Header information abstract methods
     @classmethod
@@ -1172,6 +1175,14 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         """
         pass
 
+    @classmethod
+    @abstractmethod
+    def engine_payload_attribute_target_gas_limit(cls) -> bool:
+        """
+        Return true if the payload attributes include the target gas limit.
+        """
+        pass
+
     # Engine API method versions
     @classmethod
     def engine_new_payload_version(cls) -> Optional[int]:
@@ -1327,12 +1338,6 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         Return fork name as it's meant to be passed to the transition tool for
         execution.
         """
-        pass
-
-    @classmethod
-    @abstractmethod
-    def solc_name(cls) -> str:
-        """Return fork name as it's meant to be passed to the solc compiler."""
         pass
 
     @classmethod

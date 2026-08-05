@@ -132,6 +132,7 @@ def apply_new_parent(
     updated["parent_gas_used"] = new_parent.gas_used
     updated["parent_gas_limit"] = new_parent.gas_limit
     updated["parent_ommers_hash"] = new_parent.ommers_hash
+    updated["parent_slot_number"] = new_parent.slot_number
     block_hashes = env.block_hashes.copy()
     block_hashes[new_parent.number] = new_parent.block_hash
     updated["block_hashes"] = block_hashes
@@ -824,6 +825,10 @@ class BlockchainTest(BaseTest):
             )
         if empty_accounts := pre_alloc.empty_accounts():
             raise Exception(f"Empty accounts in pre state: {empty_accounts}")
+        if pre_alloc.state_commitment() is None:
+            pre_alloc.migrate_state_commitment(
+                self.fork.transitions_from().state_commitment()
+            )
         state_root = pre_alloc.state_root()
         genesis = FixtureHeader.genesis(
             self.fork.transitions_from(), env, state_root
@@ -1472,6 +1477,10 @@ class BlockchainTest(BaseTest):
                 max_priority_fee_per_gas=max_priority_fee_per_gas,
                 max_fee_per_blob_gas=max_fee_per_blob_gas,
             )
+
+        self.pre.verify_deployed_accounts(
+            int(HexNumber(start_block["number"]))
+        )
 
         # Materialise queued pre-alloc txs into a synthetic setup block.
         blocks_to_process: List[Block] = []
