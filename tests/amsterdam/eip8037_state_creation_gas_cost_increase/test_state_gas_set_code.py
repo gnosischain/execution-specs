@@ -3,7 +3,7 @@ Test EIP-7702 SetCode authorization state gas under the EIP-2780
 top-frame charge model.
 
 Under EIP-2780 (Amsterdam) an authorization's intrinsic cost is only the
-state-independent ``REGULAR_PER_AUTH_BASE_COST``; there is no intrinsic
+state-independent ``EXECUTION_PER_AUTH_BASE_COST``; there is no intrinsic
 auth state gas and there are no auth refunds. The state-dependent costs
 are charged lazily at the top frame in ``set_delegation``, keyed on each
 authority's pre-transaction state:
@@ -57,6 +57,7 @@ from execution_testing import (
 from tests.prague.eip7702_set_code_tx.spec import Spec as Spec7702
 
 from .spec import ref_spec_8037
+from .test_state_gas_sstore import revoked_advance_call_tree
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_8037.git_path
 REFERENCE_SPEC_VERSION = ref_spec_8037.version
@@ -615,7 +616,7 @@ def test_invalid_nonce_auth_still_charges_intrinsic(
     An authorization with a wrong nonce is skipped during
     ``set_delegation``, so it writes no delegation indicator and incurs
     no top-frame charge. Its state-independent
-    ``REGULAR_PER_AUTH_BASE_COST`` is still charged in the intrinsic, and
+    ``EXECUTION_PER_AUTH_BASE_COST`` is still charged in the intrinsic, and
     the authority is left untouched.
     """
     contract = pre.deploy_contract(code=Op.STOP)
@@ -670,7 +671,7 @@ def test_invalid_chain_id_auth_still_charges_intrinsic(
 
     An authorization with a mismatched chain ID is skipped during
     ``set_delegation`` and incurs no top-frame charge, but its
-    ``REGULAR_PER_AUTH_BASE_COST`` is still charged in the intrinsic and
+    ``EXECUTION_PER_AUTH_BASE_COST`` is still charged in the intrinsic and
     the authority is left untouched.
     """
     contract = pre.deploy_contract(code=Op.STOP)
@@ -946,7 +947,7 @@ def test_mixed_valid_and_invalid_auths(
     Test mixed valid and invalid authorizations under the top-frame model.
 
     Every tuple (valid or invalid) pays the intrinsic
-    ``REGULAR_PER_AUTH_BASE_COST``. Only the valid authorizations reach
+    ``EXECUTION_PER_AUTH_BASE_COST``. Only the valid authorizations reach
     ``set_delegation`` and each writes a net-new delegation on an existing
     authority, paying the first-write ``ACCOUNT_WRITE`` and the top-frame
     ``AUTH_BASE``; the invalid (wrong nonce) tuples are skipped and pay
@@ -1808,6 +1809,81 @@ def test_auth_sender_billing_after_failure(
 
 
 @pytest.mark.parametrize(
+    "inner_shape",
+    [
+        pytest.param("burned_child_spill", id="burned_child_spill"),
+        pytest.param("revoked_advance", id="revoked_advance"),
+    ],
+)
+@pytest.mark.valid_from("EIP8037")
+def test_top_level_halt_keeps_intrinsic_auth_state_gas(
+    state_test: StateTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    inner_shape: str,
+) -> None:
+    """
+    Verify a top-level exceptional halt keeps the full authorization
+    state gas in the state dimension while the burned child spill stays
+    in the execution dimension: the header reports
+    ``max(gas_limit - auth_state, auth_state)`` regardless of the
+    spill shape burned inside the halted frame.
+
+    The tx gas limit sits below the EIP-7825 cap, so the reservoir is
+    empty and every state charge inside the halted frame spills from
+    `gas_left`.
+    """
+    gas_limit = 1_000_000
+
+    if inner_shape == "burned_child_spill":
+        inner = pre.deploy_contract(code=Op.SSTORE(0, 1) + Op.INVALID)
+    else:
+        inner = revoked_advance_call_tree(pre)
+
+    recipient = pre.deploy_contract(
+        code=Op.POP(Op.CALL(gas=Op.GAS, address=inner)) + Op.INVALID,
+    )
+
+    delegate = pre.deploy_contract(code=Op.STOP)
+    signer = pre.fund_eoa(amount=0)
+    authorization_list = [
+        AuthorizationTuple(
+            address=delegate,
+            nonce=0,
+            signer=signer,
+            creates_account=True,
+            writes_delegation=True,
+        ),
+    ]
+    _, _, auth_state_gas = _auth_gas(fork, authorization_list)
+
+    # The halt consumes the whole limit: the execution and state
+    # dimensions sum to `gas_limit` however the split falls.
+    tx = Transaction(
+        ty=4,
+        to=recipient,
+        gas_limit=gas_limit,
+        authorization_list=authorization_list,
+        sender=pre.fund_eoa(),
+        expected_receipt=TransactionReceipt(
+            cumulative_gas_used=gas_limit,
+        ),
+    )
+
+    post = {
+        signer: Account(code=Spec7702.delegation_designation(delegate)),
+    }
+    state_test(
+        pre=pre,
+        post=post,
+        tx=tx,
+        blockchain_test_header_verify=Header(
+            gas_used=max(gas_limit - auth_state_gas, auth_state_gas)
+        ),
+    )
+
+
+@pytest.mark.parametrize(
     "gas_delta",
     [
         pytest.param(0, id="exact_fit"),
@@ -1923,7 +1999,7 @@ def test_invalid_auth_no_top_frame_charge(
     neither ``NEW_ACCOUNT`` / ``ACCOUNT_WRITE`` nor ``AUTH_BASE`` at the
     top frame (and, unlike the superseded EIP-8037 model, nothing is
     refilled because nothing was charged). Only the intrinsic
-    ``REGULAR_PER_AUTH_BASE_COST`` is paid and the authority is never
+    ``EXECUTION_PER_AUTH_BASE_COST`` is paid and the authority is never
     created. Swept over the reasons an authorization is rejected.
     """
     target = pre.deploy_contract(code=Op.STOP)
