@@ -12,7 +12,7 @@ Entry point for the Ethereum specification.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple, final
 
 from eth_abi import decode
 from ethereum_rlp import rlp
@@ -30,17 +30,13 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 from ethereum.merkle_patricia_trie import root, trie_set
-from ethereum.state import (
-    EMPTY_ACCOUNT,
-    EMPTY_CODE_HASH,
-    Address,
-    State,
-    apply_changes_to_state,
-)
+from ethereum.state import EMPTY_ACCOUNT, EMPTY_CODE_HASH, Address
+from ethereum.state_mpt import State, apply_changes_to_state
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt
 from .bloom import logs_bloom
+from .exceptions import WrongChainIdError
 from .state_tracker import (
     BlockState,
     TransactionState,
@@ -58,6 +54,7 @@ from .state_tracker import (
 )
 from .transactions import (
     Transaction,
+    chain_id,
     get_transaction_hash,
     recover_sender,
     validate_transaction,
@@ -68,6 +65,7 @@ from .vm import Message
 from .vm.gas import GasCosts
 from .vm.interpreter import MessageCallOutput, process_message_call
 
+BLOCK_REWARD = U256(2 * 10**18)
 MINIMUM_DIFFICULTY = Uint(131072)
 MAX_OMMER_DEPTH = Uint(6)
 BOMB_DELAY_BLOCKS = 9000000
@@ -76,9 +74,10 @@ SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
 BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
     "0x2000000000000000000000000000000000000001"
 )
-SYSTEM_TRANSACTION_GAS = Uint(30000000)
+SYSTEM_TRANSACTION_GAS = Uint(2**64 - 1)
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -135,7 +134,6 @@ def get_last_256_block_hashes(chain: BlockChain) -> List[Hash32]:
 
     """
     recent_blocks = chain.blocks[-255:]
-    # TODO: This function has not been tested rigorously
     if len(recent_blocks) == 0:
         return []
 
@@ -198,11 +196,7 @@ def state_transition(chain: BlockChain, block: Block) -> None:
         transactions=block.transactions,
     )
     block_diff = extract_block_diff(block_state)
-    block_state_root, _ = chain.state.compute_state_root_and_trie_changes(
-        block_diff.account_changes,
-        block_diff.storage_changes,
-        block_diff.storage_clears,
-    )
+    block_state_root = chain.state.compute_state_root(block_diff)
     transactions_root = root(block_output.transactions_trie)
     receipt_root = root(block_output.receipts_trie)
     block_logs_bloom = logs_bloom(block_output.block_logs)
@@ -407,7 +401,14 @@ def check_transaction(
     gas_available = block_env.block_gas_limit - block_output.block_gas_used
     if tx.gas > gas_available:
         raise GasUsedExceedsLimitError("gas used exceeds limit")
-    sender_address = recover_sender(block_env.chain_id, tx)
+    tx_chain_id = chain_id(tx)
+    if tx_chain_id is not None and tx_chain_id != block_env.chain_id:
+        raise WrongChainIdError(
+            expected=block_env.chain_id,
+            actual=tx_chain_id,
+        )
+
+    sender_address = recover_sender(tx)
     sender_account = get_account(tx_state, sender_address)
 
     max_gas_fee = tx.gas * tx.gas_price
@@ -485,6 +486,8 @@ def process_unchecked_system_transaction(
 
     """
     system_tx_state = TransactionState(parent=block_env.state)
+    if not account_exists(system_tx_state, SYSTEM_ADDRESS):
+        set_account(system_tx_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
     system_contract_code = get_code(
         system_tx_state,
         get_account(system_tx_state, target_address).code_hash,
@@ -552,10 +555,10 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
-    process_block_rewards(block_env)
-
     for i, tx in enumerate(transactions):
         process_transaction(block_env, block_output, tx, Uint(i))
+
+    process_block_rewards(block_env)
 
     return block_output
 
@@ -779,9 +782,6 @@ def process_block_rewards(
     account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
     if account.code_hash == EMPTY_CODE_HASH:
         return
-
-    if not account_exists(reward_state, SYSTEM_ADDRESS):
-        set_account(reward_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     out = process_unchecked_system_transaction(
         block_env=block_env,
