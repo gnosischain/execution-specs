@@ -1,7 +1,7 @@
 {
     "000/my_chain_id_test/Paris/tx_type_0": {
         "network": "Paris",
-        "lastblockhash": "0xd6e5b3f7b2720ab2347ee0d6c199304c367806fc285c5dca46414a459ada37eb",
+        "lastblockhash": "0x702a747d87f5daada6245b627a78bc1c5da3fef40ffe87ae4f5854570d59a551",
         "config": {
             "network": "Paris",
             "chainid": "0x01"
@@ -66,12 +66,6 @@
                 "code": "0x",
                 "storage": {}
             },
-            "0xfffffffffffffffffffffffffffffffffffffffe": {
-                "nonce": "0x00",
-                "balance": "0x00",
-                "code": "0x",
-                "storage": {}
-            },
             "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba": {
                 "nonce": "0x00",
                 "balance": "0x020229",
@@ -91,7 +85,7 @@
                     {
                         "parentHash": "0x22fe81f7301e8ddb27ecc5f31eda2982af3d450e3d59e4d01f76e19c8ef20930",
                         "feeRecipient": "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
-                        "stateRoot": "0xc310470978f6327b545ee1fecdd5ea8ee904f0d864a640108f1f4b5f803184db",
+                        "stateRoot": "0xb683405a5cda54d83677e06c6311491aeac61faf645fd19d23fceb5448b7a3fc",
                         "receiptsRoot": "0x4b93b3c0006d672c5dfd4094132d3e8acd463e7cb018f86df29136c9a399d0b6",
                         "logsBloom": "0x04000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000",
                         "blockNumber": "0x1",
@@ -101,7 +95,7 @@
                         "extraData": "0x00",
                         "prevRandao": "0x0000000000000000000000000000000000000000000000000000000000000000",
                         "baseFeePerGas": "0x7",
-                        "blockHash": "0xd6e5b3f7b2720ab2347ee0d6c199304c367806fc285c5dca46414a459ada37eb",
+                        "blockHash": "0x702a747d87f5daada6245b627a78bc1c5da3fef40ffe87ae4f5854570d59a551",
                         "transactions": [
                             "0xf861800a8405f5e10094100000000000000000000000000000000000000080801ba07e09e26678ed4fac08a249ebe8ed680bf9051a5e14ad223e4b2b9d26e0208f37a05f6e3f188e3e6eab7d7d3b6568f5eac7d687b08d307d3154ccd8c87b4630509b"
                         ]
@@ -112,7 +106,7 @@
             }
         ],
         "_info": {
-            "hash": "0x3c977c86585f56f5f2b48d9a887e7774bf09eebe10243be6662e52707174f7a2",
+            "hash": "0xf164e180ca4119007d43c515c4d1a86c42ed47363280dfcf1bc580d0788699d6",
             "fixture-format": "blockchain_test_engine"
         }
     }

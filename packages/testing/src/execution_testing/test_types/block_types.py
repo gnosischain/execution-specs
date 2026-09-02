@@ -1,6 +1,6 @@
 """Block-related types for Ethereum tests."""
 
-import hashlib
+import json
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Dict, Generic, List, Sequence
@@ -21,6 +21,7 @@ from execution_testing.base_types import (
     TestAddress,
     ZeroPaddedHexNumber,
 )
+from execution_testing.base_types.ssz import SSZModel, Uint64
 from execution_testing.forks import Fork
 
 DEFAULT_BASE_FEE = 7
@@ -73,10 +74,12 @@ class WithdrawalGeneric(CamelModel, Generic[NumberBoundTypeVar]):
         return t.root_hash
 
 
-class Withdrawal(WithdrawalGeneric[HexNumber]):
-    """Withdrawal type."""
+class Withdrawal(WithdrawalGeneric[HexNumber], SSZModel):
+    """Withdrawal type; also the consensus-layer SSZ container."""
 
-    pass
+    index: Uint64
+    validator_index: Uint64
+    amount: Uint64
 
 
 class EnvironmentGeneric(CamelModel, Generic[NumberBoundTypeVar]):
@@ -136,6 +139,7 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
     )
     parent_blob_gas_used: ZeroPaddedHexNumber | None = Field(None)
     parent_excess_blob_gas: ZeroPaddedHexNumber | None = Field(None)
+    parent_slot_number: ZeroPaddedHexNumber | None = Field(None)
     parent_beacon_block_root: Hash | None = Field(None)
 
     block_hashes: Dict[ZeroPaddedHexNumber, Hash] = Field(default_factory=dict)
@@ -203,7 +207,11 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
             updated_values["parent_beacon_block_root"] = 0
 
         if fork.header_slot_number_required() and self.slot_number is None:
-            updated_values["slot_number"] = 0
+            updated_values["slot_number"] = (
+                int(self.parent_slot_number) + 1
+                if self.parent_slot_number is not None
+                else 0
+            )
 
         if (
             not fork.header_zero_difficulty_required()
@@ -214,15 +222,18 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
 
         return self.copy(**updated_values)
 
-    def __hash__(self) -> int:
-        """Hashes the environment object."""
-        hash_dict = self.model_dump(exclude_none=True, by_alias=True)
+    def canonical_json(self) -> str:
+        """
+        Return the canonical JSON encoding of this model.
 
-        sorted_items = sorted(hash_dict.items())
-        hash_string = str(sorted_items)
-
-        digest = hashlib.sha256(hash_string.encode("utf-8")).digest()
-        return int.from_bytes(digest[:8], byteorder="big")
+        Keys are alias-cased and sorted, and unset fields are excluded, so
+        two equal models encode identically and the encoding is stable
+        across processes: usable as a grouping key or a hash pre-image.
+        """
+        return json.dumps(
+            self.model_dump(mode="json", by_alias=True, exclude_none=True),
+            sort_keys=True,
+        )
 
     def __eq__(self, other: object) -> bool:
         """Check if two environment objects are equal."""

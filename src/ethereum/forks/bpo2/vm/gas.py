@@ -12,10 +12,11 @@ EVM gas constants and calculators.
 """
 
 from dataclasses import dataclass
-from typing import Final, List, Tuple
+from typing import Final, List, Tuple, final
 
 from ethereum_types.numeric import U64, U256, Uint, ulen
 
+from ethereum.forks.bpo1.blocks import Header as PreviousHeader
 from ethereum.trace import GasAndRefund, evm_trace
 from ethereum.utils.numeric import ceil32, taylor_exponential
 
@@ -181,7 +182,7 @@ class GasCosts:
     OPCODE_EXP_BASE: Final[Uint] = Uint(10)
     OPCODE_EXP_PER_BYTE: Final[Uint] = Uint(50)
     OPCODE_KECCAK256_BASE: Final[Uint] = Uint(30)
-    OPCODE_KECCACK256_PER_WORD: Final[Uint] = Uint(6)
+    OPCODE_KECCAK256_PER_WORD: Final[Uint] = Uint(6)
     OPCODE_LOG_BASE: Final[Uint] = Uint(375)
     OPCODE_LOG_DATA_PER_BYTE: Final[Uint] = Uint(8)
     OPCODE_LOG_TOPIC: Final[Uint] = Uint(375)
@@ -189,6 +190,7 @@ class GasCosts:
     OPCODE_SELFDESTRUCT_NEW_ACCOUNT: Final[Uint] = Uint(25000)
 
 
+@final
 @dataclass
 class ExtendMemory:
     """
@@ -204,6 +206,7 @@ class ExtendMemory:
     expand_by: Uint
 
 
+@final
 @dataclass
 class MessageCallGas:
     """
@@ -390,7 +393,9 @@ def init_code_cost(init_code_length: Uint) -> Uint:
     return GasCosts.CODE_INIT_PER_WORD * ceil32(init_code_length) // Uint(32)
 
 
-def calculate_excess_blob_gas(parent_header: Header) -> U64:
+def calculate_excess_blob_gas(
+    parent_header: Header | PreviousHeader,
+) -> U64:
     """
     Calculates the excess blob gas for the current block based
     on the gas used in the parent block.
@@ -406,13 +411,14 @@ def calculate_excess_blob_gas(parent_header: Header) -> U64:
         The excess blob gas for the current block.
 
     """
-    # At the fork block, these are defined as zero.
+    # Defaults for a parent without blob gas fields.
     excess_blob_gas = U64(0)
     blob_gas_used = U64(0)
     base_fee_per_gas = Uint(0)
 
-    if isinstance(parent_header, Header):
-        # After the fork block, read them from the parent header.
+    if isinstance(parent_header, (Header, PreviousHeader)):
+        # Read them from any parent that carries the fields, so
+        # accumulated excess blob gas survives a fork transition.
         excess_blob_gas = parent_header.excess_blob_gas
         blob_gas_used = parent_header.blob_gas_used
         base_fee_per_gas = parent_header.base_fee_per_gas

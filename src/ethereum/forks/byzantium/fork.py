@@ -12,7 +12,7 @@ Entry point for the Ethereum specification.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple, final
 
 from ethereum_rlp import rlp
 from ethereum_types.numeric import U64, U256, Uint
@@ -28,16 +28,13 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 from ethereum.merkle_patricia_trie import root, trie_set
-from ethereum.state import (
-    EMPTY_CODE_HASH,
-    Address,
-    State,
-    apply_changes_to_state,
-)
+from ethereum.state import EMPTY_CODE_HASH, Address
+from ethereum.state_mpt import State, apply_changes_to_state
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt
 from .bloom import logs_bloom
+from .exceptions import WrongChainIdError
 from .state_tracker import (
     BlockState,
     TransactionState,
@@ -53,6 +50,7 @@ from .state_tracker import (
 )
 from .transactions import (
     Transaction,
+    chain_id,
     get_transaction_hash,
     recover_sender,
     validate_transaction,
@@ -68,6 +66,7 @@ BOMB_DELAY_BLOCKS = 3000000
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -124,7 +123,6 @@ def get_last_256_block_hashes(chain: BlockChain) -> List[Hash32]:
 
     """
     recent_blocks = chain.blocks[-255:]
-    # TODO: This function has not been tested rigorously
     if len(recent_blocks) == 0:
         return []
 
@@ -188,11 +186,7 @@ def state_transition(chain: BlockChain, block: Block) -> None:
         ommers=block.ommers,
     )
     block_diff = extract_block_diff(block_state)
-    block_state_root, _ = chain.state.compute_state_root_and_trie_changes(
-        block_diff.account_changes,
-        block_diff.storage_changes,
-        block_diff.storage_clears,
-    )
+    block_state_root = chain.state.compute_state_root(block_diff)
     transactions_root = root(block_output.transactions_trie)
     receipt_root = root(block_output.receipts_trie)
     block_logs_bloom = logs_bloom(block_output.block_logs)
@@ -397,7 +391,14 @@ def check_transaction(
     gas_available = block_env.block_gas_limit - block_output.block_gas_used
     if tx.gas > gas_available:
         raise GasUsedExceedsLimitError("gas used exceeds limit")
-    sender_address = recover_sender(block_env.chain_id, tx)
+    tx_chain_id = chain_id(tx)
+    if tx_chain_id is not None and tx_chain_id != block_env.chain_id:
+        raise WrongChainIdError(
+            expected=block_env.chain_id,
+            actual=tx_chain_id,
+        )
+
+    sender_address = recover_sender(tx)
     sender_account = get_account(tx_state, sender_address)
 
     max_gas_fee = tx.gas * tx.gas_price
@@ -680,10 +681,7 @@ def process_transaction(
     transaction_fee = tx_gas_used_after_refund * tx.gas_price
 
     # refund gas
-    sender_balance_after_refund = get_account(tx_state, sender).balance + U256(
-        gas_refund_amount
-    )
-    set_account_balance(tx_state, sender, sender_balance_after_refund)
+    create_ether(tx_state, sender, U256(gas_refund_amount))
 
     # transfer miner fees
     coinbase_balance_after_mining_fee = get_account(

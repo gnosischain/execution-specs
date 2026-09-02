@@ -1,6 +1,6 @@
 """Common definitions and types."""
 
-from .account_types import EOA, Alloc
+from .account_types import EOA, Alloc, AllocGroupHash
 from .blob_types import Blob
 from .block_access_list import (
     BalAccountAbsentValues,
@@ -35,10 +35,21 @@ from .helpers import (
 from .phase_manager import TestPhase, TestPhaseManager
 from .receipt_types import TransactionLog, TransactionReceipt
 from .request_types import (
+    BuilderDepositRequest,
+    BuilderExitRequest,
     ConsolidationRequest,
     DepositRequest,
     Requests,
     WithdrawalRequest,
+)
+from .system_contract_request_types import (
+    FeeSystemContractRequest,
+    SystemContractInteractionBase,
+    SystemContractInteractionContract,
+    SystemContractInteractionMeasuredOutOfGasContract,
+    SystemContractInteractionTransaction,
+    SystemContractRequest,
+    relay_contract_code,
 )
 from .transaction_types import (
     AuthorizationTuple,
@@ -54,6 +65,7 @@ __all__ = (
     "DETERMINISTIC_FACTORY_BYTECODE",
     "DETERMINISTIC_FACTORY_ADDRESS",
     "Alloc",
+    "AllocGroupHash",
     "AuthorizationTuple",
     "BalAccountAbsentValues",
     "BalAccountChange",
@@ -66,6 +78,8 @@ __all__ = (
     "Blob",
     "BlockAccessList",
     "BlockAccessListExpectation",
+    "BuilderDepositRequest",
+    "BuilderExitRequest",
     "ChainConfig",
     "ChainConfigDefaults",
     "ConsolidationRequest",
@@ -73,9 +87,15 @@ __all__ = (
     "Environment",
     "EnvironmentDefaults",
     "EOA",
+    "FeeSystemContractRequest",
     "NetworkWrappedTransaction",
     "Removable",
     "Requests",
+    "SystemContractInteractionBase",
+    "SystemContractInteractionContract",
+    "SystemContractInteractionMeasuredOutOfGasContract",
+    "SystemContractInteractionTransaction",
+    "SystemContractRequest",
     "TestParameterGroup",
     "TestPhase",
     "TestPhaseManager",
@@ -95,4 +115,5 @@ __all__ = (
     "contract_address_from_hash",
     "eoa_from_hash",
     "keccak256",
+    "relay_contract_code",
 )
