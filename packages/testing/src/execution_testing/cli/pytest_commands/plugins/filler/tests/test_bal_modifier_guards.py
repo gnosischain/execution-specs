@@ -164,7 +164,7 @@ def rebuilt_block_hash(fixture: dict[str, Any], bal_hash: Bytes) -> str:
         parent_hash=execution_payload["parentHash"],
         fee_recipient=execution_payload["feeRecipient"],
         state_root=execution_payload["stateRoot"],
-        transactions_trie=EmptyTrieRoot,
+        transactions_root=EmptyTrieRoot,
         receipts_root=execution_payload["receiptsRoot"],
         logs_bloom=execution_payload["logsBloom"],
         number=execution_payload["blockNumber"],
