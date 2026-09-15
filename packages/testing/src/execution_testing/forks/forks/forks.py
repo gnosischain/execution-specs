@@ -1452,12 +1452,12 @@ class ConstantinopleFix(
 
     @classmethod
     def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
-        """Call the block rewards contract before the transactions."""
+        """Call the block rewards contract after the transactions."""
         return {
             Address(
                 BLOCK_REWARDS_CONTRACT_ADDRESS,
                 label="BLOCK_REWARDS_CONTRACT_ADDRESS",
-            ): SystemCallPhase.BEFORE_TRANSACTIONS,
+            ): SystemCallPhase.AFTER_TRANSACTIONS,
             **super().system_contract_call_phases(),
         }
 
