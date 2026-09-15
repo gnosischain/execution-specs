@@ -35,6 +35,7 @@ from execution_testing import (
     Bytecode,
     Conditional,
     Fork,
+    GasConsumer,
     Initcode,
     Op,
     StateTestFiller,
@@ -2630,7 +2631,6 @@ def test_bal_create_contract_init_revert(
 def test_bal_call_revert_insufficient_funds(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
     call_opcode: Op,
     delegated: bool,
     target_is_warm: bool,
@@ -2645,7 +2645,7 @@ def test_bal_call_revert_insufficient_funds(
     failure happens after delegation resolution. Under EIP-8037 the
     call family reads the delegation target's code before the balance
     check fails, so both the target and the delegation target appear in
-    the BAL. Pre-8037 forks defer that read, so only the target appears.
+    the BAL.
 
     Access-list warming does NOT add to BAL on its own — only EVM
     access does — so the BAL is identical across warm/cold variants.
@@ -2712,17 +2712,7 @@ def test_bal_call_revert_insufficient_funds(
 
     if delegated:
         assert delegation_target is not None
-        # Under EIP-8037 the call family reads the delegation target's
-        # code before the balance check fails, so it appears in the
-        # BAL. Pre-8037 forks defer that read and it stays out.
-        # TODO: drop this fork split once #2473 (defer get_code into
-        # generic_call) is consolidated into amsterdam.
-        if fork.is_eip_enabled(8037):
-            account_expectations[delegation_target] = (
-                BalAccountExpectation.empty()
-            )
-        else:
-            account_expectations[delegation_target] = None
+        account_expectations[delegation_target] = BalAccountExpectation.empty()
 
     block = Block(
         txs=[tx],
@@ -3332,12 +3322,10 @@ def test_bal_create_and_oog(
         account_new=False,
     )
     factory_sstore = Op.SSTORE(0x00, 1)
-    oog_sink_memory_size = 10000 * 32
-    factory_oog_sink = Op.MSTORE(
-        oog_sink_memory_size - 32,
-        0,
-        old_memory_size=32,
-        new_memory_size=oog_sink_memory_size,
+    # A sized burn after the CREATE: far more than a starved frame
+    # can afford, and paid for explicitly in the success budget.
+    factory_oog_sink = GasConsumer(
+        gas=100_000, fork=fork, previous_memory_size=32
     )
     factory_code = (
         factory_mstore + factory_create + factory_oog_sink + factory_sstore

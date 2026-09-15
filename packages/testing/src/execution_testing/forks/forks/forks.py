@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from os.path import realpath
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Sized
+from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Sized, Type
 
 if TYPE_CHECKING:
     from execution_testing.fixtures.blockchain import FixtureHeader
@@ -33,10 +33,12 @@ from ..base_fork import (
     ExcessBlobGasCalculator,
     MemoryExpansionGasCalculator,
     RefundTypes,
+    SystemCallPhase,
     TransactionDataFloorCostCalculator,
     TransactionIntrinsicCostCalculator,
 )
 from ..gas_costs import BASE, HIGH, LOW, MID, VERY_LOW, GasCosts
+from ..requests import SystemContractRequest
 from . import eips
 from .eips.amsterdam import AmsterdamEIPs
 from .helpers import ceiling_division
@@ -1088,6 +1090,18 @@ class Frontier(BaseFork):
         return []
 
     @classmethod
+    def system_contract_request_types(
+        cls,
+    ) -> List[Type[SystemContractRequest]]:
+        """At Genesis, no system contract triggers execution requests."""
+        return []
+
+    @classmethod
+    def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
+        """At Genesis, no system contract is called."""
+        return {}
+
+    @classmethod
     def deterministic_factory_predeploy_address(cls) -> Address | None:
         """At Genesis, no deterministic factory predeploy is present."""
         return None
@@ -1430,6 +1444,17 @@ class ConstantinopleFix(
                 label="BLOCK_REWARDS_CONTRACT_ADDRESS",
             ),
         ] + super().system_contracts()
+
+    @classmethod
+    def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
+        """Call the block rewards contract before the transactions."""
+        return {
+            Address(
+                BLOCK_REWARDS_CONTRACT_ADDRESS,
+                label="BLOCK_REWARDS_CONTRACT_ADDRESS",
+            ): SystemCallPhase.BEFORE_TRANSACTIONS,
+            **super().system_contract_call_phases(),
+        }
 
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:

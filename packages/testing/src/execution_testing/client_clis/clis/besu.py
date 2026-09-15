@@ -455,7 +455,9 @@ class BesuExceptionMapper(ExceptionMapper):
         TransactionException.INVALID_SIGNATURE_VRS: (
             r"Failed to decode transactions from block parameter|"
             r"transaction invalid Signature s value should be less "
-            r"than \d+, but got \d+"
+            r"than \d+, but got \d+|"
+            # In-range r that is not an x-coordinate on the curve.
+            r"Cannot recover public key from signature"
         ),
         TransactionException.TYPE_3_TX_MAX_BLOB_GAS_ALLOWANCE_EXCEEDED: (
             r"Blob transaction 0x[0-9a-f]+ exceeds "
@@ -476,7 +478,8 @@ class BesuExceptionMapper(ExceptionMapper):
         BlockException.INVALID_BLOCK_ACCESS_LIST: (
             r"Block access list hash mismatch, "
             r"calculated:\s*(0x[a-f0-9]+)\s+header:\s*(0x[a-f0-9]+)|"
-            r"Block access list validation failed for block 0x[a-f0-9]+"
+            r"Block access list validation failed for block 0x[a-f0-9]+|"
+            r"Failed to decode block access list payload parameter"
         ),
         BlockException.INCORRECT_BLOCK_FORMAT: (
             r"Block access list hash mismatch, "
