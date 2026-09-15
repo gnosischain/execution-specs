@@ -136,7 +136,7 @@ Prague and Cancun also override `MAX_BLOB_GAS_PER_BLOCK = U64(262144)`.
 
 ## Block rewards (`process_block_rewards`)
 
-Called at the start of every block before user transactions. Calls `BLOCK_REWARDS_CONTRACT_ADDRESS` with selector `f91c2898` (`reward(address[],uint16[])`). Decodes the return as `(address[], uint256[])` and increases each address's balance by the corresponding amount.
+Called after user transactions when closing every block. Calls `BLOCK_REWARDS_CONTRACT_ADDRESS` with selector `f91c2898` (`reward(address[],uint16[])`). Decodes the return as `(address[], uint256[])` and increases each address's balance by the corresponding amount.
 
 If no contract is deployed at `BLOCK_REWARDS_CONTRACT_ADDRESS`, the call is silently skipped (allows tests with minimal pre-state).
 
