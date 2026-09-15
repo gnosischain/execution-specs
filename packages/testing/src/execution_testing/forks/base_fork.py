@@ -1523,7 +1523,6 @@ class BaseFork(ForkOpcodeInterface, metaclass=BaseForkMeta):
         new_cls._transition_tool_name = (  # type: ignore[attr-defined]
             cls._transition_tool_name
         )
-        new_cls._solc_name = cls._solc_name  # type: ignore[attr-defined]
         new_cls._ignore = cls._ignore  # type: ignore[attr-defined]
         new_cls._bpo_fork = cls._bpo_fork  # type: ignore[attr-defined]
         new_cls._ruleset_name = cls._ruleset_name  # type: ignore[attr-defined]
