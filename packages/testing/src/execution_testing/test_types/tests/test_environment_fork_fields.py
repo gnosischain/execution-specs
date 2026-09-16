@@ -81,7 +81,9 @@ def test_fork_requirements_pass_the_check(fork: Fork) -> None:
 
 def test_fork_requirements_set_aura_difficulty() -> None:
     """Set the fixed AuRa difficulty on pre-merge non-genesis blocks."""
-    environment = Environment(difficulty=0x20000).set_fork_requirements(Istanbul)
+    environment = Environment(difficulty=0x20000).set_fork_requirements(
+        Istanbul
+    )
 
     assert environment.difficulty == (1 << 128) - 2
 
