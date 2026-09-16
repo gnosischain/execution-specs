@@ -241,8 +241,7 @@ class Environment(EnvironmentGeneric[ZeroPaddedHexNumber]):
         ):
             if "fee_recipient" not in self.model_fields_set:
                 updated_values["fee_recipient"] = TestAddress
-            if "difficulty" not in self.model_fields_set:
-                updated_values["difficulty"] = (1 << 128) - 2
+            updated_values["difficulty"] = (1 << 128) - 2
 
         return self.copy(**updated_values)
 
