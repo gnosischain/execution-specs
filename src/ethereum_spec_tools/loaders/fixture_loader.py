@@ -26,6 +26,8 @@ from ethereum_spec_tools.forks import Hardfork
 from .fork_loader import ForkLoad
 from .transaction_loader import TransactionLoad
 
+SYSTEM_ADDRESS = "0xfffffffffffffffffffffffffffffffffffffffe"
+
 
 class BaseLoad(ABC):
     """Base class for loading JSON fixtures."""
@@ -76,7 +78,11 @@ class Load(BaseLoad):
                 code_hash=code_hash,
             )
 
-            if self.fork.proof_of_stake and account == EMPTY_ACCOUNT:
+            if (
+                self.fork.proof_of_stake
+                and account == EMPTY_ACCOUNT
+                and address != self.fork.hex_to_address(SYSTEM_ADDRESS)
+            ):
                 raise StateWithEmptyAccount(f"Empty account at {address_hex}.")
 
             provider.set_account(state, address, account)
