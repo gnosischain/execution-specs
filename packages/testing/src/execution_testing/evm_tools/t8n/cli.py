@@ -288,13 +288,15 @@ def _resolve_state_reward(
     Resolve a CLI ``--state.reward`` value into the int that
     ``TransitionToolData.reward`` expects.
 
-    ``None`` means "use the fork's default ``BLOCK_REWARD``"; an
-    explicit ``-1`` means "skip block rewards entirely" (the testing
+    ``None`` means "use the fork's default ``BLOCK_REWARD``" for forks
+    with generic rewards. Forks with a chain-specific
+    ``process_block_rewards`` function do not use this numeric value.
+    An explicit ``-1`` means "skip generic block rewards" (the testing
     sentinel); any other int passes through unchanged.
     """
     if state_reward is None:
         fork_load = ForkLoad(fork_module)
-        if fork_load.proof_of_stake:
+        if fork_load.proof_of_stake or fork_load.has_process_block_rewards:
             return -1
         return int(fork_load.BLOCK_REWARD)
     return state_reward

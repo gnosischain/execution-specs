@@ -123,11 +123,9 @@ def test_bal_pending_system_call_reads_vs_leftover_gas(
         for address, phase in fork.system_contract_call_phases().items()
         if phase is SystemCallPhase.AFTER_TRANSACTIONS
     }
-    assert post_execution_contracts == {
-        cls.system_contract_address for cls in request_types
-    }, (
-        f"{fork} calls a system contract after its transactions that this "
-        "test does not model as a request queue"
+    request_contracts = {cls.system_contract_address for cls in request_types}
+    assert request_contracts <= post_execution_contracts, (
+        f"{fork} does not call every request queue after its transactions"
     )
 
     enqueue_txs: list[Transaction] = []

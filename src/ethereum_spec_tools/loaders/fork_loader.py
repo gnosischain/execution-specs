@@ -75,6 +75,13 @@ class ForkLoad:
         return self._module("fork").process_general_purpose_requests
 
     @property
+    def has_process_general_purpose_requests(self) -> bool:
+        """Check for a `process_general_purpose_requests` function."""
+        return hasattr(
+            self._module("fork"), "process_general_purpose_requests"
+        )
+
+    @property
     def process_unchecked_system_transaction(self) -> Any:
         """process_unchecked_system_transaction function of the given fork."""
         return self._module("fork").process_unchecked_system_transaction

@@ -10,7 +10,7 @@
 # release-ready rehearsal of the next tests@ release.
 tests:
   evm-type: eels
-  fill-params: --until=Amsterdam --generate-all-formats
+  fill-params: --from=ConstantinopleFix --until=Amsterdam --generate-all-formats
 
 benchmark:
   evm-type: benchmark
@@ -25,4 +25,4 @@ benchmark_fast:
 # Shared entry for all `<feat>-devnet` releases; matched by `-devnet` suffix.
 devnet:
   evm-type: eels
-  fill-params: --until=Amsterdam --generate-all-formats
+  fill-params: --from=ConstantinopleFix --until=Amsterdam --generate-all-formats

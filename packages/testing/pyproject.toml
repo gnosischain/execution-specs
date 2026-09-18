@@ -62,6 +62,7 @@ Homepage = "https://github.com/ethereum/execution-specs"
 Documentation = "https://eest.ethereum.org"
 Repository = "https://github.com/ethereum/execution-specs"
 Issues = "https://github.com/ethereum/execution-specs/issues"
+Changelog = "https://eest.ethereum.org/main/CHANGELOG/"
 
 [dependency-groups]
 test = [

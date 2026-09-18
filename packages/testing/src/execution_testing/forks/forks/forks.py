@@ -1436,6 +1436,11 @@ class ConstantinopleFix(
     """Constantinople Fix fork — first active Gnosis mainnet fork."""
 
     @classmethod
+    def empty_block_bal_item_count(cls) -> int:
+        """Count the Gnosis block-reward system call target."""
+        return super().empty_block_bal_item_count() + 1
+
+    @classmethod
     def system_contracts(cls) -> List[Address]:
         """Block rewards contract is present from ConstantinopleFix onwards."""
         return [
@@ -1684,7 +1689,7 @@ class BPO5(
 
 class Amsterdam(
     AmsterdamEIPs,
-    BPO2,
+    Osaka,
     deployed=False,
 ):
     """Amsterdam fork."""
@@ -1692,6 +1697,11 @@ class Amsterdam(
     # TODO: We may need to adjust which BPO Amsterdam inherits from as the
     #  related Amsterdam specs change over time, and before Amsterdam is
     #  live on mainnet.
+
+    @classmethod
+    def empty_block_bal_item_count(cls) -> int:
+        """Count the Gnosis system account created by system calls."""
+        return super().empty_block_bal_item_count() + 1
 
     @classmethod
     def engine_payload_attribute_target_gas_limit(cls) -> bool:

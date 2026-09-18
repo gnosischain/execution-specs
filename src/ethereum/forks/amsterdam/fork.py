@@ -9,11 +9,15 @@ Introduction
 ------------
 
 Entry point for the Ethereum specification.
+
+Gnosis changes collect execution and blob fees, process withdrawals through
+the deposit contract, and obtain block rewards through a system contract.
 """
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, final
 
+from eth_abi import decode, encode
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes, Bytes0
 from ethereum_types.frozen import slotted_freezable
@@ -28,7 +32,7 @@ from ethereum.exceptions import (
 )
 from ethereum.forks.bpo5.blocks import Header as PreviousHeader
 from ethereum.merkle_patricia_trie import root, trie_set
-from ethereum.state import EMPTY_CODE_HASH, Address, BlockDiff
+from ethereum.state import EMPTY_ACCOUNT, EMPTY_CODE_HASH, Address, BlockDiff
 from ethereum.state_mpt import State, apply_changes_to_state
 
 from . import vm
@@ -51,6 +55,7 @@ from .requests import (
     BUILDER_DEPOSIT_REQUEST_TYPE,
     BUILDER_EXIT_REQUEST_TYPE,
     CONSOLIDATION_REQUEST_TYPE,
+    DEPOSIT_CONTRACT_ADDRESS,
     DEPOSIT_REQUEST_TYPE,
     WITHDRAWAL_REQUEST_TYPE,
     compute_requests_hash,
@@ -59,6 +64,7 @@ from .requests import (
 from .state_tracker import (
     BlockState,
     TransactionState,
+    account_exists,
     clear_account_preserving_balance,
     create_ether,
     extract_block_diff,
@@ -66,6 +72,7 @@ from .state_tracker import (
     get_code,
     incorporate_tx_into_block,
     increment_nonce,
+    set_account,
     set_account_balance,
 )
 from .transactions import (
@@ -108,16 +115,24 @@ BASE_FEE_MAX_CHANGE_DENOMINATOR = Uint(8)
 ELASTICITY_MULTIPLIER = Uint(2)
 EMPTY_OMMER_HASH = keccak256(rlp.encode([]))
 SYSTEM_ADDRESS = hex_to_address("0xfffffffffffffffffffffffffffffffffffffffe")
+BLOCK_REWARDS_CONTRACT_ADDRESS = hex_to_address(
+    "0x2000000000000000000000000000000000000001"
+)
+FEE_COLLECTOR_ADDRESS = hex_to_address(
+    "0x1559000000000000000000000000000000000000"
+)
+MAX_FAILED_WITHDRAWALS_TO_PROCESS = 4
 BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
 SYSTEM_TRANSACTION_GAS = ExecutionGas(Uint(30000000))
+BLOCK_REWARD_SYSTEM_TRANSACTION_GAS = ExecutionGas(Uint(2**64 - 1))
+BLOB_FEE_COLLECTOR = FEE_COLLECTOR_ADDRESS
 SYSTEM_MAX_SSTORES_PER_CALL = Uint(16)
 """
 Upper bound on the number of new storage slots a single system call is
 expected to write.
 """
-GWEI_TO_WEI = U256(10**9)
 
 WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS = hex_to_address(
     "0x00000961Ef480Eb55e80D19ad83579A64c007002"
@@ -730,6 +745,7 @@ def process_unchecked_system_transaction(
     block_env: vm.BlockEnvironment,
     target_address: Address,
     data: Bytes,
+    gas: ExecutionGas = SYSTEM_TRANSACTION_GAS,
 ) -> TransactionOutput:
     """
     Process a system transaction without checking if the contract contains
@@ -743,6 +759,8 @@ def process_unchecked_system_transaction(
         Address of the contract to call.
     data :
         Data to pass to the contract.
+    gas :
+        Execution gas available to the system call.
 
     Returns
     -------
@@ -751,6 +769,8 @@ def process_unchecked_system_transaction(
 
     """
     system_tx_state = TransactionState(parent=block_env.state)
+    if not account_exists(system_tx_state, SYSTEM_ADDRESS):
+        set_account(system_tx_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
 
     tx_env = vm.TransactionEnvironment(
         origin=SYSTEM_ADDRESS,
@@ -758,9 +778,9 @@ def process_unchecked_system_transaction(
         is_create=False,
         data=data,
         value=U256(0),
-        gas_limit=SYSTEM_TRANSACTION_GAS,
-        effective_gas_price=block_env.base_fee_per_gas,
-        execution_gas_grant=SYSTEM_TRANSACTION_GAS,
+        gas_limit=gas,
+        effective_gas_price=Uint(0),
+        execution_gas_grant=gas,
         state_gas_reservoir=StateGas(
             StateGasCosts.STORAGE_SET * SYSTEM_MAX_SSTORES_PER_CALL
         ),
@@ -837,12 +857,14 @@ def apply_body(
         ulen(transactions) + Uint(1)
     )
 
-    process_withdrawals(block_env, block_output, withdrawals)
-
     process_general_purpose_requests(
         block_env=block_env,
         block_output=block_output,
     )
+
+    process_block_rewards(block_env)
+
+    process_withdrawals(block_env, block_output, withdrawals)
 
     block_output.block_access_list = build_block_access_list(
         block_env.block_access_list_builder, block_env.state
@@ -930,7 +952,7 @@ def update_sender_state(
     block_env: vm.BlockEnvironment,
     tx_env: vm.TransactionEnvironment,
     tx: Transaction,
-) -> None:
+) -> Uint:
     """
     Debit the sender for the transaction's maximum possible gas fee.
 
@@ -947,6 +969,11 @@ def update_sender_state(
         The transaction's execution environment.
     tx :
         The transaction being charged.
+
+    Returns
+    -------
+    blob_gas_fee : `Uint`
+        Blob fee collected when the transaction was included.
 
     """
     tx_state = tx_env.state
@@ -966,20 +993,23 @@ def update_sender_state(
     )
     set_account_balance(tx_state, sender, U256(sender_balance_after_gas_fee))
 
+    return blob_gas_fee
+
 
 def disburse_gas_fees(
     block_env: vm.BlockEnvironment,
     tx_env: vm.TransactionEnvironment,
     settlement: TransactionGasSettlement,
     payer: Address,
+    blob_gas_fee: Uint,
 ) -> None:
     """
-    Refund the payer's unspent gas and pay the priority fee.
+    Refund unspent gas and distribute transaction fees.
 
     Return the gas the transaction did not use to the ``payer`` that
     fronted the maximum fee at inclusion, priced at the effective gas
     price, and credit the coinbase with the priority fee on the gas that
-    was used.
+    was used. Collect base and blob fees for Gnosis fee collectors.
 
     Parameters
     ----------
@@ -992,6 +1022,8 @@ def disburse_gas_fees(
     payer :
         The account that fronted the maximum gas fee and receives the
         refund.
+    blob_gas_fee :
+        Blob fee collected when the transaction was included.
 
     """
     tx_state = tx_env.state
@@ -1004,6 +1036,12 @@ def disburse_gas_fees(
 
     create_ether(tx_state, payer, U256(gas_refund_amount))
     create_ether(tx_state, block_env.coinbase, U256(transaction_fee))
+
+    base_fee = U256(settlement.gas_used * block_env.base_fee_per_gas)
+    if base_fee != 0:
+        create_ether(tx_state, FEE_COLLECTOR_ADDRESS, base_fee)
+    if blob_gas_fee != 0:
+        create_ether(tx_state, BLOB_FEE_COLLECTOR, U256(blob_gas_fee))
 
 
 def process_transaction(
@@ -1055,7 +1093,7 @@ def process_transaction(
 
     tx_env = check_transaction(block_env, block_output, tx, index)
 
-    update_sender_state(block_env, tx_env, tx)
+    blob_gas_fee = update_sender_state(block_env, tx_env, tx)
 
     tx_output = process_top_level(block_env, tx_env)
 
@@ -1068,7 +1106,9 @@ def process_transaction(
         tx_output.state_gas_used,
     )
 
-    disburse_gas_fees(block_env, tx_env, settlement, tx_env.origin)
+    disburse_gas_fees(
+        block_env, tx_env, settlement, tx_env.origin, blob_gas_fee
+    )
 
     block_output.block_gas_used += settlement.execution_gas_used
     block_output.block_state_gas_used += settlement.state_gas_used
@@ -1104,20 +1144,89 @@ def process_withdrawals(
     withdrawals: Tuple[Withdrawal, ...],
 ) -> None:
     """
-    Increase the balance of the withdrawing account.
+    Process withdrawals through the Gnosis deposit contract.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
     wd_state = TransactionState(parent=block_env.state)
-
+    amounts = []
+    addresses = []
     for i, wd in enumerate(withdrawals):
         trie_set(
             block_output.withdrawals_trie,
             rlp.encode(Uint(i)),
             rlp.encode(wd),
         )
+        amounts.append(int(wd.amount))
+        addresses.append(wd.address)
 
-        create_ether(wd_state, wd.address, U256(wd.amount) * GWEI_TO_WEI)
+    deposit_contract = get_account(wd_state, DEPOSIT_CONTRACT_ADDRESS)
+    if deposit_contract.code_hash == EMPTY_CODE_HASH:
+        return
+
+    payload = encode(
+        ["uint256", "uint64[]", "address[]"],
+        [MAX_FAILED_WITHDRAWALS_TO_PROCESS, amounts, addresses],
+    )
+
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=DEPOSIT_CONTRACT_ADDRESS,
+        data=bytes.fromhex("79d0c0bc") + payload,
+    )
+    if out.error:
+        raise InvalidBlock(f"Withdrawal system call failed: {out.error}")
 
     incorporate_tx_into_block(wd_state, block_env.block_access_list_builder)
+
+
+def process_block_rewards(
+    block_env: vm.BlockEnvironment,
+) -> None:
+    """
+    Process block rewards through the Gnosis block reward contract.
+
+    Spec: https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md
+    Contract: https://github.com/gnosischain/posdao-contracts/blob/0315e8ee854cb02d03f4c18965584a74f30796f7/contracts/base/BlockRewardAuRaBase.sol#L234C14-L234C20
+    """
+    # reward(address[],uint16[]) with benefactors=[coinbase], kind=[0]
+    coinbase_padded = b"\x00" * 12 + bytes(block_env.coinbase)
+    data = (
+        bytes.fromhex("f91c2898")
+        + (64).to_bytes(32, "big")  # offset of address[] arg
+        + (128).to_bytes(32, "big")  # offset of uint16[] arg
+        + (1).to_bytes(32, "big")  # length of address[] = 1
+        + coinbase_padded  # address[0] = coinbase
+        + (1).to_bytes(32, "big")  # length of uint16[] = 1
+        + (0).to_bytes(32, "big")  # kind[0] = 0 (RewardAuthor)
+    )
+
+    reward_state = TransactionState(parent=block_env.state)
+    account = get_account(reward_state, BLOCK_REWARDS_CONTRACT_ADDRESS)
+    if account.code_hash == EMPTY_CODE_HASH:
+        return
+
+    out = process_unchecked_system_transaction(
+        block_env=block_env,
+        target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
+        data=data,
+        gas=BLOCK_REWARD_SYSTEM_TRANSACTION_GAS,
+    )
+    if out.error:
+        raise InvalidBlock(f"Block rewards system call failed: {out.error}")
+
+    if len(out.return_data) == 0:
+        return
+
+    addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
+    for addr, amount in zip(addresses, amounts, strict=True):
+        address = hex_to_address(addr)
+        balance = get_account(reward_state, address).balance + U256(amount)
+        set_account_balance(reward_state, address, balance)
+
+    incorporate_tx_into_block(
+        reward_state, block_env.block_access_list_builder
+    )
 
 
 def check_gas_limit(gas_limit: Uint, parent_gas_limit: Uint) -> bool:

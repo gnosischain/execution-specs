@@ -81,7 +81,7 @@ def beacon_root_system_call_expectations(
             ],
         ),
         # System address MUST NOT be included
-        SYSTEM_ADDRESS: None,
+        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
     }
 
 
@@ -627,7 +627,7 @@ def test_bal_4788_noop_writes_are_reads(
                             storage_changes=[],
                             storage_reads=[timestamp_slot, root_slot],
                         ),
-                        SYSTEM_ADDRESS: None,
+                        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
                     }
                 ),
             )
