@@ -29,7 +29,7 @@ from execution_testing.exceptions import (
 from execution_testing.forks import Fork
 
 if TYPE_CHECKING:
-    from ethereum_spec_tools.evm_tools.t8n import ForkCache
+    from execution_testing.evm_tools.t8n import ForkCache
 
 
 class ExecutionSpecsTransitionTool(TransitionTool):
@@ -60,7 +60,7 @@ class ExecutionSpecsTransitionTool(TransitionTool):
     def fork_cache(self) -> "ForkCache":
         """Lazily import and instantiate the EELS fork cache on first use."""
         if self._fork_cache is None:
-            from ethereum_spec_tools.evm_tools.t8n import ForkCache
+            from execution_testing.evm_tools.t8n import ForkCache
 
             self._fork_cache = ForkCache()
         return self._fork_cache
@@ -80,7 +80,7 @@ class ExecutionSpecsTransitionTool(TransitionTool):
 
     def is_fork_supported(self, fork: Fork) -> bool:
         """Return True if the fork is supported by the tool."""
-        from ethereum_spec_tools.evm_tools.utils import get_supported_forks
+        from ethereum_spec_tools.utils import get_supported_forks
 
         return fork.transition_tool_name() in get_supported_forks()
 
@@ -100,14 +100,14 @@ class ExecutionSpecsTransitionTool(TransitionTool):
         — and ``T8N.run()`` returns the ``TransitionToolOutput``
         directly.
         """
-        from ethereum_spec_tools.evm_tools.t8n import T8N
-        from ethereum_spec_tools.evm_tools.t8n.evm_trace.count import (
+        from execution_testing.evm_tools.t8n import T8N
+        from execution_testing.evm_tools.t8n.evm_trace.count import (
             CountTracer,
         )
-        from ethereum_spec_tools.evm_tools.t8n.evm_trace.eip3155 import (
+        from execution_testing.evm_tools.t8n.evm_trace.eip3155 import (
             Eip3155Tracer,
         )
-        from ethereum_spec_tools.evm_tools.t8n.evm_trace.group import (
+        from execution_testing.evm_tools.t8n.evm_trace.group import (
             GroupTracer,
         )
 
@@ -264,6 +264,14 @@ class ExecutionSpecsExceptionMapper(ExceptionMapper):
         TransactionException.LOG_MISMATCH: "LogMismatchError",
     }
     mapping_regex: ClassVar[Dict[ExceptionBase, str]] = {
+        # An in-range r that is not the x-coordinate of any secp256k1 point:
+        # recovery has no solution, so the transaction has no sender. Distinct
+        # from the "bad r"/"bad s"/"bad v" range failures in
+        # mapping_substring, and raised from ethereum.crypto.elliptic_curve
+        # rather than from the transaction validation itself.
+        TransactionException.INVALID_SIGNATURE_VRS: (
+            r"InvalidSignatureError\('r is not the x-coordinate"
+        ),
         # Temporary solution for issue #1981.
         TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS: (
             r"InsufficientMaxFeePerGasError|InvalidBlock"

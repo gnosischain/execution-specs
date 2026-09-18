@@ -4,9 +4,9 @@ Tests for the EIP-8038 [State Access Gas Cost Increase](https://eips.ethereum.or
 
 Under EIP-8038 the contract-creation opcodes are repriced in their
 *execution* gas dimension to ``CREATE_ACCESS`` (``ACCOUNT_WRITE`` +
-``COLD_STORAGE_ACCESS`` = 11,000), on top of which the EIP-3860 init
-code word cost (2 per word) and, for ``CREATE2`` only, an additional
-keccak word cost (6 per word) are charged. The new-account creation
+``COLD_ACCOUNT_ACCESS``), on top of which the EIP-3860 init code
+word cost and, for ``CREATE2`` only, an additional keccak word cost
+are charged. The new-account creation
 and per-byte code deposit charges are the EIP-8037 *state* dimension,
 covered in
 ``eip8037_state_creation_gas_cost_increase/test_state_gas_create.py``.
@@ -68,9 +68,9 @@ def test_create_execution_gas(
     """
     Measure the execution gas of CREATE/CREATE2 and assert the schedule.
 
-    The EIP-8038 *execution* dimension is ``CREATE_ACCESS`` (11,000) plus
-    the EIP-3860 init code word cost (2 per word) plus, for ``CREATE2``
-    only, an additional keccak word cost (6 per word). The EIP-8037
+    The EIP-8038 *execution* dimension is ``CREATE_ACCESS`` plus the
+    EIP-3860 init code word cost plus, for ``CREATE2`` only, an
+    additional keccak word cost. The EIP-8037
     account-creation state gas is excluded by subtracting
     ``create_state_gas(0)``.
     """
@@ -279,6 +279,7 @@ class TestCreateTxGasBoundary:
         execution += initcode.deployment_gas(fork)
         return execution
 
+    @pytest.mark.inclusion_test
     @pytest.mark.parametrize(
         "gas_test_case",
         [
@@ -393,7 +394,7 @@ def test_aborted_create_does_not_warm_address(
     balance for the endowment, or nonce overflow), the would-be address
     is never added to the accessed-addresses set. A subsequent
     ``BALANCE`` of that address is therefore charged the full
-    ``COLD_ACCOUNT_ACCESS`` (3,000), not ``WARM_ACCESS`` (100).
+    ``COLD_ACCOUNT_ACCESS``, not ``WARM_ACCESS``.
     """
     init_code = Op.STOP
     init_code_bytes = bytes(init_code)
@@ -505,7 +506,8 @@ def test_create2_to_occupied_address(
     #
     # `address=` hard-codes the occupant at the derived collision address;
     # it requires `pre_alloc_mutable`. This is the only way to pre-seat the
-    # exact CREATE2 target, mirroring the EIP-7610 collision suite.
+    # exact CREATE2 target, mirroring
+    # `tests/frontier/create/test_create_collision.py`.
     occupant_code = Op.SSTORE(0, 0x42) + Op.STOP
     occupant_storage = Storage({0x1: 0xCAFE})  # type: ignore[dict-item]
     pre.deploy_contract(

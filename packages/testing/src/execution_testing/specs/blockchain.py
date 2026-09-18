@@ -83,12 +83,11 @@ from execution_testing.fixtures.common import (
     FixtureTransactionReceipt,
 )
 from execution_testing.fixtures.post_verifications import PostVerifications
-from execution_testing.forks import Fork
+from execution_testing.forks import Fork, Requests
 from execution_testing.test_types import (
     Alloc,
     Environment,
     Removable,
-    Requests,
     TestPhase,
     Transaction,
     Withdrawal,
@@ -132,6 +131,7 @@ def apply_new_parent(
     updated["parent_gas_used"] = new_parent.gas_used
     updated["parent_gas_limit"] = new_parent.gas_limit
     updated["parent_ommers_hash"] = new_parent.ommers_hash
+    updated["parent_slot_number"] = new_parent.slot_number
     block_hashes = env.block_hashes.copy()
     block_hashes[new_parent.number] = new_parent.block_hash
     updated["block_hashes"] = block_hashes
@@ -374,6 +374,26 @@ class Block(Header):
             "split via _split_blocks_by_phase first."
         )
 
+    def engine_payload_only_overrides(self) -> List[str]:
+        """
+        Return the names of the settings that only reach the engine payload.
+
+        An RLP block cannot carry them, so a fixture that delivers blocks as
+        RLP would present a valid block while claiming the exception they
+        are meant to cause.
+        """
+        overrides: List[str] = []
+        if self.engine_new_payload_block_access_list is not None:
+            overrides.append("engine_new_payload_block_access_list")
+        if self.engine_new_payload_slot_number is not None:
+            overrides.append("engine_new_payload_slot_number")
+        if (
+            self.expected_block_access_list is not None
+            and self.expected_block_access_list.has_rlp_modifier
+        ):
+            overrides.append("expected_block_access_list.modify_rlp")
+        return overrides
+
     def set_environment(self, env: Environment) -> Environment:
         """
         Create copy of the environment with the characteristics of this
@@ -540,12 +560,13 @@ class BuiltBlock(CamelModel):
         self,
     ) -> "FixtureExecutionPayloadModifier | None":
         """
-        Propagate ``rlp_modifier``'s header changes to the engine payload.
+        Propagate header changes and explicit overrides to the engine payload.
 
         The engine ``ExecutionPayload`` schema does not carry
-        ``block_access_list_hash`` directly; the equivalent payload field is
-        the ``block_access_list`` body. So a header modifier that touches the
-        BAL hash needs to drive a matching change on the payload body.
+        ``block_access_list_hash`` directly; the corresponding payload
+        field is the ``block_access_list`` body. Removing the header hash
+        therefore removes the payload field. Adding or changing the hash
+        is reflected in ``blockHash`` without synthesizing a BAL body.
         """
         if self.engine_new_payload_slot_number is not None:
             return FixtureExecutionPayloadModifier(
@@ -566,14 +587,9 @@ class BuiltBlock(CamelModel):
                     FixtureExecutionPayloadModifier.REMOVE_FIELD
                 ),
             )
-        # The user injected a header BAL hash; mirror that on the engine
-        # payload by forcing a body to be present. Its exact value is
-        # irrelevant for negative tests — a non-``None`` value is enough to
-        # make a payload-version mismatch detectable.
-        if self.block_access_list is None:
-            return FixtureExecutionPayloadModifier(
-                block_access_list=Bytes(b""),
-            )
+        # Do not introduce an unsupported pre-fork payload field when the
+        # intended defect is the header hash. API field-presence tests use
+        # an explicit engine_new_payload_block_access_list override.
         return None
 
     def get_fixture_engine_new_payload(self) -> FixtureEngineNewPayload:
@@ -768,7 +784,7 @@ class BlockchainTest(BaseTest):
     @classmethod
     def discard_fixture_format_by_marks(
         cls,
-        fixture_format: FixtureFormat,
+        fixture_format: FixtureFormat | LabeledFixtureFormat,
         markers: List[pytest.Mark],
     ) -> bool:
         """
@@ -789,8 +805,65 @@ class BlockchainTest(BaseTest):
             return True
         return False
 
+    def model_post_init(self, __context: Any, /) -> None:
+        """
+        Model post-init to assert static (pre-fill/execute) checks.
+        """
+        super().model_post_init(__context)
+        if self.is_inclusion_test:
+            # Verify that the blockchain contains at most one invalid
+            # transaction which must be located at the end of the last block.
+            for i, block in enumerate(self.blocks):
+                if i != (len(self.blocks) - 1):
+                    valid_tx_range = block.txs[:]
+                else:
+                    valid_tx_range = block.txs[:-1]
+                if any(tx.error is not None for tx in valid_tx_range):
+                    raise Exception(
+                        "test correctness: in an inclusion test the only "
+                        "transaction allowed to produce an exception is the "
+                        "last transaction of the last block, but block "
+                        f"{i} contains an invalid transaction elsewhere"
+                    )
+        for i, block in enumerate(self.blocks):
+            expectation = block.expected_block_access_list
+            if (
+                expectation is not None
+                and expectation.has_modifier
+                and not block.exception
+                and block.engine_api_error_code is None
+            ):
+                raise Exception(
+                    f"test correctness: block {i} modifies its block access "
+                    "list or its encoding but declares no `exception` or "
+                    "`engine_api_error_code`, so the corrupted block access "
+                    "list would be filled as valid. Declare the exception "
+                    "the modified block access list must cause, or drop the "
+                    "modifier."
+                )
+            if (
+                block.engine_new_payload_block_access_list is not None
+                and expectation is not None
+                and expectation.has_rlp_modifier
+            ):
+                raise Exception(
+                    f"test correctness: block {i} sets "
+                    "`engine_new_payload_block_access_list` and re-encodes "
+                    "the block access list with `modify_rlp`; the explicit "
+                    "payload override would discard the re-encoding. Keep "
+                    "one: `engine_new_payload_block_access_list` delivers "
+                    "arbitrary bytes, `modify_rlp` re-encodes the list the "
+                    "transition tool produced."
+                )
+
     def get_genesis_environment(self) -> Environment:
         """Get the genesis environment for pre-allocation groups."""
+        # Check only explicitly supplied fields. The defaults below add fields
+        # that every genesis header carries, irrespective of the active fork.
+        self.genesis_environment.check_fork_fields(
+            self.fork.transitions_from()
+        )
+
         # Apply GENESIS_ENVIRONMENT_DEFAULTS first so set_fork_requirements
         # treats this as genesis (number = 0). Otherwise, default number = 1
         # triggers fork overrides, non-zero coinbase, and hash mismatch (AuRa
@@ -824,6 +897,10 @@ class BlockchainTest(BaseTest):
             )
         if empty_accounts := pre_alloc.empty_accounts():
             raise Exception(f"Empty accounts in pre state: {empty_accounts}")
+        if pre_alloc.state_commitment() is None:
+            pre_alloc.migrate_state_commitment(
+                self.fork.transitions_from().state_commitment()
+            )
         state_root = pre_alloc.state_root()
         genesis = FixtureHeader.genesis(
             self.fork.transitions_from(), env, state_root
@@ -857,6 +934,7 @@ class BlockchainTest(BaseTest):
             block_number=env.number, timestamp=env.timestamp
         )
         env = env.set_fork_requirements(fork)
+        env.check_fork_fields(fork)
         txs = block.txs[:]
         if any("gas_limit" not in tx.model_fields_set for tx in block.txs):
             max_tx_gas_limit = Transaction.calculate_max_gas_limit(
@@ -995,15 +1073,16 @@ class BlockchainTest(BaseTest):
                 "provided by the transition tool"
             )
 
-            computed_block_access_list_hash = Hash(t8n_bal.rlp.keccak256())
-            assert (
-                computed_block_access_list_hash
-                == header.block_access_list_hash
-            ), (
-                "Block access list hash in header does not match the "
-                f"computed hash from BAL: {header.block_access_list_hash} "
-                f"!= {computed_block_access_list_hash}"
-            )
+            if t8n.attests_block_access_list_hash:
+                computed_block_access_list_hash = Hash(t8n_bal.rlp.keccak256())
+                assert (
+                    computed_block_access_list_hash
+                    == header.block_access_list_hash
+                ), (
+                    "Block access list hash in header does not match the "
+                    f"computed hash from BAL: {header.block_access_list_hash} "
+                    f"!= {computed_block_access_list_hash}"
+                )
 
         if block.rlp_modifier is not None:
             # Modify any parameter specified in the `rlp_modifier` after
@@ -1014,6 +1093,7 @@ class BlockchainTest(BaseTest):
         # Process block access list - apply transformer if present for invalid
         # tests
         bal = t8n_bal
+        bal_rlp_override: Bytes | None = None
 
         # Always validate BAL structural integrity (ordering, duplicates)
         # if present
@@ -1030,10 +1110,41 @@ class BlockchainTest(BaseTest):
             bal = block.expected_block_access_list.modify_if_invalid_test(
                 t8n_bal
             )
-            if bal != t8n_bal:
-                # If the BAL was modified and the fork requires it, update the
-                # header hash
+            if bal.rlp != t8n_bal.rlp:
+                # Compare bytes, not contents: an encoding override also
+                # moves the header commitment.
                 header.block_access_list_hash = Hash(bal.rlp.keccak256())
+            bal_rlp_override = block.expected_block_access_list.modified_rlp(
+                bal
+            )
+            if (
+                block.expected_block_access_list.has_modifier
+                and bal.rlp == t8n_bal.rlp
+                and (
+                    bal_rlp_override is None or bal_rlp_override == t8n_bal.rlp
+                )
+            ):
+                raise Exception(
+                    f"test correctness: block number {int(env.number)}'s "
+                    "block access list modifier left the list unchanged, so "
+                    "the block would be labelled invalid for no reason. Make "
+                    "the modifier change the list, or drop it along with the "
+                    "exception."
+                )
+            if bal.has_rlp_override and (
+                block.engine_new_payload_block_access_list is not None
+                or bal_rlp_override is not None
+            ):
+                raise Exception(
+                    f"test correctness: block number {int(env.number)} "
+                    "re-encodes the block access list with `override_rlp` "
+                    "and also replaces the payload bytes, so the payload "
+                    "would not carry what the header commits to. Keep one: "
+                    "`override_rlp` commits the header to its re-encoding, "
+                    "`modify_rlp` re-encodes the payload only, "
+                    "`engine_new_payload_block_access_list` delivers "
+                    "arbitrary bytes."
+                )
 
         built_block_kwargs: Dict[str, Any] = dict(
             header=header,
@@ -1052,6 +1163,8 @@ class BlockchainTest(BaseTest):
             block_access_list=bal,
             engine_new_payload_block_access_list=(
                 block.engine_new_payload_block_access_list
+                if block.engine_new_payload_block_access_list is not None
+                else bal_rlp_override
             ),
             engine_new_payload_slot_number=(
                 block.engine_new_payload_slot_number
@@ -1079,7 +1192,7 @@ class BlockchainTest(BaseTest):
                 and block.engine_new_payload_slot_number is None
                 and not (
                     block.expected_block_access_list is not None
-                    and block.expected_block_access_list._modifier is not None
+                    and block.expected_block_access_list.has_modifier
                 )
             ):
                 # Only verify block level exception if: - No transaction
@@ -1090,8 +1203,9 @@ class BlockchainTest(BaseTest):
                 # what normally produces the block exception. - No engine
                 # payload BAL override was specified, because it corrupts only
                 # the engine payload after the transition tool has run. - No
-                # BAL modifier was specified, because modified BAL also
-                # produces block exceptions.
+                # BAL modifier was specified, because a rewritten BAL, whether
+                # in contents or in encoding, is applied after the transition
+                # tool has run and is what produces the block exception.
                 built_block.verify_block_exception(
                     transition_tool_exceptions_reliable=t8n.exception_mapper.reliable,
                 )
@@ -1136,6 +1250,16 @@ class BlockchainTest(BaseTest):
         t8n: FillerBackend,
     ) -> FillResult:
         """Create a fixture from the blockchain test definition."""
+        for i, block in enumerate(self.blocks):
+            overrides = block.engine_payload_only_overrides()
+            if overrides:
+                raise Exception(
+                    f"test correctness: block {i} sets {', '.join(overrides)}"
+                    ", which only reach the engine payload and cannot be "
+                    "expressed in an RLP blockchain fixture. Mark the test "
+                    "`blockchain_test_engine_only`."
+                )
+
         fixture_blocks: List[FixtureBlock | InvalidFixtureBlock] = []
 
         pre, genesis = self.make_genesis(apply_pre_allocation_blockchain=True)
@@ -1148,7 +1272,7 @@ class BlockchainTest(BaseTest):
         benchmark_gas_used: int | None = None
         benchmark_block_gas_used: int | None = None
         benchmark_opcode_count: OpcodeCount | None = None
-        for block in self.blocks:
+        for i, block in enumerate(self.blocks):
             # This is the most common case, the RLP needs to be constructed
             # based on the transactions to be included in the block.
             # Set the environment according to the block to execute.
@@ -1159,6 +1283,17 @@ class BlockchainTest(BaseTest):
                 previous_alloc=alloc,
             )
             block_number = int(built_block.header.number)
+            if (
+                built_block.block_access_list is not None
+                and built_block.block_access_list.has_rlp_override
+            ):
+                raise Exception(
+                    f"test correctness: block {i}'s block access list "
+                    "modifier re-encodes the list, but block RLP does not "
+                    "carry the block access list, so an RLP blockchain "
+                    "fixture cannot deliver the re-encoded bytes. Mark the "
+                    "test `blockchain_test_engine_only`."
+                )
             is_last_block = block is self.blocks[-1]
             if is_last_block and self.operation_mode == OpMode.BENCHMARKING:
                 benchmark_gas_used = built_block.cumulative_gas_used()
@@ -1236,7 +1371,8 @@ class BlockchainTest(BaseTest):
     def make_hive_fixture(
         self,
         t8n: FillerBackend,
-        fixture_format: FixtureFormat = BlockchainEngineFixture,
+        fixture_format: FixtureFormat
+        | LabeledFixtureFormat = BlockchainEngineFixture,
     ) -> FillResult:
         """Create a hive fixture from the blocktest definition."""
         fixture_payloads: List[FixtureEngineNewPayload] = []
@@ -1325,15 +1461,14 @@ class BlockchainTest(BaseTest):
         if fixture_format == BlockchainEngineXFixture:
             # For Engine X format, exclude pre (will be provided via shared
             # state) and prepare for state diff optimization
-            fixture_data.update(
-                {
-                    "post_state": alloc
-                    if self.include_full_post_state_in_output
-                    else None,
-                    "pre_hash": "",  # Will be set by BaseTestWrapper
-                }
-            )
-            fixture = BlockchainEngineXFixture(**fixture_data)
+            pre_alloc_group_hash = self.pre.get_alloc_grouping_hash()
+            if pre_alloc_group_hash is None:
+                raise ValueError(
+                    "Engine X fixtures require a pre-alloc group; was phase 1 "
+                    "run?"
+                )
+            fixture_data["pre_hash"] = pre_alloc_group_hash
+            fixture_data["post_state_diff"] = alloc.calculate_diff(self.pre)
         elif fixture_format == BlockchainEngineSyncFixture:
             # Sync fixture format
             assert genesis.header.block_hash != head_hash, (
@@ -1360,7 +1495,6 @@ class BlockchainTest(BaseTest):
                     else None,
                 }
             )
-            fixture = BlockchainEngineSyncFixture(**fixture_data)
         else:
             # Standard engine fixture
             fixture_data.update(
@@ -1371,7 +1505,7 @@ class BlockchainTest(BaseTest):
                     else None,
                 }
             )
-            fixture = BlockchainEngineFixture(**fixture_data)
+        fixture = fixture_format.format_class()(**fixture_data)
 
         return FillResult(
             fixture=fixture,
@@ -1472,6 +1606,10 @@ class BlockchainTest(BaseTest):
                 max_priority_fee_per_gas=max_priority_fee_per_gas,
                 max_fee_per_blob_gas=max_fee_per_blob_gas,
             )
+
+        self.pre.verify_deployed_accounts(
+            int(HexNumber(start_block["number"]))
+        )
 
         # Materialise queued pre-alloc txs into a synthetic setup block.
         blocks_to_process: List[Block] = []
@@ -1610,7 +1748,7 @@ class BlockchainTest(BaseTest):
     def generate(
         self,
         t8n: FillerBackend,
-        fixture_format: FixtureFormat,
+        fixture_format: FixtureFormat | LabeledFixtureFormat,
     ) -> FillResult:
         """Generate the BlockchainTest fixture."""
         if fixture_format == BlockchainEngineStatefulFixture:
@@ -1629,7 +1767,7 @@ class BlockchainTest(BaseTest):
     def execute(
         self,
         *,
-        execute_format: ExecuteFormat,
+        execute_format: ExecuteFormat | LabeledExecuteFormat,
     ) -> BaseExecute:
         """Generate the list of test fixtures."""
         if execute_format == TransactionPost:

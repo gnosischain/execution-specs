@@ -91,24 +91,14 @@ class StateTest(BaseTest):
     ] = [
         StateFixture,
     ] + [
-        LabeledFixtureFormat(
-            fixture_format,
-            f"{fixture_format.format_name}_from_state_test",
-            f"A {fixture_format.format_name} generated from a state_test",
+        fixture_format.with_label_suffix(
+            "from_state_test",
+            f"A {fixture_format.format_id()} generated from a state_test",
         )
         for fixture_format in BlockchainTest.supported_fixture_formats
         # Exclude sync fixtures from state tests - they don't make sense for
         # state tests
-        if not (
-            (
-                hasattr(fixture_format, "__name__")
-                and "Sync" in fixture_format.__name__
-            )
-            or (
-                hasattr(fixture_format, "format")
-                and "Sync" in fixture_format.format.__name__
-            )
-        )
+        if "Sync" not in fixture_format.format_class().__name__
     ]
     supported_execute_formats: ClassVar[Sequence[LabeledExecuteFormat]] = [
         LabeledExecuteFormat(
@@ -232,7 +222,7 @@ class StateTest(BaseTest):
     @classmethod
     def discard_fixture_format_by_marks(
         cls,
-        fixture_format: FixtureFormat,
+        fixture_format: FixtureFormat | LabeledFixtureFormat,
         markers: List[pytest.Mark],
     ) -> bool:
         """
@@ -332,6 +322,13 @@ class StateTest(BaseTest):
 
     def generate_blockchain_test(self) -> BlockchainTest:
         """Generate a BlockchainTest fixture from this StateTest fixture."""
+        # Checked before the genesis derivation below, which asks the
+        # fork for blob constants a fork without blobs does not have.
+        self.env.check_fork_fields(
+            self.fork.fork_at(
+                block_number=self.env.number, timestamp=self.env.timestamp
+            )
+        )
         return BlockchainTest.from_test(
             base_test=self,
             genesis_environment=self._generate_blockchain_genesis_environment(),
@@ -353,6 +350,7 @@ class StateTest(BaseTest):
         )
 
         env = self.env.set_fork_requirements(fork)
+        env.check_fork_fields(fork)
         tx = self.tx.with_gas_limit(
             max_gas_limit=env.gas_limit,
             transaction_gas_limit_cap=fork.transaction_gas_limit_cap(),
@@ -526,7 +524,7 @@ class StateTest(BaseTest):
     def generate(
         self,
         t8n: TransitionTool,
-        fixture_format: FixtureFormat,
+        fixture_format: FixtureFormat | LabeledFixtureFormat,
     ) -> FillResult:
         """Generate the BlockchainTest fixture."""
         self.check_exception_test(exception=self.tx.error is not None)
@@ -542,7 +540,7 @@ class StateTest(BaseTest):
     def execute(
         self,
         *,
-        execute_format: ExecuteFormat,
+        execute_format: ExecuteFormat | LabeledExecuteFormat,
     ) -> BaseExecute:
         """Generate the list of test fixtures."""
         if execute_format == TransactionPost:

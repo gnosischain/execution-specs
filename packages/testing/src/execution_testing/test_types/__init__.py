@@ -1,6 +1,6 @@
 """Common definitions and types."""
 
-from .account_types import EOA, Alloc
+from .account_types import EOA, Alloc, AllocGroupHash
 from .blob_types import Blob
 from .block_access_list import (
     BalAccountAbsentValues,
@@ -34,21 +34,12 @@ from .helpers import (
 )
 from .phase_manager import TestPhase, TestPhaseManager
 from .receipt_types import TransactionLog, TransactionReceipt
-from .request_types import (
-    BuilderDepositRequest,
-    BuilderExitRequest,
-    ConsolidationRequest,
-    DepositRequest,
-    Requests,
-    WithdrawalRequest,
-)
-from .system_contract_request_types import (
-    FeeSystemContractRequest,
+from .system_contract_interactions import (
     SystemContractInteractionBase,
     SystemContractInteractionContract,
     SystemContractInteractionMeasuredOutOfGasContract,
     SystemContractInteractionTransaction,
-    SystemContractRequest,
+    fee_increment_blocks,
     relay_contract_code,
 )
 from .transaction_types import (
@@ -65,6 +56,7 @@ __all__ = (
     "DETERMINISTIC_FACTORY_BYTECODE",
     "DETERMINISTIC_FACTORY_ADDRESS",
     "Alloc",
+    "AllocGroupHash",
     "AuthorizationTuple",
     "BalAccountAbsentValues",
     "BalAccountChange",
@@ -77,24 +69,18 @@ __all__ = (
     "Blob",
     "BlockAccessList",
     "BlockAccessListExpectation",
-    "BuilderDepositRequest",
-    "BuilderExitRequest",
     "ChainConfig",
     "ChainConfigDefaults",
-    "ConsolidationRequest",
-    "DepositRequest",
     "Environment",
     "EnvironmentDefaults",
     "EOA",
-    "FeeSystemContractRequest",
+    "fee_increment_blocks",
     "NetworkWrappedTransaction",
     "Removable",
-    "Requests",
     "SystemContractInteractionBase",
     "SystemContractInteractionContract",
     "SystemContractInteractionMeasuredOutOfGasContract",
     "SystemContractInteractionTransaction",
-    "SystemContractRequest",
     "TestParameterGroup",
     "TestPhase",
     "TestPhaseManager",
@@ -105,7 +91,6 @@ __all__ = (
     "TransactionTestMetadata",
     "TransactionType",
     "Withdrawal",
-    "WithdrawalRequest",
     "add_kzg_version",
     "ceiling_division",
     "compute_create_address",

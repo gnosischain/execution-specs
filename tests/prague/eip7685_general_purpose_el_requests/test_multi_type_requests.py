@@ -14,7 +14,12 @@ from execution_testing import (
     Block,
     BlockchainTestFiller,
     BlockException,
+    BuilderDepositRequest,
+    BuilderExitRequest,
     Bytes,
+    ConsolidationRequest,
+    DepositRequest,
+    EIPChecklist,
     Environment,
     FeeSystemContractRequest,
     Fork,
@@ -24,15 +29,9 @@ from execution_testing import (
     SystemContractInteractionTransaction,
     SystemContractRequest,
     TestAddress,
+    WithdrawalRequest,
 )
 
-from ...amsterdam.eip8282_builder_execution_requests.helpers import (
-    BuilderDepositRequest,
-    BuilderExitRequest,
-)
-from ..eip6110_deposits.helpers import DepositRequest
-from ..eip7002_el_triggerable_withdrawals.helpers import WithdrawalRequest
-from ..eip7251_consolidations.helpers import ConsolidationRequest
 from .spec import ref_spec_7685
 
 REFERENCE_SPEC_GIT_PATH: str = ref_spec_7685.git_path
@@ -52,7 +51,7 @@ REQUEST_TYPES: List[type[SystemContractRequest]] = [
     BuilderExitRequest,
 ]
 REQUEST_TYPE_BY_ADDRESS = {
-    rt.interaction_contract_address: rt for rt in REQUEST_TYPES
+    rt.system_contract_address: rt for rt in REQUEST_TYPES
 }
 # Number of requests used for request types that have no per-block cap (e.g.
 # deposits), to exercise "many in a single block".
@@ -147,6 +146,7 @@ def get_fork_permutations(fork: Fork) -> Generator[ParameterSet, None, None]:
 
 @pytest.mark.parametrize_by_fork("requests", get_fork_permutations)
 @pytest.mark.eels_base_coverage
+@EIPChecklist.ExecutionLayerRequest.Test.CrossRequestType.Update(eip=[8282])
 def test_valid_multi_type_requests(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,

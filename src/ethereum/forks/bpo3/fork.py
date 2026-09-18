@@ -42,7 +42,6 @@ from .exceptions import (
     InsufficientMaxFeePerGasError,
     InvalidBlobVersionedHashError,
     NoBlobDataError,
-    PriorityFeeGreaterThanMaxFeeError,
     TransactionTypeContractCreationError,
     WrongChainIdError,
 )
@@ -178,7 +177,6 @@ def get_last_256_block_hashes(chain: BlockChain) -> List[Hash32]:
 
     """
     recent_blocks = chain.blocks[-255:]
-    # TODO: This function has not been tested rigorously
     if len(recent_blocks) == 0:
         return []
 
@@ -446,8 +444,6 @@ def check_transaction(
         If the sender's balance is not enough to pay for the transaction.
     InvalidSenderError :
         If the transaction is from an address that does not exist anymore.
-    PriorityFeeGreaterThanMaxFeeError :
-        If the priority fee is greater than the maximum fee per gas.
     InsufficientMaxFeePerGasError :
         If the maximum fee per gas is insufficient for the transaction.
     InsufficientMaxFeePerBlobGasError :
@@ -490,10 +486,6 @@ def check_transaction(
     sender_account = get_account(tx_state, sender_address)
 
     if isinstance(tx, FeeMarketCapableTransaction):
-        if tx.max_fee_per_gas < tx.max_priority_fee_per_gas:
-            raise PriorityFeeGreaterThanMaxFeeError(
-                "priority fee greater than max fee"
-            )
         if tx.max_fee_per_gas < block_env.base_fee_per_gas:
             raise InsufficientMaxFeePerGasError(
                 tx.max_fee_per_gas, block_env.base_fee_per_gas
@@ -1002,7 +994,7 @@ def process_withdrawals(
             rlp.encode(wd),
         )
 
-        create_ether(wd_state, wd.address, wd.amount * U256(10**9))
+        create_ether(wd_state, wd.address, U256(wd.amount) * U256(10**9))
 
     incorporate_tx_into_block(wd_state)
 

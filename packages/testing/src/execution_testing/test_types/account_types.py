@@ -1,8 +1,11 @@
 """Account-related types for Ethereum tests."""
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
+from hashlib import sha256
+from types import ModuleType
 from typing import (
     Any,
     Dict,
@@ -26,9 +29,11 @@ from spec256k1 import PrivateKey
 from execution_testing.base_types import (
     Account,
     Address,
+    FixedSizeBytes,
     Hash,
     HashInt,
     Number,
+    StateCommitment,
     Storage,
     StorageRootType,
 )
@@ -105,6 +110,31 @@ class EOA(Address):
         return self.__class__(Address(self), key=self.key, nonce=self.nonce)
 
 
+class AllocGroupHash(FixedSizeBytes[8]):  # type: ignore
+    """Class that helps represent hashes used to group allocs."""
+
+    @classmethod
+    def from_preimage(cls, x: str | bytes) -> "AllocGroupHash":
+        """
+        Perform a hash (sha256) then truncate the output to get the alloc
+        hash.
+        """
+        if isinstance(x, str):
+            x = x.encode("utf-8")
+        return cls(sha256(x).digest()[:8])
+
+    def __xor__(self, other: "int | AllocGroupHash") -> "AllocGroupHash":
+        """
+        Alloc hashes are usually combination of multiple inputs via
+        XOR operation.
+        """
+        if isinstance(other, int):
+            other = AllocGroupHash(other)
+        return AllocGroupHash(
+            bytes(a ^ b for a, b in zip(self, other, strict=True))
+        )
+
+
 class Alloc(BaseAlloc):
     """
     Allocation of accounts in the state, pre and post test execution.
@@ -120,6 +150,13 @@ class Alloc(BaseAlloc):
 
     _phase: _Phase = PrivateAttr(default=_Phase.CONSTRUCTION)
     _code_store: Dict[Hash32, Bytes] = PrivateAttr(default_factory=dict)
+    _state_commitment: StateCommitment | None = PrivateAttr(default=None)
+    """
+    Commitment scheme this allocation's state root is computed under.
+
+    Unset by default: it must be seeded from the accompanying fork before any
+    state-root computation.
+    """
 
     @dataclass(kw_only=True)
     class UnexpectedAccountError(Exception):
@@ -198,6 +235,7 @@ class Alloc(BaseAlloc):
         alloc_1: "Alloc",
         alloc_2: "Alloc",
         key_collision_mode: KeyCollisionMode = KeyCollisionMode.OVERWRITE,
+        state_commitment: StateCommitment | None = None,
     ) -> "Alloc":
         """Return merged allocation of two sources."""
         overlapping_keys = alloc_1.root.keys() & alloc_2.root.keys()
@@ -221,18 +259,21 @@ class Alloc(BaseAlloc):
                             account_1=account_1,
                             account_2=account_2,
                         )
-        merged = alloc_1.model_dump()
+        merged = alloc_1.model_copy(deep=True)
 
         for address, other_account in alloc_2.root.items():
-            merged_account = Account.merge(
-                merged.get(address, None), other_account
-            )
+            merged_account = Account.merge(merged.get(address), other_account)
             if merged_account:
                 merged[address] = merged_account
             elif address in merged:
-                merged.pop(address, None)
+                merged.root.pop(address, None)
 
-        return Alloc(merged)
+        if state_commitment is not None:
+            merged.migrate_state_commitment(state_commitment)
+        else:
+            # By default, state commitment of the second alloc takes precedence
+            merged.migrate_state_commitment(alloc_2.state_commitment())
+        return merged
 
     def __iter__(self) -> Iterator[Address]:  # type: ignore [override]
         """Return iterator over the allocation."""
@@ -302,7 +343,7 @@ class Alloc(BaseAlloc):
 
     def state_root(self) -> Hash:
         """Return state root of the allocation."""
-        return Hash(spec_state_mpt.state_root(self._materialize_state()))
+        return Hash(self._state_module().state_root(self._materialize_state()))
 
     def verify_post_alloc(self, got_alloc: "Alloc") -> None:
         """
@@ -328,6 +369,57 @@ class Alloc(BaseAlloc):
                     account.check_alloc(address, got_account)
                 else:
                     raise Alloc.MissingAccountError(address=address)
+
+    def get_alloc_grouping_hash(self) -> AllocGroupHash | None:
+        """
+        Return the grouping hash if the allocation belongs to a particular
+        group, otherwise `None`.
+
+        Method can be overloaded by other implementations of the Alloc to
+        return the appropriate group.
+        """
+        return None
+
+    def calculate_diff(self, base_alloc: "Alloc") -> "Alloc":
+        """
+        Calculate the state difference between self and a base.
+
+        Returns an Alloc containing only the accounts that:
+        - Changed between base and self (balance, nonce, storage, code)
+        - Were created during test execution (new accounts)
+        - Were deleted during test execution (represented as None)
+
+        Args:
+            base_alloc: Genesis pre-allocation state
+
+        Returns:
+            Alloc containing only the state differences for efficient storage
+
+        """
+        diff: Dict[Address, Account | None] = {}
+
+        # Find all addresses that exist in either state
+        all_addresses = set(self.root.keys()) | set(base_alloc.root.keys())
+
+        for address in all_addresses:
+            genesis_account = base_alloc.root.get(address)
+            post_account = self.root.get(address)
+
+            # Account was deleted (exists in genesis but not in post)
+            if genesis_account is not None and post_account is None:
+                diff[address] = None
+
+            # Account was created (doesn't exist in genesis but exists in post)
+            elif genesis_account is None and post_account is not None:
+                diff[address] = post_account
+
+            # Account was modified (exists in both but different)
+            elif genesis_account != post_account:
+                diff[address] = post_account
+
+            # Account unchanged - don't include in diff
+
+        return Alloc(diff)
 
     # ------------------------------------------------------------------
     # PreState protocol implementation
@@ -359,25 +451,40 @@ class Alloc(BaseAlloc):
             self._build_cache()
             self._phase = _Phase.LIVE
 
-    def _materialize_state(self) -> spec_state_mpt.State:
+    def _state_module(self) -> ModuleType:
         """
-        Build an in-memory `ethereum.state_mpt.State` mirror of
-        `self.root`.
+        Return the spec state module implementing `self._state_commitment`.
+        """
+        if self._state_commitment is None:
+            raise ValueError(
+                "Alloc state commitment is unset; seed it from the "
+                "accompanying fork."
+            )
+        if self._state_commitment is StateCommitment.MPT:
+            return spec_state_mpt
+        raise NotImplementedError("State commitment type not yet implemented.")
+
+    def _materialize_state(self) -> spec_state.PreState:
+        """
+        Build a spec-side `PreState` mirror of `self.root` using the
+        implementation module for this allocation's commitment scheme.
 
         Used as the trie-backed delegate for `compute_state_root` (a
         cold, once-per-block call). The materialized state is not
         retained.
         """
-        state = spec_state_mpt.State()
+        mod = self._state_module()
+        state: spec_state.PreState = mod.State()
         for address, account in self.root.items():
             if account is None:
                 continue
             addr = Bytes20(address)
             code = bytes(account.code) if account.code else b""
-            code_hash = (
-                spec_keccak256(code) if code else spec_state.EMPTY_CODE_HASH
-            )
-            spec_state_mpt.set_account(
+            if code:
+                code_hash = mod.store_code(state, code)
+            else:
+                code_hash = spec_state.EMPTY_CODE_HASH
+            mod.set_account(
                 state,
                 addr,
                 spec_state.Account(
@@ -390,13 +497,12 @@ class Alloc(BaseAlloc):
                 value_int = int(value_hi)
                 if value_int == 0:
                     continue
-                spec_state_mpt.set_storage(
+                mod.set_storage(
                     state,
                     addr,
                     Bytes32(int(key_hi).to_bytes(32, "big")),
                     U256(value_int),
                 )
-        state._code_store.update(self._code_store)
         return state
 
     def get_account_optional(
@@ -447,16 +553,6 @@ class Alloc(BaseAlloc):
         if code_hash == spec_state.EMPTY_CODE_HASH:
             return Bytes(b"")
         return self._code_store[code_hash]
-
-    def account_has_storage(self, address: Bytes20) -> bool:
-        """
-        Return whether the account at `address` has any storage slots set.
-
-        Conforms to `ethereum.state.PreState.account_has_storage`.
-        """
-        self._ensure_live()
-        account = self.root.get(Address(address))
-        return account is not None and bool(account.storage.root)
 
     def compute_state_root(self, block_diff: spec_state.BlockDiff) -> Hash32:
         """
@@ -564,6 +660,25 @@ class Alloc(BaseAlloc):
     def freeze(self) -> None:
         """Lock the allocation: no further mutations allowed."""
         self._phase = _Phase.FROZEN
+
+    def state_commitment(self) -> StateCommitment | None:
+        """
+        Return the commitment scheme this allocation is committed under, or
+        `None` if it has not been seeded from a fork yet.
+        """
+        return self._state_commitment
+
+    def migrate_state_commitment(
+        self, commitment: StateCommitment | None
+    ) -> None:
+        """
+        Switch the commitment scheme used to compute the state root.
+        """
+        if self._phase is _Phase.FROZEN:
+            raise RuntimeError(
+                "migrate_state_commitment not allowed: Alloc is FROZEN"
+            )
+        self._state_commitment = commitment
 
     def deterministic_deploy_contract(
         self,
@@ -674,3 +789,27 @@ class Alloc(BaseAlloc):
         raise NotImplementedError(
             "nonexistent_account is not implemented in the base class"
         )
+
+    def expect_account_state(
+        self,
+        addresses: Address | Sequence[Address],
+        *,
+        is_existing_account: bool = True,
+        is_contract: bool = False,
+        min_balance: int | None = None,
+        code_prefix: bytes | None = None,
+    ) -> None:
+        """
+        Register start-block expectation(s) for predeployed account(s).
+
+        Accepts a single address or a range; labels ride on the addresses
+        themselves. Used only by fill-stateful; ignored by other
+        allocations.
+        """
+
+    def verify_deployed_accounts(self, block_number: int) -> None:
+        """
+        Verify predeployed-account expectations at block_number.
+
+        No-op unless fill-stateful allocation.
+        """

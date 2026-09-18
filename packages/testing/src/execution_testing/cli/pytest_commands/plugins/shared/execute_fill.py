@@ -169,15 +169,6 @@ def pytest_configure(config: pytest.Config) -> None:
 
     config.addinivalue_line(
         "markers",
-        "yul_test: a test case that compiles Yul code.",
-    )
-    config.addinivalue_line(
-        "markers",
-        "compile_yul_with(fork): Always compile Yul source using the "
-        "corresponding evm version.",
-    )
-    config.addinivalue_line(
-        "markers",
         "fill: Markers to be added in fill mode only.",
     )
     config.addinivalue_line(
@@ -191,6 +182,10 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
+        "bigmem: Tests that consume a large amount of memory.",
+    )
+    config.addinivalue_line(
+        "markers",
         "eip_checklist(item_id, eip=None): Mark a test as implementing a "
         "specific checklist item. The first positional parameter is the "
         "checklist item ID. The optional 'eip' keyword parameter specifies "
@@ -198,8 +193,14 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
-        "derived_test: Mark a test as a derived test (E.g. a BlockchainTest "
-        "that is derived from a StateTest).",
+        "primary_format: Mark the first fixture format generated for a test. "
+        "Select with `-m primary_format` to fill every test exactly once.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "inclusion_test: Mark a test that verifies whether a transaction can "
+        "be included in a block. The transaction under test must be the last "
+        "one of the last block.",
     )
     config.addinivalue_line(
         "markers",
@@ -299,13 +300,16 @@ def test_case_description(request: pytest.FixtureRequest) -> str:
 
 
 def pytest_make_parametrize_id(
-    config: pytest.Config, val: str, argname: str
+    config: pytest.Config, val: object, argname: str
 ) -> str:
     """
     Pytest hook called when generating test ids. We use this to generate more
     readable test ids for the generated tests.
     """
     del config
+    if isinstance(val, type):
+        # `str()` on a class renders `<class '...'>`; use its bare name.
+        val = val.__name__
     return f"{argname}_{val}"
 
 
@@ -400,15 +404,10 @@ def is_exception_test(request: pytest.FixtureRequest) -> bool:
     return request.node.get_closest_marker("exception_test") is not None
 
 
-def pytest_addoption(parser: pytest.Parser) -> None:
-    """Add command-line options to pytest."""
-    static_filler_group = parser.getgroup(
-        "static", "Arguments defining static filler behavior"
-    )
-    static_filler_group.addoption(
-        "--fill-static-tests",
-        action="store_true",
-        dest="fill_static_tests_enabled",
-        default=None,
-        help=("Enable reading and filling from static test files."),
-    )
+@pytest.fixture(scope="function")
+def is_inclusion_test(request: pytest.FixtureRequest) -> bool:
+    """
+    Check, given the test node properties, whether the test is an inclusion
+    test.
+    """
+    return request.node.get_closest_marker("inclusion_test") is not None

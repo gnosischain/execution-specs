@@ -15,14 +15,14 @@ This module covers the EIP-8038 *execution* ``SSTORE`` refund schedule via
 the transaction receipt's ``cumulative_gas_used``:
 
 * Clearing a slot whose original value is non-zero grants
-  ``REFUND_STORAGE_CLEAR`` (12480) to ``refund_counter`` (no EIP-8037
+  ``REFUND_STORAGE_CLEAR`` to ``refund_counter`` (no EIP-8037
   state refund, since no state was created).
 * Clearing then re-setting the same non-zero-original slot nets a zero
   refund: the clear grant is reversed (``refund -= REFUND_STORAGE_CLEAR``)
   exactly when ``original != 0 and current == 0`` and a non-zero value is
   written back.
 * Restoring a non-zero-original slot to its original value refunds the
-  write cost ``STORAGE_WRITE`` (10000).
+  write cost ``STORAGE_WRITE``.
 * The applied refund is capped at ``gas_used // 5`` (EIP-3529 quotient).
 
 All refunds use a non-zero original so the state-creation refund owned by
@@ -34,8 +34,14 @@ import pytest
 from execution_testing import (
     Account,
     Alloc,
+    BalAccountExpectation,
+    BalNonceChange,
+    BalStorageChange,
+    BalStorageSlot,
+    BlockAccessListExpectation,
     Bytecode,
     Fork,
+    GasConsumer,
     Op,
     StateTestFiller,
     Transaction,
@@ -80,7 +86,7 @@ def test_sstore_clear_grants_refund(
     Clearing a non-zero-original slot grants ``REFUND_STORAGE_CLEAR``.
 
     Enough unrelated gas is burned so the EIP-3529 quotient cap
-    (``gas_used // 5``) does not bind, letting the full 12480 refund be
+    (``gas_used // 5``) does not bind, letting the full clear refund be
     observed in ``cumulative_gas_used``. The non-zero original means no
     EIP-8037 state refund participates.
     """
@@ -90,9 +96,9 @@ def test_sstore_clear_grants_refund(
         current_value=1,
         new_value=0,
     )(0, 0)
-    # Burn cheap gas (JUMPDEST = 1 gas, no stack effect) so that
-    # gas_used // 5 exceeds the refund and the full grant applies.
-    burn = Op.JUMPDEST * 60_000
+    # Burn unrelated execution gas so that gas_used // 5 exceeds the
+    # refund and the full grant applies.
+    burn = GasConsumer(gas=clear.refund(fork) * 5, fork=fork)
     code = clear + burn
 
     contract = pre.deploy_contract(code=code, storage={0: 1})
@@ -151,16 +157,45 @@ def test_sstore_clear_then_reset_nets_zero(
     assert code.refund(fork) == 0
     expected_cumulative = _cumulative_gas_used(code, fork)
 
+    sender = pre.fund_eoa()
     tx = Transaction(
         to=contract,
-        sender=pre.fund_eoa(),
+        sender=sender,
         expected_receipt=TransactionReceipt(
             cumulative_gas_used=expected_cumulative
         ),
     )
 
     post = {contract: Account(storage={0: 2})}
-    state_test(pre=pre, post=post, tx=tx)
+    state_test(
+        pre=pre,
+        post=post,
+        tx=tx,
+        expected_block_access_list=BlockAccessListExpectation(
+            account_expectations={
+                sender: BalAccountExpectation(
+                    nonce_changes=[
+                        BalNonceChange(block_access_index=1, post_nonce=1)
+                    ],
+                ),
+                # The clear and the reset net into one change holding the
+                # final value, not one entry per write.
+                contract: BalAccountExpectation(
+                    storage_changes=[
+                        BalStorageSlot(
+                            slot=0,
+                            slot_changes=[
+                                BalStorageChange(
+                                    block_access_index=1, post_value=2
+                                )
+                            ],
+                        )
+                    ],
+                    storage_reads=[],
+                ),
+            }
+        ),
+    )
 
 
 @EIPChecklist.GasRefundsChanges.Test.RefundCalculation()
@@ -174,7 +209,7 @@ def test_sstore_restore_nonzero_refunds_write(
     Restoring a non-zero-original slot refunds the write cost.
 
     The slot is changed (charging ``STORAGE_WRITE``) then restored to its
-    original non-zero value, refunding ``STORAGE_WRITE`` (10000). Gas is
+    original non-zero value, refunding ``STORAGE_WRITE``. Gas is
     burned so the quotient cap does not bind and the full refund is
     observable.
     """
@@ -189,7 +224,7 @@ def test_sstore_restore_nonzero_refunds_write(
         current_value=2,
         new_value=1,
     )(0, 1)
-    burn = Op.JUMPDEST * 60_000
+    burn = GasConsumer(gas=code.refund(fork) * 5, fork=fork)
     code += burn
 
     contract = pre.deploy_contract(code=code, storage={0: 1})
@@ -284,7 +319,7 @@ def test_sstore_refund_cap_exact_equality(
     The applied refund equals the EIP-3529 cap at exact equality.
 
     A single non-zero-original clear accrues ``REFUND_STORAGE_CLEAR``.
-    Cheap ``JUMPDEST`` gas (1 each) is burned so the gross gas lands at
+    Unrelated execution gas is burned so the gross gas lands at
     exactly ``max_refund_quotient * accrued``; the quotient cap
     ``gross // max_refund_quotient`` then equals the accrued refund
     *exactly*, the boundary between the cap binding and not binding. The
@@ -304,20 +339,13 @@ def test_sstore_refund_cap_exact_equality(
         return_cost_deducted_prior_execution=True
     )
     # Target the exact boundary: gross == quotient * accrued, so that
-    # gross // quotient == accrued with no slack. Solve for the JUMPDEST
-    # count from the remaining gas after intrinsic and the clear's
-    # execution cost; each JUMPDEST costs exactly 1 gas.
-    jumpdest_gas = Op.JUMPDEST.gas_cost(fork)
+    # gross // quotient == accrued with no slack. The burn is whatever
+    # is left after the intrinsic cost and the clear's execution cost.
     target_gross = quotient * accrued
     base_gross = intrinsic + clear.execution_cost(fork)
     burn_gas = target_gross - base_gross
-    num_jumpdest, remainder = divmod(burn_gas, jumpdest_gas)
-    # An exact integer JUMPDEST count must reach the boundary; otherwise
-    # the equality below would not hold and the test would (correctly)
-    # fail rather than silently approximate.
-    assert remainder == 0
 
-    code = clear + Op.JUMPDEST * num_jumpdest
+    code = clear + GasConsumer(gas=burn_gas, fork=fork)
     contract = pre.deploy_contract(code=code, storage={0: 1})
 
     gross = intrinsic + code.execution_cost(fork) + code.state_cost(fork)

@@ -42,6 +42,7 @@ from .state_tracker import (
     TransactionState,
     account_exists,
     account_exists_and_is_empty,
+    create_ether,
     destroy_account,
     destroy_touched_empty_accounts,
     extract_block_diff,
@@ -138,7 +139,6 @@ def get_last_256_block_hashes(chain: BlockChain) -> List[Hash32]:
 
     """
     recent_blocks = chain.blocks[-255:]
-    # TODO: This function has not been tested rigorously
     if len(recent_blocks) == 0:
         return []
 
@@ -739,10 +739,7 @@ def process_transaction(
     transaction_fee = tx_gas_used_after_refund * tx.gas_price
 
     # refund gas
-    sender_balance_after_refund = get_account(tx_state, sender).balance + U256(
-        gas_refund_amount
-    )
-    set_account_balance(tx_state, sender, sender_balance_after_refund)
+    create_ether(tx_state, sender, U256(gas_refund_amount))
 
     # transfer miner fees
     coinbase_balance_after_mining_fee = get_account(

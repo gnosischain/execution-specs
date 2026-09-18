@@ -17,7 +17,7 @@ regardless of whether the leaf pre-existed. This module pins that
 reduced, refund-free charge via the exact receipt gas:
 
 * a non-clearing delegation on an existing empty-code leaf pays the
-  intrinsic ``REGULAR_PER_AUTH_BASE_COST`` plus the top-frame
+  intrinsic ``EXECUTION_PER_AUTH_BASE_COST`` plus the top-frame
   ``ACCOUNT_WRITE`` (first leaf write) and ``AUTH_BASE`` (the net-new
   delegation indicator); and
 * a *clearing* re-authorization of an existing-delegation authority
@@ -98,7 +98,7 @@ def test_existing_authority_no_new_account_charge(
         authorization_list_or_count=n,
         return_cost_deducted_prior_execution=True,
     )
-    top_frame_execution = fork.transaction_top_frame_gas_calculator()(
+    top_frame_execution = fork.transaction_top_frame_execution_gas(
         authorizations=authorization_list,
     )
     top_frame_state = fork.transaction_top_frame_state_gas(
@@ -173,7 +173,7 @@ def test_clearing_delegation_no_state_charge(
         authorization_list_or_count=n,
         return_cost_deducted_prior_execution=True,
     )
-    top_frame_execution = fork.transaction_top_frame_gas_calculator()(
+    top_frame_execution = fork.transaction_top_frame_execution_gas(
         authorizations=authorization_list,
     )
     top_frame_state = fork.transaction_top_frame_state_gas(

@@ -16,13 +16,22 @@ from ethereum.crypto.elliptic_curve import SECP256K1N, secp256k1_recover
 from ethereum.crypto.hash import Hash32, keccak256
 from ethereum.exceptions import (
     InsufficientTransactionGasError,
+    InvalidBlock,
     InvalidSignatureError,
+    NonceMismatchError,
     NonceOverflowError,
 )
 from ethereum.state import Address
 
 from .exceptions import (
+    BlobCountExceededError,
+    EmptyAuthorizationListError,
     InitCodeTooLargeError,
+    InsufficientMaxFeePerGasError,
+    InvalidBlobVersionedHashError,
+    NoBlobDataError,
+    PriorityFeeGreaterThanMaxFeeError,
+    TransactionTypeContractCreationError,
     TransactionTypeError,
 )
 from .fork_types import Authorization, ExecutionGas, VersionedHash
@@ -38,13 +47,23 @@ class IntrinsicGasCost:
 
     calldata_floor: ExecutionGas
     """
-    Minimum gas cost based on calldata size per [EIP-7623].
+    Minimum gas cost based on calldata size per [EIP-7623], including the
+    access list data surcharge per [EIP-7981].
 
     [EIP-7623]: https://eips.ethereum.org/EIPS/eip-7623
+    [EIP-7981]: https://eips.ethereum.org/EIPS/eip-7981
     """
 
 
-TX_MAX_GAS_LIMIT = Uint(16_777_216)
+BLOB_COUNT_LIMIT = 2
+"""
+Maximum number of blobs a single transaction may carry.
+"""
+
+VERSIONED_HASH_VERSION_KZG = b"\x01"
+"""
+Version byte that every blob versioned hash must start with.
+"""
 
 ACCESS_LIST_ADDRESS_FLOOR_TOKENS = Uint(80)
 """
@@ -589,12 +608,49 @@ def validate_transaction(tx: Transaction, sender: Address) -> IntrinsicGasCost:
     and a `NonceOverflowError` exception if the nonce overflows.
     It also raises an `InitCodeTooLargeError` if the code
     size of a contract creation transaction exceeds the maximum allowed
-    size.
+    size, and a `PriorityFeeGreaterThanMaxFeeError` if the maximum
+    priority fee per gas of a fee market transaction exceeds its maximum
+    fee per gas.
 
     [EIP-2681]: https://eips.ethereum.org/EIPS/eip-2681
     [EIP-7623]: https://eips.ethereum.org/EIPS/eip-7623
     """
+    from .vm.gas import GasCosts
     from .vm.interpreter import MAX_INIT_CODE_SIZE
+
+    if U256(tx.nonce) >= U256(U64.MAX_VALUE):
+        raise NonceOverflowError("Nonce too high")
+
+    if tx.to == Bytes0(b"") and len(tx.data) > MAX_INIT_CODE_SIZE:
+        raise InitCodeTooLargeError("Code size too large")
+
+    if isinstance(tx, FeeMarketCapableTransaction):
+        if tx.max_fee_per_gas < tx.max_priority_fee_per_gas:
+            raise PriorityFeeGreaterThanMaxFeeError(
+                "priority fee greater than max fee"
+            )
+
+    if isinstance(tx, BlobTransaction):
+        blob_count = len(tx.blob_versioned_hashes)
+        if blob_count == 0:
+            raise NoBlobDataError("no blob data in transaction")
+        if blob_count > BLOB_COUNT_LIMIT:
+            raise BlobCountExceededError(
+                f"Tx has {blob_count} blobs. Max allowed: {BLOB_COUNT_LIMIT}"
+            )
+        for blob_versioned_hash in tx.blob_versioned_hashes:
+            if blob_versioned_hash[0:1] != VERSIONED_HASH_VERSION_KZG:
+                raise InvalidBlobVersionedHashError(
+                    "invalid blob versioned hash"
+                )
+
+    if isinstance(tx, (BlobTransaction, SetCodeTransaction)):
+        if not isinstance(tx.to, Address):
+            raise TransactionTypeContractCreationError(tx)
+
+    if isinstance(tx, SetCodeTransaction):
+        if not any(tx.authorizations):
+            raise EmptyAuthorizationListError("empty authorization list")
 
     intrinsic = calculate_intrinsic_cost(tx, sender)
     intrinsic_gas = Uint(intrinsic.execution)
@@ -602,18 +658,14 @@ def validate_transaction(tx: Transaction, sender: Address) -> IntrinsicGasCost:
         raise InsufficientTransactionGasError("Insufficient intrinsic gas")
     if intrinsic.calldata_floor > tx.gas:
         raise InsufficientTransactionGasError("Insufficient calldata floor")
-    if tx.to == Bytes0(b"") and len(tx.data) > MAX_INIT_CODE_SIZE:
-        raise InitCodeTooLargeError("Code size too large")
-    if intrinsic.execution > TX_MAX_GAS_LIMIT:
+    if intrinsic.execution > GasCosts.TX_MAX_GAS_LIMIT:
         raise InsufficientTransactionGasError(
             "Intrinsic execution gas exceeds TX_MAX_GAS_LIMIT"
         )
-    if intrinsic.calldata_floor > TX_MAX_GAS_LIMIT:
+    if intrinsic.calldata_floor > GasCosts.TX_MAX_GAS_LIMIT:
         raise InsufficientTransactionGasError(
             "Intrinsic calldata floor exceeds TX_MAX_GAS_LIMIT"
         )
-    if U256(tx.nonce) >= U256(U64.MAX_VALUE):
-        raise NonceOverflowError("Nonce too high")
 
     return intrinsic
 
@@ -622,7 +674,7 @@ def calculate_intrinsic_cost(
     tx: Transaction, sender: Address
 ) -> IntrinsicGasCost:
     """
-    Calculates the gas that is charged before execution is started.
+    Calculate the gas charged before execution starts and the data floor.
 
     The intrinsic cost of the transaction is charged before execution has
     begun. Functions/operations in the EVM cost money to execute so this
@@ -642,9 +694,9 @@ def calculate_intrinsic_cost(
     3. Value cost (`TX_VALUE_COST` for a non-self-transfer call) when
        ``tx.value > 0``.
     4. Calldata cost (zero and non-zero bytes).
-    5. Access list entries (if applicable).
+    5. Access list entry charges and the data surcharge (if applicable).
     6. Authorizations (if applicable): only the state-independent base
-       cost (`REGULAR_PER_AUTH_BASE_COST`) per tuple. The
+       cost (`EXECUTION_PER_AUTH_BASE_COST`) per tuple. The
        state-dependent account-creation and delegation-write costs are
        charged at the top frame by `set_delegation`.
 
@@ -653,7 +705,9 @@ def calculate_intrinsic_cost(
 
     This function takes a transaction and its sender as parameters and
     returns the intrinsic execution gas cost and the minimum (floor)
-    gas cost based on the calldata size. The floor is anchored on the
+    gas cost based on the calldata size and access list data surcharge.
+    The surcharge is added to both costs, so it is charged regardless of
+    which side determines the gas used. The floor is anchored on the
     execution-gas portion of items 1 to 3 above rather than `TX_BASE`
     alone, so it never undercuts the transaction's own intrinsic base.
     """
@@ -689,20 +743,20 @@ def calculate_intrinsic_cost(
                 ulen(access.slots) * ACCESS_LIST_STORAGE_KEY_FLOOR_TOKENS
             )
 
-    # Data token floor cost for access list bytes.
-    access_list_cost += tokens_in_access_list * GasCosts.TX_DATA_TOKEN_FLOOR
+    # Charge the access list data surcharge on both sides of the gas-used
+    # maximum, independently of the existing per-entry access charges.
+    access_list_data_cost = (
+        tokens_in_access_list * GasCosts.TX_DATA_TOKEN_FLOOR
+    )
 
     auth_cost = Uint(0)
     if isinstance(tx, SetCodeTransaction):
-        auth_cost = GasCosts.REGULAR_PER_AUTH_BASE_COST * ulen(
+        auth_cost = GasCosts.EXECUTION_PER_AUTH_BASE_COST * ulen(
             tx.authorizations
         )
 
     # EIP-7976 floor tokens: all calldata bytes count uniformly.
     floor_tokens_in_calldata = ulen(tx.data) * GasCosts.TX_DATA_TOKEN_STANDARD
-
-    # Total floor tokens.
-    total_floor_tokens = floor_tokens_in_calldata + tokens_in_access_list
 
     # Decomposed execution-gas intrinsic base (EIP-2780), which also
     # anchors the calldata floor.
@@ -710,7 +764,9 @@ def calculate_intrinsic_cost(
 
     # Floor gas cost (EIP-7623: minimum gas for data-heavy transactions).
     data_floor_gas_cost = (
-        total_floor_tokens * GasCosts.TX_DATA_TOKEN_FLOOR + base_execution_gas
+        base_execution_gas
+        + floor_tokens_in_calldata * GasCosts.TX_DATA_TOKEN_FLOOR
+        + access_list_data_cost
     )
 
     return IntrinsicGasCost(
@@ -719,6 +775,7 @@ def calculate_intrinsic_cost(
             + init_code_gas
             + data_cost
             + access_list_cost
+            + access_list_data_cost
             + auth_cost
         ),
         calldata_floor=ExecutionGas(data_floor_gas_cost),
@@ -735,6 +792,55 @@ def count_tokens_in_data(data: bytes) -> Uint:
     num_non_zeros = ulen(data) - num_zeros
 
     return num_zeros + num_non_zeros * Uint(4)
+
+
+def calculate_effective_gas_price(
+    tx: Transaction, base_fee_per_gas: Uint
+) -> Uint:
+    """
+    Calculate the price per unit of gas the transaction actually pays.
+
+    A fee-market transaction pays the base fee plus a priority fee
+    capped by both of its fee caps; its maximum fee must cover the base
+    fee, or an `InsufficientMaxFeePerGasError` is raised. A transaction
+    priced with a plain gas price pays that price outright, which must
+    likewise cover the base fee.
+    """
+    if isinstance(tx, FeeMarketCapableTransaction):
+        if tx.max_fee_per_gas < base_fee_per_gas:
+            raise InsufficientMaxFeePerGasError(
+                tx.max_fee_per_gas, base_fee_per_gas
+            )
+
+        priority_fee_per_gas = min(
+            tx.max_priority_fee_per_gas,
+            tx.max_fee_per_gas - base_fee_per_gas,
+        )
+        return priority_fee_per_gas + base_fee_per_gas
+
+    if tx.gas_price < base_fee_per_gas:
+        raise InvalidBlock
+    return tx.gas_price
+
+
+def calculate_max_gas_fee(tx: Transaction, gas_limit: Uint) -> Uint:
+    """
+    Calculate the largest execution-gas fee the transaction can incur:
+    `gas_limit` priced at the transaction's fee cap.
+    """
+    if isinstance(tx, FeeMarketCapableTransaction):
+        return gas_limit * tx.max_fee_per_gas
+    return gas_limit * tx.gas_price
+
+
+def check_nonce(tx: Transaction, sender_nonce: Uint) -> None:
+    """
+    Check that the transaction's nonce equals the sender's next nonce.
+    """
+    if sender_nonce > Uint(tx.nonce):
+        raise NonceMismatchError("nonce too low")
+    elif sender_nonce < Uint(tx.nonce):
+        raise NonceMismatchError("nonce too high")
 
 
 def chain_id(tx: Transaction) -> None | U64:

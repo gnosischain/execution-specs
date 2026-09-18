@@ -191,12 +191,7 @@ from ..forks import (
                     ],
                 )
             ],
-            [
-                "fork",
-                "shared_value",
-                "different_value_1",
-                "different_value_2",
-            ],
+            ["fork", "shared_value", "different_value_1", "different_value_2"],
             [
                 pytest.param(Frontier, 1, "a", "x"),
                 pytest.param(Frontier, 2, "b", "y"),

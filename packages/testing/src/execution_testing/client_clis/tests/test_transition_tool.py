@@ -8,7 +8,9 @@ from typing import Any, Type
 
 import ijson  # type: ignore[import-untyped]
 import pytest
+from tenacity import retry, retry_if_exception_type, stop_after_attempt
 
+from execution_testing.base_types import StateCommitment
 from execution_testing.client_clis import (
     CLINotFoundInPathError,
     EvmOneTransitionTool,
@@ -116,6 +118,7 @@ def test_unknown_binary_path() -> None:
 TEST_ALLOC = Alloc.model_validate(
     {0xA: {"balance": 1, "nonce": 2, "code": "0x00"}}
 )
+TEST_ALLOC.migrate_state_commitment(StateCommitment.MPT)
 TEST_ALLOC_STATE_ROOT = TEST_ALLOC.state_root()
 
 
@@ -165,6 +168,7 @@ def test_lazy_alloc_file_handles_mixed_entries(tmp_path: Path) -> None:
             0xC: {"balance": "0xff", "nonce": 0, "code": "0x"},
         }
     )
+    alloc.migrate_state_commitment(StateCommitment.MPT)
     state_root = alloc.state_root()
     alloc_path = tmp_path / "alloc.json"
     alloc_path.write_text(alloc.model_dump_json())
@@ -300,27 +304,38 @@ def test_lazy_alloc_file_keepalive_pins_temp_dir() -> None:
     import gc
     import tempfile
 
-    keep = tempfile.TemporaryDirectory()
-    keep_path = Path(keep.name)
-    alloc_path = keep_path / "alloc.json"
-    alloc_path.write_text(TEST_ALLOC.model_dump_json())
+    def materialize_alloc() -> Path:
+        keep = tempfile.TemporaryDirectory()
+        keep_path = Path(keep.name)
+        alloc_path = keep_path / "alloc.json"
+        alloc_path.write_text(TEST_ALLOC.model_dump_json())
 
-    lazy = LazyAllocFile(
-        raw=alloc_path,
-        _state_root=TEST_ALLOC_STATE_ROOT,
-        _keepalive=keep,
+        lazy = LazyAllocFile(
+            raw=alloc_path,
+            _state_root=TEST_ALLOC_STATE_ROOT,
+            _keepalive=keep,
+        )
+        # The keepalive must preserve the file across garbage collection.
+        del keep
+        gc.collect()
+        assert alloc_path.exists()
+        assert lazy.materialize() == TEST_ALLOC
+        return keep_path
+
+    # Exit the producing frame before checking finalizer-driven cleanup.
+    keep_path = materialize_alloc()
+
+    @retry(
+        retry=retry_if_exception_type(AssertionError),
+        stop=stop_after_attempt(5),
+        reraise=True,
     )
-    # Releasing our handle leaves the file alive via the keepalive on lazy.
-    del keep
-    assert alloc_path.exists()
-    assert lazy.materialize() == TEST_ALLOC
+    def assert_cleaned_up() -> None:
+        # PyPy may need multiple collections to run the temp dir finalizer.
+        gc.collect()
+        assert not keep_path.exists()
 
-    # Dropping the LazyAllocFile drops the keepalive; TemporaryDirectory's
-    # finalizer wipes the directory. PyPy doesn't refcount, so trigger GC
-    # explicitly to run the finalizer deterministically.
-    del lazy
-    gc.collect()
-    assert not keep_path.exists()
+    assert_cleaned_up()
 
 
 def test_dump_files_to_directory_copies_lazy_alloc_file(

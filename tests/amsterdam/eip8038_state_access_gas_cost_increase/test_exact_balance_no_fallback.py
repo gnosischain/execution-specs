@@ -61,6 +61,7 @@ def gas_costs_before_increase(
     return ancestor.gas_costs()
 
 
+@pytest.mark.inclusion_test
 @EIPChecklist.GasCostChanges.Test.OutOfGas()
 @pytest.mark.exception_test
 @pytest.mark.parametrize(
@@ -82,8 +83,8 @@ def test_access_list_no_fallback(
     Reject an access-list transaction whose ``gas_limit`` is one gas
     below the Amsterdam intrinsic.
 
-    EIP-8038 raises ``TX_ACCESS_LIST_ADDRESS`` (2400 -> 3000) and
-    ``TX_ACCESS_LIST_STORAGE_KEY`` (1900 -> 3000). A client reusing the
+    EIP-8038 raises ``TX_ACCESS_LIST_ADDRESS`` and
+    ``TX_ACCESS_LIST_STORAGE_KEY``. A client reusing the
     old per-address/per-key constants would compute an intrinsic smaller
     by ``num_addresses * addr_delta + num_keys * key_delta``; with the
     sender funded to the wei, that fallback must not slip through.
@@ -136,6 +137,7 @@ def test_access_list_no_fallback(
     state_test(pre=pre, post={}, tx=tx)
 
 
+@pytest.mark.inclusion_test
 @EIPChecklist.GasCostChanges.Test.OutOfGas()
 @pytest.mark.exception_test
 @pytest.mark.parametrize(
@@ -205,6 +207,7 @@ def test_authorization_no_fallback(
     state_test(pre=pre, post={}, tx=tx)
 
 
+@pytest.mark.inclusion_test
 @EIPChecklist.GasCostChanges.Test.OutOfGas()
 @pytest.mark.exception_test
 def test_cold_account_access_no_fallback(
@@ -218,7 +221,7 @@ def test_cold_account_access_no_fallback(
 
     Under EIP-2780 every non-create, non-self transaction pays one
     ``COLD_ACCOUNT_ACCESS`` in its intrinsic for touching the recipient;
-    EIP-8038 raises that constant (2600 -> 3000). A client reusing the
+    EIP-8038 raises that constant. A client reusing the
     old ``COLD_ACCOUNT_ACCESS`` would compute an intrinsic smaller by the
     per-access delta, and with the sender funded to the wei that fallback
     must not execute.

@@ -173,6 +173,7 @@ def test_auth_execution_intrinsic_magnitude(
     state_test(env=env, pre=pre, post=post, tx=tx)
 
 
+@pytest.mark.inclusion_test
 @EIPChecklist.GasCostChanges.Test.OutOfGas()
 @pytest.mark.exception_test
 @pytest.mark.parametrize("n", [1, 3])
@@ -332,7 +333,7 @@ def test_mixed_validity_multi_auth_receipt_gas(
     Pin the exact receipt gas of a transaction carrying one valid and
     one invalid authorization under the EIP-2780 top-frame charge model.
 
-    Both tuples pay the state-independent ``REGULAR_PER_AUTH_BASE_COST``
+    Both tuples pay the state-independent ``EXECUTION_PER_AUTH_BASE_COST``
     in the intrinsic. The single valid authorization's authority leaf
     already exists (a funded EOA) and gains a net-new delegation
     indicator, so at the top frame it pays the first-write
@@ -444,7 +445,7 @@ def test_mixed_validity_multi_auth_receipt_gas(
         authorization_list_or_count=n,
         return_cost_deducted_prior_execution=True,
     )
-    top_frame_execution = fork.transaction_top_frame_gas_calculator()(
+    top_frame_execution = fork.transaction_top_frame_execution_gas(
         authorizations=authorization_list,
     )
     top_frame_state = fork.transaction_top_frame_state_gas(
@@ -604,9 +605,7 @@ def test_many_auths_block_limit(
     )
     per_auth_total = (
         _execution_per_auth(fork)
-        + fork.transaction_top_frame_gas_calculator()(
-            authorizations=[probe_auth]
-        )
+        + fork.transaction_top_frame_execution_gas(authorizations=[probe_auth])
         + fork.transaction_top_frame_state_gas(authorizations=[probe_auth])
     )
     base = fork.transaction_intrinsic_cost_calculator()(

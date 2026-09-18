@@ -38,7 +38,6 @@ from .blocks import Block, Header, Log, Receipt, encode_receipt
 from .bloom import logs_bloom
 from .exceptions import (
     InsufficientMaxFeePerGasError,
-    PriorityFeeGreaterThanMaxFeeError,
     WrongChainIdError,
 )
 from .state_tracker import (
@@ -46,6 +45,7 @@ from .state_tracker import (
     TransactionState,
     account_exists,
     account_exists_and_is_empty,
+    create_ether,
     destroy_account,
     destroy_touched_empty_accounts,
     extract_block_diff,
@@ -147,7 +147,6 @@ def get_last_256_block_hashes(chain: BlockChain) -> List[Hash32]:
 
     """
     recent_blocks = chain.blocks[-255:]
-    # TODO: This function has not been tested rigorously
     if len(recent_blocks) == 0:
         return []
 
@@ -486,8 +485,6 @@ def check_transaction(
         If the sender's balance is not enough to pay for the transaction.
     InvalidSenderError :
         If the transaction is from an address that does not exist anymore.
-    PriorityFeeGreaterThanMaxFeeError:
-        If the priority fee is greater than the maximum fee per gas.
     InsufficientMaxFeePerGasError :
         If the maximum fee per gas is insufficient for the transaction.
 
@@ -506,10 +503,6 @@ def check_transaction(
     sender_account = get_account(tx_state, sender_address)
 
     if isinstance(tx, FeeMarketTransaction):
-        if tx.max_fee_per_gas < tx.max_priority_fee_per_gas:
-            raise PriorityFeeGreaterThanMaxFeeError(
-                "priority fee greater than max fee"
-            )
         if tx.max_fee_per_gas < block_env.base_fee_per_gas:
             raise InsufficientMaxFeePerGasError(
                 tx.max_fee_per_gas, block_env.base_fee_per_gas
@@ -856,10 +849,7 @@ def process_transaction(
     transaction_fee = tx_gas_used_after_refund * priority_fee_per_gas
 
     # refund gas
-    sender_balance_after_refund = get_account(tx_state, sender).balance + U256(
-        gas_refund_amount
-    )
-    set_account_balance(tx_state, sender, sender_balance_after_refund)
+    create_ether(tx_state, sender, U256(gas_refund_amount))
 
     # transfer miner fees
     coinbase_balance_after_mining_fee = get_account(
