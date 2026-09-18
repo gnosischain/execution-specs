@@ -48,8 +48,8 @@ def block_hash_system_call_expectations(block_number: int) -> dict:
                 ),
             ],
         ),
-        # Gnosis creates the system account before executing system calls.
-        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
+        # System address MUST NOT be included
+        SYSTEM_ADDRESS: None,
     }
 
 
@@ -541,7 +541,7 @@ def test_bal_2935_blockhash_does_not_read_history(
                                 )
                             ],
                         ),
-                        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
+                        SYSTEM_ADDRESS: None,
                     }
                 ),
             ),

@@ -629,7 +629,7 @@ def test_bal_post_execution_calls_net_storage_at_last_index(
                         WITHDRAWAL_REQUEST_ADDRESS: (
                             BalAccountExpectation.empty()
                         ),
-                        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
+                        SYSTEM_ADDRESS: None,
                     }
                 ),
             )

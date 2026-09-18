@@ -64,7 +64,6 @@ from .requests import (
 from .state_tracker import (
     BlockState,
     TransactionState,
-    account_exists,
     clear_account_preserving_balance,
     create_ether,
     extract_block_diff,
@@ -72,7 +71,6 @@ from .state_tracker import (
     get_code,
     incorporate_tx_into_block,
     increment_nonce,
-    set_account,
     set_account_balance,
 )
 from .transactions import (
@@ -769,8 +767,13 @@ def process_unchecked_system_transaction(
 
     """
     system_tx_state = TransactionState(parent=block_env.state)
-    if not account_exists(system_tx_state, SYSTEM_ADDRESS):
-        set_account(system_tx_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
+    # Materialize SYSTEM_ADDRESS for AuRa system calls in block state only.
+    # Avoid TransactionState reads/writes so the system caller is omitted
+    # from the block access list (EIP-7928).
+    block_state = block_env.state
+    if SYSTEM_ADDRESS not in block_state.account_writes:
+        if block_state.pre_state.get_account_optional(SYSTEM_ADDRESS) is None:
+            block_state.account_writes[SYSTEM_ADDRESS] = EMPTY_ACCOUNT
 
     tx_env = vm.TransactionEnvironment(
         origin=SYSTEM_ADDRESS,

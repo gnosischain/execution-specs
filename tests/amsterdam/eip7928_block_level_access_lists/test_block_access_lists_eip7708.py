@@ -162,8 +162,10 @@ def test_transfer_logs_and_bal_balance_changes(
                         )
                     ],
                 ),
-                # Gnosis creates the system account before system calls.
-                Spec7708.SYSTEM_ADDRESS: BalAccountExpectation.empty(),
+                # System address MUST NOT be included: EIP-7708 emits
+                # Transfer logs from SYSTEM_ADDRESS, but that address is
+                # not itself a BAL account access.
+                Spec7708.SYSTEM_ADDRESS: None,
                 # The tip is a BAL-only flow: it must never produce a
                 # Transfer log, and the zero-tip second transaction must
                 # not add a second balance change.

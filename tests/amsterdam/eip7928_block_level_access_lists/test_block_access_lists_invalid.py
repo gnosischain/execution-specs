@@ -2485,7 +2485,7 @@ def test_bal_invalid_missing_request_predeploy_accesses(
                             storage_reads=queue_slots,
                             storage_changes=[],
                         ),
-                        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
+                        SYSTEM_ADDRESS: None,
                     }
                 ).modify(modifier(predeploy)),
             )
@@ -2535,7 +2535,7 @@ def test_bal_invalid_missing_pre_block_system_call_read(
                             ],
                             storage_reads=[root_slot],
                         ),
-                        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
+                        SYSTEM_ADDRESS: None,
                     }
                 ).modify(remove_storage_reads(BEACON_ROOTS_ADDRESS)),
             )
@@ -2590,7 +2590,7 @@ def test_bal_invalid_noop_system_call_write_as_change(
                             ],
                             storage_reads=[root_slot],
                         ),
-                        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
+                        SYSTEM_ADDRESS: None,
                     }
                 ).modify(
                     remove_storage_reads(BEACON_ROOTS_ADDRESS),

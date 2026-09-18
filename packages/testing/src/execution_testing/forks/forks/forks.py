@@ -1699,11 +1699,6 @@ class Amsterdam(
     #  live on mainnet.
 
     @classmethod
-    def empty_block_bal_item_count(cls) -> int:
-        """Count the Gnosis system account created by system calls."""
-        return super().empty_block_bal_item_count() + 1
-
-    @classmethod
     def engine_payload_attribute_target_gas_limit(cls) -> bool:
         """
         Starting from Amsterdam, payload attributes now include the target gas
