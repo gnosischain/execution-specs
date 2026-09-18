@@ -393,6 +393,12 @@ class T8N(Load):
                 self.fork.BlockAccessIndex(Uint(len(self.txs)) + Uint(1))
             )
 
+        if self.fork.has_process_general_purpose_requests:
+            self.fork.process_general_purpose_requests(
+                block_env=block_env,
+                block_output=block_output,
+            )
+
         # Gnosis AuRa: system call replaces Ethereum PoW coinbase rewards.
         if self.fork.has_process_block_rewards:
             self.fork.process_block_rewards(block_env)

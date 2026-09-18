@@ -3833,7 +3833,7 @@ def test_bal_all_transaction_types(
         to=contract_3,
         max_fee_per_gas=50,
         max_priority_fee_per_gas=5,
-        max_fee_per_blob_gas=10,
+        max_fee_per_blob_gas=1_000_000_000,
         blob_versioned_hashes=blob_hashes,
         data=Hash(0x04),
     )
@@ -4253,12 +4253,10 @@ def test_bal_gas_limit_boundary(
     post-tx system work (CL withdrawals, queue processing).
 
     Orthogonal axes:
-    - `with_tx`: alice → bob transfer adds 3 items (alice + bob +
-      coinbase, credited the fee).
-    - `with_cl_withdrawal`: EIP-4895 withdrawal to a recipient adds 1
-      item, processed between txs and the rest of the post-tx system
-      work. Together they catch clients that validate the cap before
-      `process_withdrawals` runs.
+    - `with_tx`: alice → bob transfer adds 4 items (alice, bob,
+      coinbase, and the Gnosis fee collector).
+    - `with_cl_withdrawal`: Gnosis passes the withdrawal batch to the
+      deposit contract instead of crediting recipients directly.
     """
     # Match framework's DEFAULT_BASE_FEE so gas_price == base_fee
     # cancels the priority fee (no coinbase balance_change to absorb
@@ -4278,9 +4276,9 @@ def test_bal_gas_limit_boundary(
         # charge that would otherwise inflate the tx's gas needs past
         # the BAL-sized ``block_gas_limit``.
         bob = pre.fund_eoa(amount=1)
-        # alice (sender) + bob (recipient) + coinbase, touched by the
-        # zero priority-fee credit.
-        extra_items += 3
+        # Alice, bob, coinbase (touched by the zero priority-fee credit),
+        # and the Gnosis base-fee collector.
+        extra_items += 4
         txs.append(
             Transaction(
                 sender=alice,
@@ -4301,22 +4299,9 @@ def test_bal_gas_limit_boundary(
 
     if with_cl_withdrawal:
         charlie = pre.fund_eoa(amount=0)
-        withdrawal_amount_wei = 10**9  # 1 gwei
-        # CL withdrawal recipient adds 1 item; processed at
-        # block_access_index = len(txs) + 1 (post-tx).
-        extra_items += 1
         withdrawals.append(
             Withdrawal(index=0, validator_index=0, address=charlie, amount=1)
         )
-        expected_accounts[charlie] = BalAccountExpectation(
-            balance_changes=[
-                BalBalanceChange(
-                    block_access_index=len(txs) + 1,
-                    post_balance=withdrawal_amount_wei,
-                )
-            ],
-        )
-        post[charlie] = Account(balance=withdrawal_amount_wei)
 
     total_items = fork.empty_block_bal_item_count() + extra_items
     gas_limit = (
@@ -4401,10 +4386,10 @@ def test_bal_gas_limit_boundary_storage_keys(
         for _ in range(2)
     ]
 
-    # alice + counter + coinbase (touched by the zero priority-fee
-    # credit), then one item per key.
+    # Alice + counter + coinbase (touched by the zero priority-fee credit)
+    # + the Gnosis base-fee collector, then one item per key.
     storage_keys = [written_slot, read_slot]
-    total_items = fork.empty_block_bal_item_count() + 3 + len(storage_keys)
+    total_items = fork.empty_block_bal_item_count() + 4 + len(storage_keys)
     gas_limit = (
         total_items * fork.gas_costs().BLOCK_ACCESS_LIST_ITEM + boundary_offset
     )

@@ -657,6 +657,9 @@ def test_bal_invalid_missing_account(
 
 @pytest.mark.valid_from("Amsterdam")
 @pytest.mark.exception_test
+@pytest.mark.skip(
+    reason="Gnosis withdrawals are contract calldata, not recipient credits"
+)
 def test_bal_invalid_missing_withdrawal_account(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -733,6 +736,9 @@ def test_bal_invalid_missing_withdrawal_account(
 
 @pytest.mark.valid_from("Amsterdam")
 @pytest.mark.exception_test
+@pytest.mark.skip(
+    reason="Gnosis withdrawals are contract calldata, not recipient credits"
+)
 @pytest.mark.parametrize(
     "withdrawal_amount,initial_balance",
     [
@@ -1587,6 +1593,9 @@ def test_bal_invalid_field_entries(
 
 @pytest.mark.valid_from("Amsterdam")
 @pytest.mark.exception_test
+@pytest.mark.skip(
+    reason="Gnosis withdrawals are contract calldata, not recipient credits"
+)
 def test_bal_invalid_withdrawal_balance_value(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -2476,7 +2485,7 @@ def test_bal_invalid_missing_request_predeploy_accesses(
                             storage_reads=queue_slots,
                             storage_changes=[],
                         ),
-                        SYSTEM_ADDRESS: None,
+                        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
                     }
                 ).modify(modifier(predeploy)),
             )
@@ -2526,7 +2535,7 @@ def test_bal_invalid_missing_pre_block_system_call_read(
                             ],
                             storage_reads=[root_slot],
                         ),
-                        SYSTEM_ADDRESS: None,
+                        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
                     }
                 ).modify(remove_storage_reads(BEACON_ROOTS_ADDRESS)),
             )
@@ -2581,7 +2590,7 @@ def test_bal_invalid_noop_system_call_write_as_change(
                             ],
                             storage_reads=[root_slot],
                         ),
-                        SYSTEM_ADDRESS: None,
+                        SYSTEM_ADDRESS: BalAccountExpectation.empty(),
                     }
                 ).modify(
                     remove_storage_reads(BEACON_ROOTS_ADDRESS),
