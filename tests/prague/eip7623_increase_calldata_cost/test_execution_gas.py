@@ -12,6 +12,7 @@ from execution_testing import (
     AuthorizationTuple,
     Bytes,
     Fork,
+    GasConsumer,
     Op,
     StateTestFiller,
     Transaction,
@@ -65,7 +66,12 @@ class TestGasConsumption:
             pytest.param(1, True, None, id="type_1"),
             pytest.param(2, True, None, id="type_2"),
             pytest.param(3, True, None, id="type_3"),
-            pytest.param(4, True, [Address(1)], id="type_4"),
+            pytest.param(
+                4,
+                True,
+                [Address(1)],
+                id="type_4",
+            ),
         ],
         indirect=["authorization_list"],
     )
@@ -132,7 +138,7 @@ class TestGasConsumptionBelowDataFloor:
         assert execution_gas > 0
 
         return pre.deploy_contract(
-            (Op.JUMPDEST * (execution_gas - 1)) + Op.STOP
+            GasConsumer(gas=execution_gas - 1, fork=fork) + Op.STOP
         )
 
     @pytest.mark.parametrize(

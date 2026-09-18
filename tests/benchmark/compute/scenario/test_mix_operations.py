@@ -19,6 +19,9 @@ from execution_testing import (
         Op.PUSH2[bytes(Op.JUMPDEST + Op.JUMPDEST)],
         Op.PUSH1[bytes(Op.JUMPDEST)] + Op.JUMPDEST,
         Op.PUSH2[bytes(Op.JUMPDEST + Op.JUMPDEST)] + Op.JUMPDEST,
+        Op.SWAPN[bytes(Op.JUMPDEST)],
+        Op.DUPN[bytes(Op.JUMPDEST)],
+        Op.EXCHANGE[bytes(Op.JUMPDEST)],
     ],
     ids=lambda x: x.hex(),
 )
@@ -76,7 +79,9 @@ def test_jumpdest_analysis(
         + Op.CREATE(value=Op.PUSH0, offset=Op.PUSH0, size=Op.MSIZE)
     )
 
-    setup = code_prepare_initcode + Op.PUSH0
+    setup = code_prepare_initcode + Op.CREATE(
+        value=Op.PUSH0, offset=Op.PUSH0, size=Op.MSIZE
+    )
 
     benchmark_test(
         code_generator=JumpLoopGenerator(

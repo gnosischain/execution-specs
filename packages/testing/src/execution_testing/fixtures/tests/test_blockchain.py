@@ -23,16 +23,19 @@ from execution_testing.exceptions import (
     EngineAPIError,
     TransactionException,
 )
-from execution_testing.forks import Amsterdam, Prague
+from execution_testing.forks import (
+    Amsterdam,
+    ConsolidationRequest,
+    DepositRequest,
+    Prague,
+    Requests,
+    WithdrawalRequest,
+)
 from execution_testing.test_types import (
     EOA,
     AuthorizationTuple,
-    ConsolidationRequest,
-    DepositRequest,
-    Requests,
     Transaction,
     Withdrawal,
-    WithdrawalRequest,
 )
 
 from ..blockchain import (
@@ -78,7 +81,7 @@ fixture_header_ones = FixtureHeader(
         pytest.param(
             True,
             FixtureTransaction.from_transaction(
-                Transaction().with_signature_and_sender()
+                Transaction(gas_limit=0x5208).with_signature_and_sender()
             ),
             {
                 "type": "0x00",
@@ -99,7 +102,10 @@ fixture_header_ones = FixtureHeader(
         pytest.param(
             True,
             FixtureTransaction.from_transaction(
-                Transaction(to=None).with_signature_and_sender()
+                Transaction(
+                    to=None,
+                    gas_limit=0x5208,
+                ).with_signature_and_sender()
             ),
             {
                 "type": "0x00",
@@ -120,7 +126,7 @@ fixture_header_ones = FixtureHeader(
         pytest.param(
             True,
             FixtureTransaction.from_transaction(
-                Transaction(ty=1).with_signature_and_sender()
+                Transaction(ty=1, gas_limit=0x5208).with_signature_and_sender()
             ),
             {
                 "type": "0x01",
@@ -143,7 +149,7 @@ fixture_header_ones = FixtureHeader(
             True,
             FixtureTransaction.from_transaction(
                 Transaction(
-                    ty=2, max_fee_per_gas=7
+                    ty=2, max_fee_per_gas=7, gas_limit=0x5208
                 ).with_signature_and_sender()
             ),
             {
@@ -172,6 +178,7 @@ fixture_header_ones = FixtureHeader(
                     max_fee_per_gas=7,
                     max_fee_per_blob_gas=1,
                     blob_versioned_hashes=[],
+                    gas_limit=0x5208,
                 ).with_signature_and_sender()
             ),
             {
@@ -208,6 +215,7 @@ fixture_header_ones = FixtureHeader(
                             signer=EOA(key=TestPrivateKey),
                         )
                     ],
+                    gas_limit=0x5208,
                 ).with_signature_and_sender()
             ),
             {
@@ -256,6 +264,7 @@ fixture_header_ones = FixtureHeader(
                     max_fee_per_gas=20,
                     max_fee_per_blob_gas=30,
                     blob_versioned_hashes=[0, 1],
+                    gas_limit=0x5208,
                 ).with_signature_and_sender()
             ),
             {
@@ -401,7 +410,9 @@ fixture_header_ones = FixtureHeader(
                 ),
                 txs=[
                     FixtureTransaction.from_transaction(
-                        Transaction().with_signature_and_sender()
+                        Transaction(
+                            gas_limit=0x5208
+                        ).with_signature_and_sender()
                     )
                 ],
             ),
@@ -475,7 +486,10 @@ fixture_header_ones = FixtureHeader(
                 ),
                 txs=[
                     FixtureTransaction.from_transaction(
-                        Transaction(to=None).with_signature_and_sender()
+                        Transaction(
+                            to=None,
+                            gas_limit=0x5208,
+                        ).with_signature_and_sender()
                     )
                 ],
             ),
@@ -615,6 +629,7 @@ fixture_header_ones = FixtureHeader(
                         max_fee_per_gas=20,
                         max_fee_per_blob_gas=30,
                         blob_versioned_hashes=[0, 1],
+                        gas_limit=0x5208,
                     ).with_signature_and_sender(),
                 ],
                 withdrawals=[
@@ -642,6 +657,7 @@ fixture_header_ones = FixtureHeader(
                 "transactions": [
                     Transaction(
                         to=0x1234,
+                        gas_limit=0x5208,
                         data=b"\x01\x00",
                         access_list=[
                             AccessList(
@@ -701,6 +717,7 @@ fixture_header_ones = FixtureHeader(
                 transactions=[
                     Transaction(
                         to=0x1234,
+                        gas_limit=0x5208,
                         data=b"\x01\x00",
                         access_list=[
                             AccessList(
@@ -767,6 +784,7 @@ fixture_header_ones = FixtureHeader(
                         "transactions": [
                             Transaction(
                                 to=0x1234,
+                                gas_limit=0x5208,
                                 data=b"\x01\x00",
                                 access_list=[
                                     AccessList(
@@ -861,6 +879,7 @@ fixture_header_ones = FixtureHeader(
                 transactions=[
                     Transaction(
                         to=0x1234,
+                        gas_limit=0x5208,
                         data=b"\x01\x00",
                         access_list=[
                             AccessList(
@@ -926,6 +945,7 @@ fixture_header_ones = FixtureHeader(
                         "transactions": [
                             Transaction(
                                 to=0x1234,
+                                gas_limit=0x5208,
                                 data=b"\x01\x00",
                                 access_list=[
                                     AccessList(
@@ -1209,6 +1229,7 @@ EngineNewPayloadParametersAdapter = TypeAdapter(EngineNewPayloadParameters)  # t
                     transactions=[
                         Transaction(
                             to=0x1234,
+                            gas_limit=0x5208,
                             data=b"\x01\x00",
                             access_list=[
                                 AccessList(
@@ -1253,6 +1274,7 @@ EngineNewPayloadParametersAdapter = TypeAdapter(EngineNewPayloadParameters)  # t
                     "transactions": [
                         Transaction(
                             to=0x1234,
+                            gas_limit=0x5208,
                             data=b"\x01\x00",
                             access_list=[
                                 AccessList(
@@ -1312,6 +1334,7 @@ EngineNewPayloadParametersAdapter = TypeAdapter(EngineNewPayloadParameters)  # t
                     transactions=[
                         Transaction(
                             to=0x1234,
+                            gas_limit=0x5208,
                             data=b"\x01\x00",
                             access_list=[
                                 AccessList(
@@ -1358,6 +1381,7 @@ EngineNewPayloadParametersAdapter = TypeAdapter(EngineNewPayloadParameters)  # t
                     "transactions": [
                         Transaction(
                             to=0x1234,
+                            gas_limit=0x5208,
                             data=b"\x01\x00",
                             access_list=[
                                 AccessList(
@@ -1419,6 +1443,7 @@ EngineNewPayloadParametersAdapter = TypeAdapter(EngineNewPayloadParameters)  # t
                     transactions=[
                         Transaction(
                             to=0x1234,
+                            gas_limit=0x5208,
                             data=b"\x01\x00",
                             access_list=[
                                 AccessList(
@@ -1484,6 +1509,7 @@ EngineNewPayloadParametersAdapter = TypeAdapter(EngineNewPayloadParameters)  # t
                     "transactions": [
                         Transaction(
                             to=0x1234,
+                            gas_limit=0x5208,
                             data=b"\x01\x00",
                             access_list=[
                                 AccessList(

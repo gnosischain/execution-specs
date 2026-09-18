@@ -328,6 +328,9 @@ class NethermindExceptionMapper(ExceptionMapper):
         TransactionException.INSUFFICIENT_MAX_FEE_PER_BLOB_GAS: (
             "InsufficientMaxFeePerBlobGas: Not enough to cover blob gas fee"
         ),
+        TransactionException.INVALID_SIGNATURE_VRS: (
+            "InvalidTxSignature: Signature is invalid."
+        ),
         TransactionException.TYPE_1_TX_PRE_FORK: (
             "InvalidTxType: Transaction type in Custom is not supported"
         ),
@@ -402,11 +405,27 @@ class NethermindExceptionMapper(ExceptionMapper):
         ),
     }
     mapping_regex = {
+        # In-range r that is not an x-coordinate on the curve leaves the
+        # transaction without a recovered sender.
+        TransactionException.INVALID_SIGNATURE_VRS: (
+            r"failed with error sender not specified"
+        ),
         TransactionException.INSUFFICIENT_ACCOUNT_FUNDS: (
             r"insufficient sender balance|"
             r"insufficient MaxFeePerGas for sender balance"
             r"|insufficient funds for gas \* price \+ value"
             r"|insufficient funds for transfer|insufficient funds for gas"
+        ),
+        TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS: (
+            r"max fee per gas less than block base fee"
+        ),
+        TransactionException.INSUFFICIENT_MAX_FEE_PER_BLOB_GAS: (
+            r"max fee per blob gas less than block blob gas fee"
+        ),
+        TransactionException.NONCE_MISMATCH_TOO_LOW: (r"nonce too low"),
+        TransactionException.NONCE_MISMATCH_TOO_HIGH: (r"nonce too high"),
+        TransactionException.INVALID_CHAINID: (
+            r"InvalidTxChainId|Signature is invalid."
         ),
         TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS: (
             r"max fee per gas less than block base fee"
@@ -436,13 +455,12 @@ class NethermindExceptionMapper(ExceptionMapper):
             r"calculated hash 0x[0-9a-f]+"
         ),
         BlockException.SYSTEM_CONTRACT_EMPTY: (
-            r"(BlockRewards|Withdrawals|Consolidations)Empty: "
-            r"Contract is not deployed\."
+            r"(Withdrawals|Consolidations|BuilderDeposits|BuilderExits)"
+            r"Empty: Contract is not deployed\."
         ),
         BlockException.SYSTEM_CONTRACT_CALL_FAILED: (
-            r"(BlockRewards|Withdrawals|Consolidations)Failed: "
-            r"Contract execution failed\.|"
-            r"execution reverted|invalid opcode: INVALID"
+            r"(Withdrawals|Consolidations|BuilderDeposits|BuilderExits)"
+            r"Failed: Contract execution failed\."
         ),
         # BAL Exceptions — specific exceptions have unique patterns, but
         # INVALID_BLOCK_ACCESS_LIST and INCORRECT_BLOCK_FORMAT intentionally

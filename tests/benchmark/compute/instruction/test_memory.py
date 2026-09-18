@@ -11,28 +11,55 @@ Supported Opcodes:
 
 import pytest
 from execution_testing import (
+    Alloc,
+    BenchmarkCodeGenerator,
     BenchmarkTestFiller,
     Bytecode,
+    Conditional,
     ExtCallGenerator,
+    Fork,
+    Hash,
     JumpLoopGenerator,
     Op,
+    Transaction,
+    WhileGas,
 )
 
 
 @pytest.mark.repricing(mem_size=1)
+# MSIZE should be O(1), but sweep mem_size so a size-dependent
+# implementation shows up as a regression. ExtCallGenerator re-expands
+# memory in every call frame, so once the expansion outweighs a frame's
+# MSIZE work (~16 KiB), loop in a single frame instead, paying one POP
+# per MSIZE but expanding only once.
 @pytest.mark.parametrize("mem_size", [0, 1, 1_000, 100_000, 1_000_000])
 def test_msize(
     benchmark_test: BenchmarkTestFiller,
+    fork: Fork,
     mem_size: int,
 ) -> None:
     """Benchmark MSIZE instruction."""
-    benchmark_test(
-        target_opcode=Op.MSIZE,
-        code_generator=ExtCallGenerator(
-            setup=Op.POP(Op.MLOAD(Op.SELFBALANCE)),
+    setup = Op.POP(Op.MLOAD(Op.SELFBALANCE))
+    expansion_gas = fork.memory_expansion_gas_calculator()(new_bytes=mem_size)
+    frame_msize_gas = fork.max_stack_height() * fork.gas_costs().BASE
+
+    code_generator: BenchmarkCodeGenerator
+    if expansion_gas <= frame_msize_gas:
+        code_generator = ExtCallGenerator(
+            setup=setup,
             attack_block=Op.MSIZE,
             contract_balance=mem_size,
-        ),
+        )
+    else:
+        code_generator = JumpLoopGenerator(
+            setup=setup,
+            attack_block=Op.POP(Op.MSIZE),
+            contract_balance=mem_size,
+        )
+
+    benchmark_test(
+        target_opcode=Op.MSIZE,
+        code_generator=code_generator,
     )
 
 
@@ -104,4 +131,76 @@ def test_mcopy(
         code_generator=JumpLoopGenerator(
             attack_block=attack_block, cleanup=mem_touch
         ),
+    )
+
+
+@pytest.mark.parametrize("mem_size", [0, 8 * 1024, 64 * 1024])
+def test_sibling_frame_memory(
+    benchmark_test: BenchmarkTestFiller,
+    pre: Alloc,
+    mem_size: int,
+) -> None:
+    """Benchmark sibling call frames that each expand their own memory."""
+    frame_code = Op.STOP if mem_size == 0 else Op.MSTORE8(mem_size - 1, 0)
+    frame_address = pre.deploy_contract(code=frame_code)
+
+    benchmark_test(
+        target_opcode=Op.CALL,
+        code_generator=JumpLoopGenerator(
+            attack_block=Op.POP(
+                Op.CALL(
+                    gas=Op.GAS,
+                    address=frame_address,
+                )
+            )
+        ),
+    )
+
+
+@pytest.mark.parametrize("depth", [1, 64, 256])
+@pytest.mark.parametrize("mem_size", [0, 8 * 1024, 64 * 1024])
+def test_nested_frame_memory(
+    benchmark_test: BenchmarkTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    depth: int,
+    mem_size: int,
+) -> None:
+    """Benchmark a deep frame stack where every frame holds live memory."""
+    leaf_address = pre.deploy_contract(
+        code=WhileGas(body=Op.POP(Op.MLOAD(Op.PUSH0)), fork=fork)
+    )
+
+    # The frame's own memory is claimed before the descent, and must not
+    # overlap memory[0:32], which carries the depth to the next frame.
+    frame_memory = (
+        Op.MSTORE8(mem_size - 1, 0xFF) if mem_size > 0 else Bytecode()
+    )
+
+    descend = Op.MSTORE(0, Op.SUB(Op.CALLDATALOAD(0), 1)) + Conditional(
+        condition=Op.CALL(
+            gas=Op.GAS,
+            address=Op.ADDRESS,
+            args_offset=0,
+            args_size=32,
+        ),
+        if_false=Op.REVERT(0, 0),
+    )
+
+    entry_address = pre.deploy_contract(
+        code=frame_memory
+        + Conditional(
+            condition=Op.ISZERO(Op.CALLDATALOAD(0)),
+            if_true=Op.POP(Op.CALL(gas=Op.GAS, address=leaf_address)),
+            if_false=descend,
+        )
+    )
+
+    benchmark_test(
+        tx=Transaction(
+            to=entry_address,
+            data=Hash(depth),
+            sender=pre.fund_eoa(),
+        ),
+        skip_gas_used_validation=True,
     )

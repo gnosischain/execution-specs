@@ -12,7 +12,7 @@ from typing import List, Mapping
 
 from execution_testing.base_types import Address
 
-from ....base_fork import BaseFork
+from ....base_fork import BaseFork, SystemCallPhase
 
 CONTRACTS_DIR = Path(__file__).parent.parent.parent / "contracts"
 DEPOSIT_CONTRACT_ADDRESS = 0xBABE2BED00000000000000000000000000000003
@@ -43,6 +43,17 @@ class EIP4895(
                 label="DEPOSIT_CONTRACT_ADDRESS",
             ),
         ] + super(EIP4895, cls).system_contracts()
+
+    @classmethod
+    def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
+        """Never call the deposit contract; deposits are read from its logs."""
+        return {
+            Address(
+                DEPOSIT_CONTRACT_ADDRESS,
+                label="DEPOSIT_CONTRACT_ADDRESS",
+            ): SystemCallPhase.NONE,
+            **super(EIP4895, cls).system_contract_call_phases(),
+        }
 
     @classmethod
     def pre_allocation_blockchain(cls) -> Mapping:

@@ -2,7 +2,7 @@
 Tests for EIP-7928 BAL cross-index tracking.
 
 Tests that state changes are correctly tracked across different block indices:
-- Index 1..N: Regular transactions
+- Index 1..N: Execution transactions
 - Index N+1: Post-execution system operations
 
 Includes tests for system contracts (withdrawal/consolidation) cross-index
@@ -14,6 +14,7 @@ from execution_testing import (
     Account,
     Address,
     Alloc,
+    BalAccountAbsentValues,
     BalAccountExpectation,
     BalBalanceChange,
     BalNonceChange,
@@ -23,25 +24,30 @@ from execution_testing import (
     BlockAccessListExpectation,
     BlockchainTestFiller,
     Bytecode,
+    ConsolidationRequest,
+    Fork,
     Op,
+    SystemCallPhase,
     Transaction,
+    Withdrawal,
+    WithdrawalRequest,
+    compute_create_address,
 )
+from execution_testing import Macros as Om
 
-from ...prague.eip7002_el_triggerable_withdrawals.spec import Spec as Spec7002
-from ...prague.eip7251_consolidations.spec import Spec as Spec7251
 from .spec import ref_spec_7928
+from .test_block_access_lists_eip4788 import (
+    BEACON_ROOTS_ADDRESS,
+    SYSTEM_ADDRESS,
+)
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_7928.git_path
 REFERENCE_SPEC_VERSION = ref_spec_7928.version
 
 pytestmark = pytest.mark.valid_from("Amsterdam")
 
-WITHDRAWAL_REQUEST_ADDRESS = Address(
-    Spec7002.WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS
-)
-CONSOLIDATION_REQUEST_ADDRESS = Address(
-    Spec7251.CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS
-)
+WITHDRAWAL_REQUEST_ADDRESS = WithdrawalRequest.system_contract_address
+CONSOLIDATION_REQUEST_ADDRESS = ConsolidationRequest.system_contract_address
 
 
 def test_bal_withdrawal_contract_cross_index(
@@ -68,7 +74,6 @@ def test_bal_withdrawal_contract_cross_index(
         to=WITHDRAWAL_REQUEST_ADDRESS,
         value=1,
         data=withdrawal_calldata,
-        gas_limit=1_000_000,
     )
 
     blockchain_test(
@@ -141,7 +146,6 @@ def test_bal_consolidation_contract_cross_index(
         to=CONSOLIDATION_REQUEST_ADDRESS,
         value=1,
         data=consolidation_calldata,
-        gas_limit=1_000_000,
     )
 
     blockchain_test(
@@ -222,11 +226,7 @@ def test_bal_noop_write_filtering(
         storage={3: 100, 4: 150},
     )
 
-    tx = Transaction(
-        sender=sender,
-        to=test_address,
-        gas_limit=100_000,
-    )
+    tx = Transaction(sender=sender, to=test_address)
 
     # Expected BAL should only show actual changes
     expected_block_access_list = BlockAccessListExpectation(
@@ -268,6 +268,97 @@ def test_bal_noop_write_filtering(
     )
 
 
+def test_bal_intra_tx_round_trip_after_prior_tx_write(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+) -> None:
+    """
+    Verify a per-tx no-op SSTORE round-trip is not recorded as a storage
+    change when an earlier tx in the same block wrote the slot.
+
+    Per EIP-7928 §Storage, a write is compared against "the storage value
+    as of immediately before the current `block_access_index` (i.e., the
+    cumulative state from all prior indices, falling back to the pre-block
+    state)", and "a no-op write MUST NOT remove `storage_changes` entries
+    from earlier indices for the same slot".
+
+    Both txs call the same contract whose runtime SSTOREs 0xff then 0x42
+    to slot 1. Tx 1 changes slot 1 from 0 to 0x42 (real change). Tx 1's
+    write becomes tx 2's baseline, so tx 2's 0x42 -> 0xff -> 0x42 nets to
+    a no-op and only tx 1 appears in `storage_changes` (with tx 1's entry
+    left intact).
+    """
+    # Runtime: write 0xff to slot 1, then write 0x42 to slot 1, STOP.
+    # The two SSTOREs hit the journal at every call, but the net effect
+    # on the slot is `pre_value -> 0x42` — a no-op when pre_value == 0x42.
+    contract_code = Bytecode(Op.SSTORE(1, 0xFF) + Op.SSTORE(1, 0x42) + Op.STOP)
+    contract = pre.deploy_contract(code=contract_code)
+
+    sender_a = pre.fund_eoa()
+    sender_b = pre.fund_eoa()
+
+    # Both txs go into the same block; tx 1 makes the real 0 -> 0x42
+    # change, tx 2 starts from 0x42 and ends at 0x42 (per-tx no-op).
+    tx_1 = Transaction(sender=sender_a, to=contract)
+    tx_2 = Transaction(sender=sender_b, to=contract)
+
+    expected_block_access_list = BlockAccessListExpectation(
+        account_expectations={
+            contract: BalAccountExpectation(
+                # Only tx 1's real change appears. Tx 2's same-value
+                # round-trip MUST be classified as a read for tx 2.
+                storage_changes=[
+                    BalStorageSlot(
+                        slot=1,
+                        slot_changes=[
+                            BalStorageChange(
+                                block_access_index=1, post_value=0x42
+                            ),
+                        ],
+                    ),
+                ],
+                # `storage_changes` is only verified as a sub-sequence
+                # at fill time, so this additional check guards against a
+                # reference regression that emits tx 2's no-op as a
+                # spurious index-2 change.
+                absent_values=BalAccountAbsentValues(
+                    storage_changes=[
+                        BalStorageSlot(
+                            slot=1,
+                            slot_changes=[
+                                BalStorageChange(
+                                    block_access_index=2, post_value=0x42
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            ),
+            sender_a: BalAccountExpectation(
+                nonce_changes=[
+                    BalNonceChange(block_access_index=1, post_nonce=1),
+                ],
+            ),
+            sender_b: BalAccountExpectation(
+                nonce_changes=[
+                    BalNonceChange(block_access_index=2, post_nonce=1),
+                ],
+            ),
+        }
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[tx_1, tx_2],
+                expected_block_access_list=expected_block_access_list,
+            ),
+        ],
+        post={contract: Account(storage={1: 0x42})},
+    )
+
+
 def test_bal_system_contract_noop_filtering(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
@@ -289,7 +380,6 @@ def test_bal_system_contract_noop_filtering(
         sender=sender,
         to=receiver,
         value=100,
-        gas_limit=21_000,
     )
 
     # withdrawal and consolidation contracts should NOT have any storage
@@ -345,7 +435,7 @@ def test_bal_withdrawal_predeploy_balance_observed_cross_tx(
     making its address one whose pre-block snapshot would otherwise mask the
     BAL overlay if consulted ahead of the BAL prefix.
     """
-    fee = 1  # Spec7002.get_fee(0) is 1 when excess == 0; one request fits.
+    fee = 1  # WithdrawalRequest.get_fee(0) with no excess; one request fits.
     withdrawal_calldata = (
         (b"\x01" + b"\x00" * 47)  # 48-byte validator pubkey
         + (b"\x00" * 8)  # 8-byte amount
@@ -369,14 +459,9 @@ def test_bal_withdrawal_predeploy_balance_observed_cross_tx(
         to=WITHDRAWAL_REQUEST_ADDRESS,
         value=fee,
         data=withdrawal_calldata,
-        gas_limit=1_000_000,
     )
 
-    tx_read_balance = Transaction(
-        sender=sender_1,
-        to=reader,
-        gas_limit=100_000,
-    )
+    tx_read_balance = Transaction(sender=sender_1, to=reader)
 
     expected_block_access_list = BlockAccessListExpectation(
         account_expectations={
@@ -432,4 +517,361 @@ def test_bal_withdrawal_predeploy_balance_observed_cross_tx(
         post={
             reader: Account(storage={0: fee}),
         },
+    )
+
+
+def _system_contracts_called(
+    fork: Fork, phase: SystemCallPhase
+) -> list[Address]:
+    """Return the fork's system contracts the block calls in `phase`."""
+    return sorted(
+        address
+        for address, called in fork.system_contract_call_phases().items()
+        if called == phase
+    )
+
+
+@pytest.mark.pre_alloc_mutable()
+def test_bal_post_execution_calls_net_storage_at_last_index(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    fork: Fork,
+) -> None:
+    """
+    Two post-execution system calls write the same account at the last
+    block access index: writes are netted over the whole index, not per
+    call. The slot holding the last caller pins the call order.
+    """
+    # The request predeploys carry this because EIP-7002 and EIP-7251
+    # require the EVM call, while EIP-2935 and EIP-4788 let a client skip
+    # the EVM and write the storage itself, so substituted code there
+    # would test a choice the client is free to make.
+    post_execution = _system_contracts_called(
+        fork, SystemCallPhase.AFTER_TRANSACTIONS
+    )
+    assert {
+        WITHDRAWAL_REQUEST_ADDRESS,
+        CONSOLIDATION_REQUEST_ADDRESS,
+    }.issubset(post_execution), (
+        "the request predeploys are no longer called after transactions"
+    )
+
+    toggle_slot = 1
+    counter_slot = 2
+    last_caller_slot = 3
+
+    # Requests are made in ascending request type, so the withdrawal
+    # contract runs first and calls the consolidation contract, whose
+    # own system call then runs the same code a second time.
+    pre[CONSOLIDATION_REQUEST_ADDRESS] = Account(
+        nonce=1,
+        code=Op.SSTORE(toggle_slot, Op.ISZERO(Op.SLOAD(toggle_slot)))
+        + Op.SSTORE(counter_slot, Op.ADD(Op.SLOAD(counter_slot), 1))
+        + Op.SSTORE(last_caller_slot, Op.CALLER)
+        + Op.POP(Op.CREATE(0, 0, 0)),
+    )
+    pre[WITHDRAWAL_REQUEST_ADDRESS] = Account(
+        code=Op.POP(Op.CALL(address=CONSOLIDATION_REQUEST_ADDRESS)),
+    )
+    created = [
+        compute_create_address(
+            address=CONSOLIDATION_REQUEST_ADDRESS, nonce=nonce
+        )
+        for nonce in (1, 2)
+    ]
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[],
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations={
+                        CONSOLIDATION_REQUEST_ADDRESS: BalAccountExpectation(
+                            storage_changes=[
+                                BalStorageSlot(
+                                    slot=counter_slot,
+                                    slot_changes=[
+                                        BalStorageChange(
+                                            block_access_index=1,
+                                            post_value=2,
+                                        )
+                                    ],
+                                ),
+                                BalStorageSlot(
+                                    slot=last_caller_slot,
+                                    slot_changes=[
+                                        BalStorageChange(
+                                            block_access_index=1,
+                                            post_value=SYSTEM_ADDRESS,
+                                        )
+                                    ],
+                                ),
+                            ],
+                            storage_reads=[toggle_slot],
+                            nonce_changes=[
+                                BalNonceChange(
+                                    block_access_index=1, post_nonce=3
+                                )
+                            ],
+                        ),
+                        **{
+                            address: BalAccountExpectation(
+                                nonce_changes=[
+                                    BalNonceChange(
+                                        block_access_index=1, post_nonce=1
+                                    )
+                                ],
+                                code_changes=[],
+                            )
+                            for address in created
+                        },
+                        WITHDRAWAL_REQUEST_ADDRESS: (
+                            BalAccountExpectation.empty()
+                        ),
+                        SYSTEM_ADDRESS: None,
+                    }
+                ),
+            )
+        ],
+        post={
+            CONSOLIDATION_REQUEST_ADDRESS: Account(
+                nonce=3,
+                storage={
+                    toggle_slot: 0,
+                    counter_slot: 2,
+                    last_caller_slot: SYSTEM_ADDRESS,
+                },
+            ),
+            **{address: Account(nonce=1, code=b"") for address in created},
+        },
+    )
+
+
+@pytest.mark.pre_alloc_mutable()
+def test_bal_tx_change_kept_when_system_call_restores_slot(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+) -> None:
+    """
+    Netting stops at the index boundary: a slot a transaction sets at
+    index 1 and the consolidation system call restores at index 2 keeps
+    both changes, although the block leaves it at its starting value.
+    """
+    caller_slot = 1
+    counter_slot = 2
+    alice = pre.fund_eoa()
+
+    # The contract records its caller and counts its calls. The system
+    # address is the caller slot's starting value, so Alice's transaction
+    # moves it and the system call puts it back; the counter reaching two
+    # is what separates that round trip from neither call running.
+    pre[CONSOLIDATION_REQUEST_ADDRESS] = Account(
+        nonce=1,
+        code=Op.SSTORE(caller_slot, Op.CALLER)
+        + Op.SSTORE(counter_slot, Op.ADD(Op.SLOAD(counter_slot), 1)),
+        storage={caller_slot: SYSTEM_ADDRESS},
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[
+                    Transaction(sender=alice, to=CONSOLIDATION_REQUEST_ADDRESS)
+                ],
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations={
+                        CONSOLIDATION_REQUEST_ADDRESS: BalAccountExpectation(
+                            storage_changes=[
+                                BalStorageSlot(
+                                    slot=caller_slot,
+                                    slot_changes=[
+                                        BalStorageChange(
+                                            block_access_index=1,
+                                            post_value=alice,
+                                        ),
+                                        BalStorageChange(
+                                            block_access_index=2,
+                                            post_value=SYSTEM_ADDRESS,
+                                        ),
+                                    ],
+                                ),
+                                BalStorageSlot(
+                                    slot=counter_slot,
+                                    slot_changes=[
+                                        BalStorageChange(
+                                            block_access_index=1,
+                                            post_value=1,
+                                        ),
+                                        BalStorageChange(
+                                            block_access_index=2,
+                                            post_value=2,
+                                        ),
+                                    ],
+                                ),
+                            ],
+                            storage_reads=[],
+                        ),
+                        alice: BalAccountExpectation(
+                            nonce_changes=[
+                                BalNonceChange(
+                                    block_access_index=1, post_nonce=1
+                                )
+                            ],
+                        ),
+                    }
+                ),
+            )
+        ],
+        post={
+            CONSOLIDATION_REQUEST_ADDRESS: Account(
+                storage={caller_slot: SYSTEM_ADDRESS, counter_slot: 2}
+            ),
+            alice: Account(nonce=1),
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "forwarded_share",
+    [
+        pytest.param("all", id="forward_all"),
+        pytest.param("half", id="forward_half"),
+    ],
+)
+@pytest.mark.pre_alloc_mutable()
+def test_bal_withdrawals_and_dequeues_net_balance_at_last_index(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    fork: Fork,
+    forwarded_share: str,
+) -> None:
+    """
+    Withdrawals and the post-execution system calls share one block
+    access index, so their balance effects net. A withdrawal credits
+    each predeploy, whose own dequeue call then forwards that balance
+    on: forwarding all of it records no change, forwarding half records
+    the kept half.
+    """
+    predeploys = _system_contracts_called(
+        fork, SystemCallPhase.AFTER_TRANSACTIONS
+    )
+    withdrawal_amount_wei = 10**9
+    sink = pre.fund_eoa(amount=1)
+
+    forwarded_value: Bytecode
+    if forwarded_share == "all":
+        forwarded_wei = withdrawal_amount_wei
+        forwarded_value = Op.SELFBALANCE
+    elif forwarded_share == "half":
+        forwarded_wei = withdrawal_amount_wei // 2
+        forwarded_value = Op.DIV(Op.SELFBALANCE, 2)
+    else:
+        raise ValueError(f"unhandled share: {forwarded_share}")
+    kept_wei = withdrawal_amount_wei - forwarded_wei
+
+    for predeploy in predeploys:
+        pre[predeploy] = Account(
+            code=Op.POP(Op.CALL(address=sink, value=forwarded_value)),
+        )
+
+    predeploy_expectation = BalAccountExpectation(
+        balance_changes=(
+            [BalBalanceChange(block_access_index=1, post_balance=kept_wei)]
+            if kept_wei
+            else []
+        ),
+        storage_changes=[],
+        storage_reads=[],
+    )
+    sink_balance = 1 + forwarded_wei * len(predeploys)
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[],
+                withdrawals=[
+                    Withdrawal(
+                        index=i,
+                        validator_index=i,
+                        address=predeploy,
+                        amount=1,
+                    )
+                    for i, predeploy in enumerate(predeploys)
+                ],
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations={
+                        **dict.fromkeys(predeploys, predeploy_expectation),
+                        sink: BalAccountExpectation(
+                            balance_changes=[
+                                BalBalanceChange(
+                                    block_access_index=1,
+                                    post_balance=sink_balance,
+                                )
+                            ],
+                        ),
+                    }
+                ),
+            )
+        ],
+        post={
+            **{
+                predeploy: Account(balance=kept_wei)
+                for predeploy in predeploys
+            },
+            sink: Account(balance=sink_balance),
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(Op.REVERT(0, 0), id="revert"),
+        pytest.param(Om.OOG, id="out_of_gas"),
+    ],
+)
+@pytest.mark.pre_alloc_mutable()
+def test_bal_pre_execution_call_failure_keeps_read_drops_write(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    fork: Fork,
+    failure: Bytecode,
+) -> None:
+    """
+    A pre-execution system call that fails still merges into the BAL.
+
+    The call is unchecked, so the block stays valid and the state it
+    rolled back leaves the slot behind as a read. Unreachable on
+    mainnet, consensus-relevant on custom or test chains.
+    """
+    assert BEACON_ROOTS_ADDRESS in _system_contracts_called(
+        fork, SystemCallPhase.BEFORE_TRANSACTIONS
+    ), "the beacon roots contract is no longer called before transactions"
+
+    reverted_slot = 1
+    # The slot it reaches for is the only evidence the code ran, since
+    # the failure throws the write itself away.
+    pre[BEACON_ROOTS_ADDRESS] = Account(
+        code=Op.SSTORE(reverted_slot, 1) + failure,
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[],
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations={
+                        BEACON_ROOTS_ADDRESS: BalAccountExpectation(
+                            storage_reads=[reverted_slot],
+                            storage_changes=[],
+                        ),
+                    }
+                ),
+            )
+        ],
+        post={BEACON_ROOTS_ADDRESS: Account(storage={})},
     )

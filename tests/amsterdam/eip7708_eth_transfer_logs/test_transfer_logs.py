@@ -7,6 +7,8 @@ Tests for the Transfer(address,address,uint256) log emitted when:
 - Nonzero-value-transferring SELFDESTRUCT to a different account
 """
 
+from typing import List
+
 import pytest
 from execution_testing import (
     EOA,
@@ -19,8 +21,10 @@ from execution_testing import (
     Bytes,
     Environment,
     Fork,
+    GasConsumer,
     Initcode,
     Op,
+    ParameterSet,
     StateTestFiller,
     Storage,
     Transaction,
@@ -52,7 +56,6 @@ def test_simple_transfer_emits_log(
         sender=sender,
         to=recipient,
         value=1,
-        gas_limit=21_000,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(sender, recipient, 1)]
         ),
@@ -81,7 +84,6 @@ def test_transfer_to_delegated_account_emits_log(
         sender=sender,
         to=recipient,
         value=1,
-        gas_limit=100_000,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(sender, recipient, 1)]
         ),
@@ -102,7 +104,6 @@ def test_transfer_to_self_no_log(
         sender=sender,
         to=sender,
         value=1,
-        gas_limit=21_000,
         expected_receipt=TransactionReceipt(logs=[]),
     )
 
@@ -122,7 +123,6 @@ def test_zero_value_transfer_no_log(
         sender=sender,
         to=recipient,
         value=0,
-        gas_limit=21_000,
         expected_receipt=TransactionReceipt(logs=[]),
     )
 
@@ -152,14 +152,10 @@ def test_contract_creation_tx(
     expected_logs = (
         [transfer_log(sender, created_address, tx_value)] if expect_log else []
     )
-    gas_limit = 100_000
-    if fork.is_eip_enabled(8037):
-        gas_limit = 500_000
     tx = Transaction(
         sender=sender,
         to=None,
         value=tx_value,
-        gas_limit=gas_limit,
         data=bytes(initcode),
         expected_receipt=TransactionReceipt(logs=expected_logs),
     )
@@ -187,7 +183,7 @@ def test_contract_creation_tx_collision(
     Test that a contract-creating transaction with an address collision
     emits no log.
 
-    Per EIP-7610, contract creation aborts when the target address already
+    Per EIP-684, contract creation aborts when the target address already
     has non-empty code or nonce. The collision check happens before any
     value transfer, so EIP-7708 emits no Transfer log.
     """
@@ -196,7 +192,6 @@ def test_contract_creation_tx_collision(
         sender=sender,
         to=None,
         value=1000,
-        gas_limit=200_000,
         data=bytes(Op.RETURN(0, 0)),
         expected_receipt=TransactionReceipt(logs=[]),
     )
@@ -237,10 +232,10 @@ def test_call_opcodes_transfer_log_behavior(
     # Build the call based on opcode type
     if call_opcode in [Op.CALL, Op.CALLCODE]:
         # These opcodes have a value parameter
-        call_code = call_opcode(gas=100_000, address=callee, value=1)
+        call_code = call_opcode(address=callee, value=1)
     else:
         # DELEGATECALL and STATICCALL don't have value parameter
-        call_code = call_opcode(gas=100_000, address=callee)
+        call_code = call_opcode(address=callee)
 
     contract = pre.deploy_contract(call_code, balance=1)
 
@@ -264,7 +259,6 @@ def test_call_opcodes_transfer_log_behavior(
         sender=sender,
         to=contract,
         value=1,
-        gas_limit=200_000,
         expected_receipt=TransactionReceipt(logs=expected_logs),
     )
 
@@ -296,7 +290,7 @@ def test_call_opcodes_insufficient_balance_no_log(
     callee = pre.deploy_contract(Op.STOP)
 
     contract_code = Op.SSTORE(
-        0, call_opcode(gas=100_000, address=callee, value=attempted_value)
+        0, call_opcode(address=callee, value=attempted_value)
     )
     contract = pre.deploy_contract(contract_code, balance=caller_balance)
 
@@ -304,7 +298,6 @@ def test_call_opcodes_insufficient_balance_no_log(
         sender=sender,
         to=contract,
         value=0,
-        gas_limit=200_000,
         expected_receipt=TransactionReceipt(logs=[]),
     )
 
@@ -330,18 +323,17 @@ def test_delegatecall_inner_call_with_value(
     recipient = pre.deploy_contract(Op.STOP)
 
     # B: code that CALLs recipient with value
-    code_b = Op.CALL(gas=50_000, address=recipient, value=1)
+    code_b = Op.CALL(address=recipient, value=1)
     contract_b = pre.deploy_contract(code_b)
 
     # A: DELEGATECALLs to B (executes B's code in A's context)
-    code_a = Op.DELEGATECALL(gas=100_000, address=contract_b)
+    code_a = Op.DELEGATECALL(address=contract_b)
     contract_a = pre.deploy_contract(code_a, balance=1)
 
     tx = Transaction(
         sender=sender,
         to=contract_a,
         value=0,
-        gas_limit=200_000,
         expected_receipt=TransactionReceipt(
             logs=[
                 # CALL from B executes in A's context, so A is the sender
@@ -398,15 +390,10 @@ def test_create_opcode_emits_log(
             transfer_log(contract, created_address, create_value)
         )
 
-    gas_limit = 200_000
-    if fork.is_eip_enabled(8037):
-        gas_limit = 1_000_000
-
     tx = Transaction(
         sender=sender,
         to=contract,
         value=1,
-        gas_limit=gas_limit,
         expected_receipt=TransactionReceipt(logs=expected_logs),
     )
 
@@ -431,9 +418,7 @@ def test_initcode_calls_with_value(
     recipient = pre.deploy_contract(Op.STOP)
 
     # Initcode: CALL recipient with value, then RETURN empty code
-    initcode = Op.CALL(gas=50_000, address=recipient, value=1) + Op.RETURN(
-        0, 0
-    )
+    initcode = Op.CALL(address=recipient, value=1) + Op.RETURN(0, 0)
     initcode_bytes = bytes(initcode)
 
     # Use Initcode helper or direct memory setup for longer initcode
@@ -473,7 +458,6 @@ def test_initcode_calls_with_value(
         sender=sender,
         to=factory,
         value=0,
-        gas_limit=300_000,
         expected_receipt=TransactionReceipt(
             logs=[
                 # CREATE transfers value to new contract
@@ -511,7 +495,6 @@ def test_create_initcode_stop_emits_log(
         sender=sender,
         to=contract,
         value=0,
-        gas_limit=500_000,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(contract, created_address, 1)]
         ),
@@ -551,7 +534,6 @@ def test_failed_create_with_value_no_log(
         sender=sender,
         to=contract,
         value=1,
-        gas_limit=500_000,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(sender, contract, 1)]
         ),
@@ -583,7 +565,6 @@ def test_create_insufficient_balance_no_log(
         sender=sender,
         to=contract,
         value=1,
-        gas_limit=500_000,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(sender, contract, 1)]
         ),
@@ -592,12 +573,17 @@ def test_create_insufficient_balance_no_log(
     state_test(env=env, pre=pre, post={}, tx=tx)
 
 
-@pytest.mark.parametrize(
-    "initcode",
-    [
+def failing_initcodes(fork: Fork) -> List[ParameterSet]:
+    """
+    Return init codes that fail, one way per case.
+
+    The out-of-gas case is sized against the fork's memory pricing, so the
+    cases cannot be built before the fork is known.
+    """
+    return [
         pytest.param(
             # OOG before return
-            Op.MSTORE(offset=0xFFFFFF, value=0) + Op.RETURN(0, 0),
+            GasConsumer.out_of_gas(fork) + Op.RETURN(0, 0),
             id="create_out_of_gas_memory_expansion",
         ),
         pytest.param(
@@ -611,8 +597,10 @@ def test_create_insufficient_balance_no_log(
             Op.RETURN(0, 1000),
             id="create_out_of_gas_code_deposit",
         ),
-    ],
-)
+    ]
+
+
+@pytest.mark.parametrize_by_fork("initcode", failing_initcodes)
 def test_create_out_of_gas_no_log(
     state_test: StateTestFiller,
     env: Environment,
@@ -682,7 +670,6 @@ def test_stack_underflow_no_log(
         sender=sender,
         to=contract,
         value=1000,
-        gas_limit=100_000,
         expected_receipt=TransactionReceipt(logs=[]),  # TX fails, no logs
     )
 
@@ -737,7 +724,6 @@ def test_create_collision_no_log(
         sender=sender,
         to=factory,
         value=0,
-        gas_limit=200_000,
         expected_receipt=TransactionReceipt(
             logs=[]
         ),  # No logs - CREATE failed
@@ -760,15 +746,10 @@ def test_selfdestruct_with_value_emits_log(
     contract_code = Op.SELFDESTRUCT(beneficiary)
     contract = pre.deploy_contract(contract_code, balance=contract_balance)
 
-    gas_limit = 100_000
-    if fork.is_eip_enabled(8037):
-        gas_limit = 500_000
-
     tx = Transaction(
         sender=sender,
         to=contract,
         value=0,
-        gas_limit=gas_limit,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(contract, beneficiary, contract_balance)]
         ),
@@ -793,15 +774,10 @@ def test_selfdestruct_to_system_address(
     contract_code = Op.SELFDESTRUCT(Spec.SYSTEM_ADDRESS)
     contract = pre.deploy_contract(contract_code, balance=1)
 
-    gas_limit = 100_000
-    if fork.is_eip_enabled(8037):
-        gas_limit = 500_000
-
     tx = Transaction(
         sender=sender,
         to=contract,
         value=0,
-        gas_limit=gas_limit,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(contract, Spec.SYSTEM_ADDRESS, 1)]
         ),
@@ -829,7 +805,7 @@ def test_zero_value_operations_no_log(
     target = pre.nonexistent_account()
 
     if op_type == "call":
-        contract_code = Op.CALL(gas=100_000, address=target, value=0)
+        contract_code = Op.CALL(address=target, value=0)
     else:
         contract_code = Op.SELFDESTRUCT(target)
 
@@ -839,7 +815,6 @@ def test_zero_value_operations_no_log(
         sender=sender,
         to=contract,
         value=0,
-        gas_limit=100_000,
         expected_receipt=TransactionReceipt(logs=[]),
     )
 
@@ -873,7 +848,7 @@ def test_call_to_self_no_log(
         Op.CALLDATASIZE
         + Op.PUSH1(20)
         + Op.JUMPI
-        + call_opcode(gas=100_000, address=Op.ADDRESS, value=1, args_size=1)
+        + call_opcode(address=Op.ADDRESS, value=1, args_size=1)
         + Op.JUMPDEST
         + Op.STOP
     )
@@ -883,21 +858,25 @@ def test_call_to_self_no_log(
         sender=sender,
         to=contract,
         value=0,
-        gas_limit=200_000,
         expected_receipt=TransactionReceipt(logs=[]),
     )
 
     state_test(env=env, pre=pre, post={}, tx=tx)
 
 
-@pytest.mark.parametrize(
-    "recipient_code,call_gas,call_value,recipient_balance,contract_balance",
-    [
-        pytest.param(Op.REVERT(0, 0), 50_000, 500, 0, 500, id="call_reverted"),
+def failing_inner_operations(fork: Fork) -> List[ParameterSet]:
+    """
+    Return inner operations that fail, one way per case.
+
+    The out-of-gas memory case is sized against the fork's memory pricing,
+    so the cases cannot be built before the fork is known.
+    """
+    return [
+        pytest.param(Op.REVERT(0, 0), Op.GAS, 500, 0, 500, id="call_reverted"),
         pytest.param(Op.JUMP(0), 100, 500, 0, 500, id="call_out_of_gas"),
         pytest.param(
-            # OOG with memory expansion - tries to access large memory offset
-            Op.MSTORE(0xFFFFFF, 0) + Op.STOP,
+            # OOG on an unpayable memory expansion
+            GasConsumer.out_of_gas(fork) + Op.STOP,
             1000,
             500,
             0,
@@ -914,13 +893,18 @@ def test_call_to_self_no_log(
         ),
         pytest.param(
             Op.STOP,
-            50_000,
+            Op.GAS,
             2000,
             0,
             0,
             id="call_insufficient_balance",
         ),
-    ],
+    ]
+
+
+@pytest.mark.parametrize_by_fork(
+    "recipient_code,call_gas,call_value,recipient_balance,contract_balance",
+    failing_inner_operations,
 )
 def test_failed_inner_operation_no_log(
     state_test: StateTestFiller,
@@ -928,7 +912,7 @@ def test_failed_inner_operation_no_log(
     pre: Alloc,
     sender: EOA,
     recipient_code: Bytecode,
-    call_gas: int,
+    call_gas: int | Op,
     call_value: int,
     recipient_balance: int,
     contract_balance: int,
@@ -948,7 +932,6 @@ def test_failed_inner_operation_no_log(
         sender=sender,
         to=contract,
         value=tx_value,
-        gas_limit=100_000,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(sender, contract, tx_value)]
         ),
@@ -991,7 +974,6 @@ def test_inner_call_succeeds_outer_reverts_no_log(
         sender=sender,
         to=contract,
         value=1,
-        gas_limit=500_000,
         expected_receipt=TransactionReceipt(logs=[]),
     )
 
@@ -1049,15 +1031,10 @@ def test_inner_create_succeeds_outer_reverts_no_log(
     )
     entry = pre.deploy_contract(entry_code)
 
-    gas_limit = 200_000
-    if fork.is_eip_enabled(8037):
-        gas_limit = 1_000_000
-
     tx = Transaction(
         sender=sender,
         to=entry,
         value=0,
-        gas_limit=gas_limit,
         expected_receipt=TransactionReceipt(logs=[]),
     )
 
@@ -1091,11 +1068,14 @@ def test_nested_calls_log_order(
     # Build the chain from innermost outward by prepending each new caller.
     # Once finished, accounts[0] is the entry contract (the tx target) and
     # accounts[-1] is the final recipient.
+    # Forward all gas (`Op.GAS`) rather than a fixed amount: under EIP-8037
+    # each frame's per-frame `SSTORE` and the deepest `NEW_ACCOUNT` charge
+    # make a fixed forward too small to reach the chain depth.
     accounts: list[Address] = [pre.nonexistent_account()]
     for _ in range(call_depth):
         contract_code = Op.SSTORE(
             0,
-            Op.CALL(gas=500_000, address=accounts[0], value=transfer_value),
+            Op.CALL(gas=Op.GAS, address=accounts[0], value=transfer_value),
         )
         accounts.insert(
             0, pre.deploy_contract(contract_code, balance=transfer_value)
@@ -1116,7 +1096,6 @@ def test_nested_calls_log_order(
         sender=sender,
         to=entry_contract,
         value=tx_value,
-        gas_limit=1_000_000,
         expected_receipt=TransactionReceipt(logs=expected_logs),
     )
 
@@ -1154,7 +1133,6 @@ def test_contract_log_and_transfer_ordering(
         sender=sender,
         to=contract,
         value=1,
-        gas_limit=200_000,
         expected_receipt=TransactionReceipt(
             logs=[
                 # 1. TX-level transfer
@@ -1175,15 +1153,22 @@ def test_contract_log_and_transfer_ordering(
     state_test(env=env, pre=pre, post=post, tx=tx)
 
 
-@pytest.mark.parametrize(
-    "reverting_code",
-    [
+def reverting_codes(fork: Fork) -> List[ParameterSet]:
+    """
+    Return codes that fail the transaction, one way per case.
+
+    The out-of-gas case is sized against the fork's memory pricing, so the
+    cases cannot be built before the fork is known.
+    """
+    return [
         pytest.param(Op.REVERT(0, 0), id="revert"),
         pytest.param(Op.INVALID, id="invalid_opcode"),
         pytest.param(Op.ADD, id="stack_underflow"),
-        pytest.param(Op.MSTORE(2**256 - 1, 0), id="out_of_gas"),
-    ],
-)
+        pytest.param(GasConsumer.out_of_gas(fork), id="out_of_gas"),
+    ]
+
+
+@pytest.mark.parametrize_by_fork("reverting_code", reverting_codes)
 def test_reverted_transaction_no_log(
     state_test: StateTestFiller,
     env: Environment,
@@ -1198,7 +1183,6 @@ def test_reverted_transaction_no_log(
         sender=sender,
         to=contract,
         value=1000,
-        gas_limit=100_000,
         expected_receipt=TransactionReceipt(logs=[]),
     )
 
@@ -1244,7 +1228,6 @@ def test_transfer_to_special_address(
         sender=sender,
         to=target,
         value=transfer_amount,
-        gas_limit=100_000,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(sender, target, transfer_amount)]
         ),
@@ -1298,7 +1281,6 @@ def test_multiple_transfers_same_block(
                     sender=sender,
                     nonce=0,
                     value=100,
-                    gas_limit=21_000,
                     expected_receipt=TransactionReceipt(
                         logs=[transfer_log(sender, recipient1, 100)]
                     ),
@@ -1308,7 +1290,6 @@ def test_multiple_transfers_same_block(
                     sender=sender,
                     nonce=1,
                     value=200,
-                    gas_limit=21_000,
                     expected_receipt=TransactionReceipt(
                         logs=[transfer_log(sender, recipient2, 200)]
                     ),
@@ -1347,10 +1328,6 @@ def test_selfdestruct_then_transfer_same_block(
     contract_code = Op.SELFDESTRUCT(beneficiary)
     contract = pre.deploy_contract(contract_code, balance=500)
 
-    gas_limit = 100_000
-    if fork.is_eip_enabled(8037):
-        gas_limit = 500_000
-
     blocks = [
         Block(
             txs=[
@@ -1359,7 +1336,6 @@ def test_selfdestruct_then_transfer_same_block(
                     sender=sender,
                     nonce=0,
                     value=0,
-                    gas_limit=gas_limit,
                     expected_receipt=TransactionReceipt(
                         logs=[transfer_log(contract, beneficiary, 500)]
                     ),
@@ -1369,7 +1345,6 @@ def test_selfdestruct_then_transfer_same_block(
                     sender=sender,
                     nonce=1,
                     value=100,
-                    gas_limit=gas_limit,
                     expected_receipt=TransactionReceipt(
                         logs=[
                             transfer_log(sender, contract, 100),
@@ -1425,7 +1400,6 @@ def test_selfdestruct_to_self_cross_tx_no_log(
                     nonce=0,
                     value=contract_balance,
                     data=bytes(initcode),
-                    gas_limit=300_000,
                     expected_receipt=TransactionReceipt(
                         logs=[
                             transfer_log(
@@ -1440,7 +1414,6 @@ def test_selfdestruct_to_self_cross_tx_no_log(
                     sender=sender,
                     nonce=1,
                     value=0,
-                    gas_limit=100_000,
                     expected_receipt=TransactionReceipt(logs=[]),
                 ),
             ],
@@ -1480,7 +1453,6 @@ def test_call_to_delegated_account_with_value(
         sender=sender,
         to=caller,
         value=0,
-        gas_limit=200_000,
         expected_receipt=TransactionReceipt(
             logs=[transfer_log(caller, delegated_eoa, 100)]
         ),
@@ -1522,7 +1494,6 @@ def test_call_with_value_to_coinbase_no_priority_fee_log(
         sender=sender,
         to=caller,
         value=0,
-        gas_limit=fork.transaction_gas_limit_cap(),
         max_fee_per_gas=max_fee_per_gas,
         max_priority_fee_per_gas=max_fee_per_gas,
         expected_receipt=TransactionReceipt(

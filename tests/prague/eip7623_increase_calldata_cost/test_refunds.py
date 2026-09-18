@@ -12,7 +12,9 @@ from execution_testing import (
     AuthorizationTuple,
     Bytecode,
     Fork,
+    GasConsumer,
     Op,
+    RecipientType,
     StateTestFiller,
     Transaction,
     TransactionReceipt,
@@ -72,6 +74,10 @@ def authorization_list(
     """
     Modify fixture from conftest to automatically read the refund_type
     information.
+
+    From EIP-2780 an existing funded authority pays `ACCOUNT_WRITE` and the
+    `AUTH_BASE` state gas before the first frame, with no `NEW_ACCOUNT` and
+    no existing-authority refund. The tuple defaults already describe that.
     """
     if RefundType.AUTHORIZATION_EXISTING_AUTHORITY not in refund_type:
         return None
@@ -90,6 +96,32 @@ def ty(refund_type: RefundType) -> int:
 
 
 @pytest.fixture
+def top_frame_execution(
+    fork: Fork, authorization_list: List[AuthorizationTuple] | None
+) -> int:
+    """Top-frame execution gas charged for authorizations (EIP-8037)."""
+    if not authorization_list or not fork.is_eip_enabled(8037):
+        return 0
+    return fork.transaction_top_frame_execution_gas(
+        recipient_type=RecipientType.CONTRACT,
+        authorizations=authorization_list,
+    )
+
+
+@pytest.fixture
+def top_frame_state(
+    fork: Fork, authorization_list: List[AuthorizationTuple] | None
+) -> int:
+    """Top-frame state gas charged for authorizations (EIP-8037)."""
+    if not authorization_list or not fork.is_eip_enabled(8037):
+        return 0
+    return fork.transaction_top_frame_state_gas(
+        recipient_type=RecipientType.CONTRACT,
+        authorizations=authorization_list,
+    )
+
+
+@pytest.fixture
 def max_refund(fork: Fork, refund_type: RefundType) -> int:
     """Return the max refund gas of the transaction."""
     gas_costs = fork.gas_costs()
@@ -98,11 +130,12 @@ def max_refund(fork: Fork, refund_type: RefundType) -> int:
         if RefundType.STORAGE_CLEAR in refund_type
         else 0
     )
-    max_refund += (
-        gas_costs.REFUND_AUTH_PER_EXISTING_ACCOUNT
-        if RefundType.AUTHORIZATION_EXISTING_AUTHORITY in refund_type
-        else 0
-    )
+    auth_existing = RefundType.AUTHORIZATION_EXISTING_AUTHORITY
+    # Pre-EIP-8037: existing-authority auth refund lands in refund_counter
+    # (EIP-3529 1/5 cap). EIP-8037 / EIP-2780 charge AUTH_BASE directly at
+    # the top frame with no existing-authority refund.
+    if not fork.is_eip_enabled(8037) and auth_existing in refund_type:
+        max_refund += gas_costs.REFUND_AUTH_PER_EXISTING_ACCOUNT
     return max_refund
 
 
@@ -150,7 +183,12 @@ def contract_creating_tx() -> bool:
 
 
 @pytest.fixture
-def intrinsic_gas_data_floor_minimum_delta() -> int:
+def intrinsic_gas_data_floor_minimum_delta(
+    fork: Fork,
+    prefix_code_gas: int,
+    top_frame_execution: int,
+    top_frame_state: int,
+) -> int:
     """
     Induce a minimum delta between the transaction intrinsic gas cost and the
     floor data gas cost.
@@ -161,10 +199,19 @@ def intrinsic_gas_data_floor_minimum_delta() -> int:
     would always be the below the execution gas cost even after the refund is
     applied.
 
-    This value has been set as of Prague and should be adjusted if the gas
-    costs change.
+    On EIP-8037 the SSTORE schedule is higher and existing-authority auths add
+    `ACCOUNT_WRITE` and `AUTH_BASE` before the first frame, so the delta must
+    cover those too.
     """
-    return 250
+    if not fork.is_eip_enabled(8037):
+        return 250
+    # Floor is searched as ~intrinsic + delta. Post-refund cost at
+    # prefix-only (+ top-frame) consumption is at most
+    # intrinsic + top_frame + prefix (when refund is zero) and still
+    # above intrinsic + (top_frame + prefix) * 4/5 when the EIP-3529
+    # cap binds. Cover the no-refund upper bound so all three
+    # refund-vs-floor cases remain reachable.
+    return top_frame_execution + top_frame_state + prefix_code_gas + 500
 
 
 @pytest.fixture
@@ -173,12 +220,15 @@ def execution_gas_used(
     tx_floor_data_cost: int,
     max_refund: int,
     prefix_code_gas: int,
+    top_frame_execution: int,
+    top_frame_state: int,
     refund_test_type: RefundTestType,
 ) -> int:
     """
     Return the amount of gas that needs to be consumed by the execution.
 
-    This gas amount is on top of the transaction intrinsic gas cost.
+    This gas amount is on top of the transaction intrinsic gas cost (and, on
+    EIP-8037, on top of the authorization top-frame charge).
 
     If this value were zero it would result in the refund being applied to the
     execution gas cost and the resulting amount being always below the floor
@@ -188,8 +238,14 @@ def execution_gas_used(
     """
 
     def execution_gas_cost(execution_gas: int) -> int:
-        total_gas_used = tx_intrinsic_gas_cost_before_execution + execution_gas
-        return total_gas_used - min(max_refund, total_gas_used // 5)
+        total_gas_used = (
+            tx_intrinsic_gas_cost_before_execution
+            + top_frame_execution
+            + top_frame_state
+            + execution_gas
+        )
+        capped_refund = min(max_refund, total_gas_used // 5)
+        return total_gas_used - capped_refund
 
     execution_gas = prefix_code_gas
 
@@ -212,8 +268,6 @@ def execution_gas_used(
         refund_test_type
         == RefundTestType.EXECUTION_GAS_MINUS_REFUND_GREATER_THAN_DATA_FLOOR
     ):
-        # Keep incrementing until we actually get gas_used > tx_floor_data_cost
-        # (adding just 1 may not be enough due to refund cap boundary effects)
         while execution_gas_cost(execution_gas) <= tx_floor_data_cost:
             execution_gas += 1
         return execution_gas
@@ -231,35 +285,35 @@ def refund(
     tx_intrinsic_gas_cost_before_execution: int,
     execution_gas_used: int,
     max_refund: int,
+    top_frame_execution: int,
+    top_frame_state: int,
 ) -> int:
     """Return the refund gas of the transaction."""
     total_gas_used = (
-        tx_intrinsic_gas_cost_before_execution + execution_gas_used
+        tx_intrinsic_gas_cost_before_execution
+        + top_frame_execution
+        + top_frame_state
+        + execution_gas_used
     )
     return min(max_refund, total_gas_used // 5)
 
 
 @pytest.fixture
 def to(
+    fork: Fork,
     pre: Alloc,
     execution_gas_used: int,
     prefix_code: Bytecode,
     prefix_code_gas: int,
     code_storage: Dict,
 ) -> Address | None:
-    """
-    Return a contract that consumes the expected execution gas.
-
-    At the moment we naively use JUMPDEST to consume the gas, which can yield
-    very big contracts.
-
-    Ideally, we can use memory expansion to consume gas.
-    """
-    extra_gas = execution_gas_used - prefix_code_gas
-    return pre.deploy_contract(
-        prefix_code + (Op.JUMPDEST * extra_gas) + Op.STOP,
-        storage=code_storage,
+    """Return a contract that consumes the expected execution gas."""
+    code = (
+        prefix_code
+        + GasConsumer(gas=execution_gas_used - prefix_code_gas, fork=fork)
+        + Op.STOP
     )
+    return pre.deploy_contract(code, storage=code_storage)
 
 
 @pytest.fixture
@@ -267,16 +321,25 @@ def tx_gas_limit(
     tx_intrinsic_gas_cost_including_floor_data_cost: int,
     tx_intrinsic_gas_cost_before_execution: int,
     execution_gas_used: int,
+    top_frame_execution: int,
+    top_frame_state: int,
 ) -> int:
     """
     Gas limit for the transaction.
 
-    The gas delta is added to the intrinsic gas cost to generate different test
-    scenarios.
+    Sized to the exact pre-refund consumption when that already clears the
+    EIP-7623 floor. When consumption sits below the floor (refund-free
+    LESS_THAN cases on EIP-8037), bump the limit up to the floor so the
+    transaction remains intrinsically valid while settlement still sees
+    the lower consumed amount.
     """
-    tx_gas_limit = tx_intrinsic_gas_cost_before_execution + execution_gas_used
-    assert tx_gas_limit >= tx_intrinsic_gas_cost_including_floor_data_cost
-    return tx_gas_limit
+    consumed = (
+        tx_intrinsic_gas_cost_before_execution
+        + top_frame_execution
+        + top_frame_state
+        + execution_gas_used
+    )
+    return max(consumed, tx_intrinsic_gas_cost_including_floor_data_cost)
 
 
 @pytest.mark.parametrize(
@@ -303,14 +366,29 @@ def test_gas_refunds_from_data_floor(
     tx_intrinsic_gas_cost_before_execution: int,
     execution_gas_used: int,
     refund: int,
+    top_frame_execution: int,
+    top_frame_state: int,
     refund_test_type: RefundTestType,
 ) -> None:
     """
     Test gas refunds deducted from the execution gas cost and not the data
     floor.
+
+    Pre-EIP-8037: existing-authority auth refunds flow through
+    `refund_counter` (EIP-3529 1/5 cap) together with storage-clear refunds.
+
+    EIP-8037 / EIP-2780: existing-authority auths pay `ACCOUNT_WRITE` and
+    `AUTH_BASE` before the first frame with no auth refund; only storage-clear
+    refunds remain in `refund_counter`. Receipt `cumulative_gas_used` is the
+    sum of intrinsic execution, top-frame execution/state, and EVM gas, minus
+    the capped storage refund, then floored by EIP-7623.
     """
     gas_used = (
-        tx_intrinsic_gas_cost_before_execution + execution_gas_used - refund
+        tx_intrinsic_gas_cost_before_execution
+        + top_frame_execution
+        + top_frame_state
+        + execution_gas_used
+        - refund
     )
     if (
         refund_test_type

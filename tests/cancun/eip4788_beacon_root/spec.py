@@ -19,7 +19,6 @@ ref_spec_4788 = ReferenceSpec(
 
 
 # Constants
-@dataclass(frozen=True)
 class Spec:
     """
     Parameters from the EIP-4788 specifications as defined at
@@ -31,7 +30,6 @@ class Spec:
     BEACON_ROOTS_DEPLOYER_ADDRESS = 0x0B799C86A49DEEB90402691F1041AA3AF2D3C875
     HISTORY_BUFFER_LENGTH = 8_191
     SYSTEM_ADDRESS = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
-    FORK_TIMESTAMP = 15_000  # ShanghaiToCancun timestamp
 
 
 @dataclass(frozen=True)

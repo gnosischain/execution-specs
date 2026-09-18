@@ -11,7 +11,9 @@ from execution_testing import (
     Alloc,
     AuthorizationTuple,
     Bytes,
+    EIPChecklist,
     Fork,
+    GasConsumer,
     Op,
     StateTestFiller,
     Transaction,
@@ -75,6 +77,7 @@ class TestGasConsumption:
             pytest.param(0, id="exact_gas"),
         ],
     )
+    @EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
     def test_full_gas_consumption(
         self,
         state_test: StateTestFiller,
@@ -130,7 +133,7 @@ class TestGasConsumptionBelowDataFloor:
         assert execution_gas > 0
 
         return pre.deploy_contract(
-            (Op.JUMPDEST * (execution_gas - 1)) + Op.STOP
+            GasConsumer(gas=execution_gas - 1, fork=fork) + Op.STOP
         )
 
     @pytest.mark.parametrize(
@@ -153,6 +156,7 @@ class TestGasConsumptionBelowDataFloor:
             pytest.param(0, id="exact_gas"),
         ],
     )
+    @EIPChecklist.GasCostChanges.Test.GasUpdatesMeasurement()
     def test_gas_consumption_below_data_floor(
         self,
         state_test: StateTestFiller,
