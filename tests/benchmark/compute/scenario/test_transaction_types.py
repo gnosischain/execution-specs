@@ -544,15 +544,6 @@ def test_auth_transaction(
     intrinsic_cost_calc = fork.transaction_intrinsic_cost_calculator()
     top_frame_calc = fork.transaction_top_frame_execution_gas
 
-    # Before EIP-2780 each authorization whose authority already exists
-    # is refunded, capped per transaction by the max refund quotient.
-    refund_per_existing_authority = (
-        fork.gas_costs().REFUND_AUTH_PER_EXISTING_ACCOUNT
-        if not empty_authority
-        and RefundTypes.AUTHORIZATION_EXISTING_AUTHORITY in fork.refund_types()
-        else 0
-    )
-
     code = Op.INVALID * fork.max_code_size()
     auth_target = (
         Address(0) if zero_delegation else pre.deploy_contract(code=code)

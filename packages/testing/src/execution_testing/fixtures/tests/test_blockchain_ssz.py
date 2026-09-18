@@ -28,11 +28,11 @@ from execution_testing.base_types.ssz import (
 from execution_testing.forks import (
     BPO1,
     Amsterdam,
-    BPO2ToAmsterdamAtTime15k,
     Cancun,
     Fork,
     London,
     Osaka,
+    OsakaToAmsterdamAtTime15k,
     Paris,
     Prague,
     Shanghai,
@@ -402,9 +402,9 @@ def test_payload_ssz_field_order(
             id="ShanghaiToCancunAtTime15k",
         ),
         pytest.param(
-            BPO2ToAmsterdamAtTime15k,
+            OsakaToAmsterdamAtTime15k,
             Amsterdam,
-            id="BPO2ToAmsterdamAtTime15k",
+            id="OsakaToAmsterdamAtTime15k",
         ),
     ],
 )
