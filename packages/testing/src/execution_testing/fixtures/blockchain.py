@@ -559,6 +559,7 @@ class FixtureExecutionPayload(ForkScopedSSZModel):
             Amsterdam: ("block_access_list", "slot_number"),
         },
     )
+
     @classmethod
     def from_fixture_header(
         cls,

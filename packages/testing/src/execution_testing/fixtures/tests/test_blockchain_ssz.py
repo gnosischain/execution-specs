@@ -491,7 +491,7 @@ def _amsterdam_header() -> FixtureHeader:
         ommers_hash=Hash(1),
         fee_recipient=Address(2),
         state_root=Hash(3),
-        transactions_trie=Hash(4),
+        transactions_root=Hash(4),
         receipts_root=Hash(5),
         logs_bloom=Bloom(6),
         difficulty=7,

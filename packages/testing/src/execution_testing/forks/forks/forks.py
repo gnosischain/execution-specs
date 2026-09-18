@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from os.path import realpath
-from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Sized, Type
 
 if TYPE_CHECKING:
@@ -37,18 +35,20 @@ from ..base_fork import (
     TransactionDataFloorCostCalculator,
     TransactionIntrinsicCostCalculator,
 )
+from ..bytecode import load_contract_bytecode
 from ..gas_costs import BASE, HIGH, LOW, MID, VERY_LOW, GasCosts
 from ..requests import SystemContractRequest
 from . import eips
+from .eips import constantinople
 from .eips.amsterdam import AmsterdamEIPs
 from .helpers import ceiling_division
 
-CONTRACTS_DIR = Path(realpath(__file__)).parent / "contracts"
 SYSTEM_ADDRESS = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
 BLOCK_REWARDS_CONTRACT_ADDRESS = 0x2000000000000000000000000000000000000001
-BLOCK_REWARDS_CONTRACT_BYTECODE = (
-    CONTRACTS_DIR / "block_reward_contract.bin"
-).read_bytes()
+BLOCK_REWARDS_CONTRACT_BYTECODE = load_contract_bytecode(
+    constantinople.__name__,
+    "block_reward_contract.bin",
+)
 
 
 # All forks must be listed here !!! in the order they were introduced !!!
@@ -1447,12 +1447,12 @@ class ConstantinopleFix(
 
     @classmethod
     def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
-        """Call the block rewards contract before the transactions."""
+        """Call the block rewards contract after the transactions."""
         return {
             Address(
                 BLOCK_REWARDS_CONTRACT_ADDRESS,
                 label="BLOCK_REWARDS_CONTRACT_ADDRESS",
-            ): SystemCallPhase.BEFORE_TRANSACTIONS,
+            ): SystemCallPhase.AFTER_TRANSACTIONS,
             **super().system_contract_call_phases(),
         }
 
