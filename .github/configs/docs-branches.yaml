@@ -18,6 +18,6 @@ default_branch: forks/amsterdam
 
 branches:
   - path: "mainnet"
-    label: "Mainnet (BPO2)"
+    label: "Mainnet (Osaka)"
   - path: "forks/amsterdam"
     label: "Amsterdam"
