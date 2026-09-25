@@ -65,6 +65,7 @@ from .state_tracker import (
     BlockState,
     TransactionState,
     account_exists,
+    create_ether,
     destroy_account,
     extract_block_diff,
     get_account,
@@ -961,18 +962,10 @@ def process_transaction(
     transaction_fee = tx_gas_used_after_refund * priority_fee_per_gas
 
     # refund gas
-    sender_balance_after_refund = get_account(tx_state, sender).balance + U256(
-        gas_refund_amount
-    )
-    set_account_balance(tx_state, sender, sender_balance_after_refund)
+    create_ether(tx_state, sender, U256(gas_refund_amount))
 
     # transfer miner fees
-    coinbase_balance_after_mining_fee = get_account(
-        tx_state, block_env.coinbase
-    ).balance + U256(transaction_fee)
-    set_account_balance(
-        tx_state, block_env.coinbase, coinbase_balance_after_mining_fee
-    )
+    create_ether(tx_state, block_env.coinbase, U256(transaction_fee))
 
     # transfer base fee to fee collector address
     base_fee = U256(tx_gas_used_after_refund * block_env.base_fee_per_gas)
@@ -1097,9 +1090,6 @@ def process_block_rewards(
     )
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
-
-    if len(out.return_data) == 0:
-        return
 
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
     for addr, amount in zip(addresses, amounts, strict=True):

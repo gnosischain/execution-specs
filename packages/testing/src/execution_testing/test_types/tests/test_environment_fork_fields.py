@@ -77,3 +77,21 @@ def test_check_fork_fields(fork: Fork, name: str) -> None:
 def test_fork_requirements_pass_the_check(fork: Fork) -> None:
     """The fields a fork requires never trip its own check."""
     Environment().set_fork_requirements(fork).check_fork_fields(fork)
+
+
+def test_fork_requirements_set_aura_difficulty() -> None:
+    """Set the fixed AuRa difficulty on pre-merge non-genesis blocks."""
+    environment = Environment(difficulty=0x20000).set_fork_requirements(
+        Istanbul
+    )
+
+    assert environment.difficulty == (1 << 128) - 2
+
+
+def test_fork_requirements_set_zero_post_merge_difficulty() -> None:
+    """Set the EIP-3675 zero difficulty from Paris onward."""
+    environment = Environment(difficulty=(1 << 128) - 2).set_fork_requirements(
+        Paris
+    )
+
+    assert environment.difficulty == 0

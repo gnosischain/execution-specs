@@ -7,18 +7,17 @@ Support validator withdrawals from the beacon chain to the EVM via a new
 https://eips.ethereum.org/EIPS/eip-4895
 """
 
-from pathlib import Path
 from typing import List, Mapping
 
 from execution_testing.base_types import Address
 
 from ....base_fork import BaseFork, SystemCallPhase
+from ....bytecode import load_contract_bytecode
 
-CONTRACTS_DIR = Path(__file__).parent.parent.parent / "contracts"
 DEPOSIT_CONTRACT_ADDRESS = 0xBABE2BED00000000000000000000000000000003
-DEPOSIT_CONTRACT_BYTECODE = (
-    CONTRACTS_DIR / "deposit_contract.bin"
-).read_bytes()
+DEPOSIT_CONTRACT_BYTECODE = load_contract_bytecode(
+    __name__, "deposit_contract.bin"
+)
 
 
 class EIP4895(
@@ -46,12 +45,12 @@ class EIP4895(
 
     @classmethod
     def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
-        """Never call the deposit contract; deposits are read from its logs."""
+        """Call the deposit contract after processing transactions."""
         return {
             Address(
                 DEPOSIT_CONTRACT_ADDRESS,
                 label="DEPOSIT_CONTRACT_ADDRESS",
-            ): SystemCallPhase.NONE,
+            ): SystemCallPhase.AFTER_TRANSACTIONS,
             **super(EIP4895, cls).system_contract_call_phases(),
         }
 

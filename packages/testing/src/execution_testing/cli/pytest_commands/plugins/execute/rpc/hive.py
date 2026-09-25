@@ -134,7 +134,7 @@ def build_genesis_header(
     genesis_fork = session_fork.fork_at(
         block_number=block_number, timestamp=timestamp
     )
-    env = Environment().set_fork_requirements(genesis_fork)
+    env = Environment(number=block_number).set_fork_requirements(genesis_fork)
     assert env.withdrawals is None or len(env.withdrawals) == 0, (
         "withdrawals must be empty at genesis"
     )
@@ -155,6 +155,7 @@ def build_genesis_header(
     )
     state_root = pre_alloc.state_root()
     genesis = FixtureHeader(
+        fork=genesis_fork,
         parent_hash=0,
         ommers_hash=EmptyOmmersRoot,
         fee_recipient=0,
