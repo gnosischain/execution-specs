@@ -265,9 +265,11 @@ class EIP6110(BaseFork):
 
     @classmethod
     def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
-        """Never call the deposit contract; deposits are read from its logs."""
+        """Call the deposit contract for withdrawals after transactions."""
         return {
-            DepositRequest.system_contract_address: SystemCallPhase.NONE,
+            DepositRequest.system_contract_address: (
+                SystemCallPhase.AFTER_TRANSACTIONS
+            ),
             **super(EIP6110, cls).system_contract_call_phases(),
         }
 

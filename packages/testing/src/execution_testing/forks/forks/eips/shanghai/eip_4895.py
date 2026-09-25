@@ -45,12 +45,12 @@ class EIP4895(
 
     @classmethod
     def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
-        """Never call the deposit contract; deposits are read from its logs."""
+        """Call the deposit contract after processing transactions."""
         return {
             Address(
                 DEPOSIT_CONTRACT_ADDRESS,
                 label="DEPOSIT_CONTRACT_ADDRESS",
-            ): SystemCallPhase.NONE,
+            ): SystemCallPhase.AFTER_TRANSACTIONS,
             **super(EIP4895, cls).system_contract_call_phases(),
         }
 
