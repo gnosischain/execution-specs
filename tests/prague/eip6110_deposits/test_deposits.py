@@ -9,17 +9,27 @@ from typing import List
 
 import pytest
 from execution_testing import (
+    Account,
     Alloc,
     Block,
     BlockchainTestFiller,
     BlockException,
+    DepositRequest,
     Environment,
+    Fork,
+    Hash,
+    Header,
     Macros,
     Op,
+    Requests,
+    SystemContractInteractionContract,
+    SystemContractInteractionTransaction,
+    Transaction,
+    While,
 )
 
-from .helpers import DepositContract, DepositRequest, DepositTransaction
-from .spec import ref_spec_6110
+from .helpers import deposit_contract_execution_gas
+from .spec import Spec, ref_spec_6110
 
 REFERENCE_SPEC_GIT_PATH = ref_spec_6110.git_path
 REFERENCE_SPEC_VERSION = ref_spec_6110.version
@@ -32,7 +42,7 @@ pytestmark = pytest.mark.valid_from("Prague")
     [
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -48,7 +58,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -58,14 +68,13 @@ pytestmark = pytest.mark.valid_from("Prague")
                             index=0x0,
                         )
                     ],
-                    sender_balance=120_000_001_000_000_000 * 10**9,
                 ),
             ],
             id="single_deposit_from_eoa_huge_amount",
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -88,7 +97,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -105,7 +114,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -116,7 +125,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                         )
                     ],
                 ),
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -132,7 +141,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -155,7 +164,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -178,61 +187,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
-                    requests=[
-                        DepositRequest(
-                            pubkey=0x01,
-                            withdrawal_credentials=0x02,
-                            amount=32_000_000_000,
-                            signature=0x03,
-                            index=0x0,
-                            # From traces, gas used by the first tx is 82,498
-                            # so reduce by one here
-                            gas_limit=0x14241,
-                            valid=False,
-                        ),
-                        DepositRequest(
-                            pubkey=0x01,
-                            withdrawal_credentials=0x02,
-                            amount=32_000_000_000,
-                            signature=0x03,
-                            index=0x0,
-                        ),
-                    ],
-                ),
-            ],
-            id="multiple_deposit_from_same_eoa_first_oog",
-        ),
-        pytest.param(
-            [
-                DepositTransaction(
-                    requests=[
-                        DepositRequest(
-                            pubkey=0x01,
-                            withdrawal_credentials=0x02,
-                            amount=32_000_000_000,
-                            signature=0x03,
-                            index=0x0,
-                        ),
-                        DepositRequest(
-                            pubkey=0x01,
-                            withdrawal_credentials=0x02,
-                            amount=32_000_000_000,
-                            signature=0x03,
-                            index=0x0,
-                            # From traces, gas used by the second tx is 68,283,
-                            # reduce by one here
-                            gas_limit=0x10ABA,
-                            valid=False,
-                        ),
-                    ],
-                ),
-            ],
-            id="multiple_deposit_from_same_eoa_last_oog",
-        ),
-        pytest.param(
-            [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -250,7 +205,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -269,7 +224,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -285,7 +240,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -308,7 +263,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -319,7 +274,6 @@ pytestmark = pytest.mark.valid_from("Prague")
                         )
                         for i in range(400)
                     ],
-                    tx_gas_limit=16_777_216,
                 ),
             ],
             id="many_deposits_from_contract",
@@ -327,7 +281,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -351,7 +305,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -375,59 +329,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
-                    requests=[
-                        DepositRequest(
-                            pubkey=0x01,
-                            withdrawal_credentials=0x02,
-                            amount=1_000_000_000,
-                            signature=0x03,
-                            gas_limit=100,
-                            index=0x0,
-                            valid=False,
-                        ),
-                        DepositRequest(
-                            pubkey=0x01,
-                            withdrawal_credentials=0x02,
-                            amount=1_000_000_000,
-                            signature=0x03,
-                            gas_limit=1_000_000,
-                            index=0x0,
-                        ),
-                    ],
-                ),
-            ],
-            id="multiple_deposits_from_contract_first_oog",
-        ),
-        pytest.param(
-            [
-                DepositContract(
-                    requests=[
-                        DepositRequest(
-                            pubkey=0x01,
-                            withdrawal_credentials=0x02,
-                            amount=1_000_000_000,
-                            signature=0x03,
-                            index=0x0,
-                            gas_limit=1_000_000,
-                        ),
-                        DepositRequest(
-                            pubkey=0x01,
-                            withdrawal_credentials=0x02,
-                            amount=1_000_000_000,
-                            signature=0x03,
-                            index=0x0,
-                            gas_limit=100,
-                            valid=False,
-                        ),
-                    ],
-                ),
-            ],
-            id="multiple_deposits_from_contract_last_oog",
-        ),
-        pytest.param(
-            [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -453,7 +355,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -479,27 +381,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
-                    requests=[
-                        DepositRequest(
-                            pubkey=0x01,
-                            withdrawal_credentials=0x02,
-                            amount=1_000_000_000,
-                            signature=0x03,
-                            index=i,
-                            valid=False,
-                        )
-                        for i in range(400)
-                    ],
-                    tx_gas_limit=10_000_000,
-                ),
-            ],
-            id="many_deposits_from_contract_oog",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -510,7 +392,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                         ),
                     ],
                 ),
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -526,7 +408,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -537,7 +419,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                         )
                     ],
                 ),
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -553,7 +435,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -564,7 +446,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                         )
                     ],
                 ),
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -575,7 +457,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                         ),
                     ],
                 ),
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -591,7 +473,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -602,7 +484,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                         ),
                     ],
                 ),
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -613,7 +495,7 @@ pytestmark = pytest.mark.valid_from("Prague")
                         )
                     ],
                 ),
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -629,7 +511,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -647,7 +529,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -665,7 +547,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -683,7 +565,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -698,9 +580,13 @@ pytestmark = pytest.mark.valid_from("Prague")
             ],
             id="single_deposit_from_contract_call_depth_3",
         ),
+        # High depth under Amsterdam: EIP-7825 caps execution gas at 2^24, and
+        # EIP-8037/8038 raise intrinsic + cold-account costs, so a 271-frame
+        # 63/64 chain OOGs before the deposit lands (270 still passes). Use
+        # 256 so the case stays deep with margin past EIP-8037.
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -710,15 +596,14 @@ pytestmark = pytest.mark.valid_from("Prague")
                             index=0x0,
                         )
                     ],
-                    call_depth=271,
-                    tx_gas_limit=16_777_216,
+                    call_depth=256,
                 ),
             ],
             id="single_deposit_from_contract_call_depth_high",
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -734,7 +619,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -752,7 +637,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -770,7 +655,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -788,7 +673,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -806,7 +691,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -830,7 +715,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -851,7 +736,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -869,7 +754,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -888,7 +773,7 @@ pytestmark = pytest.mark.valid_from("Prague")
         ),
         pytest.param(
             [
-                DepositContract(
+                SystemContractInteractionContract(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -921,12 +806,7 @@ def test_deposit(
     blocks: List[Block],
 ) -> None:
     """Test making a deposit to the beacon chain deposit contract."""
-    total_gas_limit = sum(tx.gas_limit for tx in blocks[0].txs)
-    env = Environment()
-    if total_gas_limit > env.gas_limit:
-        env = Environment(gas_limit=total_gas_limit)
     blockchain_test(
-        genesis_environment=env,
         pre=pre,
         post={},
         blocks=blocks,
@@ -952,7 +832,7 @@ def test_deposit(
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -970,7 +850,7 @@ def test_deposit(
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -996,7 +876,7 @@ def test_deposit(
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -1022,7 +902,7 @@ def test_deposit(
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -1048,7 +928,7 @@ def test_deposit(
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -1074,7 +954,7 @@ def test_deposit(
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -1100,7 +980,7 @@ def test_deposit(
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -1140,7 +1020,7 @@ def test_deposit(
         ),
         pytest.param(
             [
-                DepositTransaction(
+                SystemContractInteractionTransaction(
                     requests=[
                         DepositRequest(
                             pubkey=0x01,
@@ -1187,4 +1067,124 @@ def test_deposit_negative(
         pre=pre,
         post={},
         blocks=blocks,
+    )
+
+
+@pytest.mark.parametrize(
+    "deposit_count",
+    [
+        pytest.param(
+            Spec.MAX_DEPOSIT_REQUESTS_PER_PAYLOAD + 1,
+            id="over_consensus_layer_payload_maximum",
+        ),
+    ],
+)
+@pytest.mark.slow()
+def test_deposit_high_count(
+    blockchain_test: BlockchainTestFiller,
+    pre: Alloc,
+    fork: Fork,
+    deposit_count: int,
+) -> None:
+    """
+    Test a single block carrying more deposits than a consensus layer payload
+    is allowed to contain, since EIP-6110 leaves the execution layer request
+    list unbounded.
+
+    The deposits are driven by a relay contract that loops over one deposit
+    call, so they only differ in the index the deposit contract assigns them.
+    """
+    deposit = DepositRequest(
+        pubkey=0x01,
+        withdrawal_credentials=0x02,
+        amount=Spec.MIN_DEPOSIT_AMOUNT,
+        signature=0x03,
+        index=0x0,
+    )
+    sender = pre.fund_eoa()
+
+    relay_setup_code = Op.CALLDATACOPY(
+        0, 32, len(deposit.calldata)
+    ) + Op.CALLDATALOAD(0)
+    relay_loop_code = While(
+        body=Op.POP(
+            Op.CALL(
+                address=deposit.system_contract_address,
+                value=deposit.value,
+                args_offset=0,
+                args_size=len(deposit.calldata),
+                value_transfer=True,
+                address_warm=True,
+            )
+        ),
+        condition=Op.PUSH1(1) + Op.SWAP1 + Op.SUB + Op.DUP1,
+    )
+
+    deposit_relay_code = relay_setup_code + relay_loop_code
+    deposit_relay_iteration_gas = relay_loop_code.gas_cost(fork)
+
+    relay_contract = pre.deploy_contract(
+        code=deposit_relay_code,
+        balance=deposit.value * deposit_count,
+    )
+
+    intrinsic_gas_calculator = fork.transaction_intrinsic_cost_calculator()
+    # The deposit contract's Merkle branch loop runs once per trailing zero
+    # bit of the new deposit count, so no deposit iterates it more often than
+    # the count's bit length. Budgeting that depth for every deposit, rather
+    # than the single iteration they average, leaves room for the storage
+    # slots each transaction writes for the first time.
+    gas_per_deposit = (
+        deposit_relay_iteration_gas
+        + deposit_contract_execution_gas(
+            fork, branch_updates=deposit_count.bit_length()
+        )
+    )
+
+    deposits_per_transaction = deposit_count
+    gas_limit_cap = fork.transaction_gas_limit_cap()
+    if gas_limit_cap is not None:
+        deposits_per_transaction = (
+            gas_limit_cap
+            - intrinsic_gas_calculator(
+                calldata=Hash(deposit_count) + deposit.calldata
+            )
+            - relay_setup_code.gas_cost(fork)
+        ) // gas_per_deposit
+
+    txs: List[Transaction] = []
+    for start in range(0, deposit_count, deposits_per_transaction):
+        count = min(deposits_per_transaction, deposit_count - start)
+        data = Hash(count) + deposit.calldata
+        txs.append(
+            Transaction(
+                sender=sender,
+                to=relay_contract,
+                data=data,
+                gas_limit=intrinsic_gas_calculator(calldata=data)
+                + (count * gas_per_deposit),
+            )
+        )
+
+    blockchain_test(
+        genesis_environment=Environment(
+            gas_limit=sum(int(tx.gas_limit) for tx in txs)
+        ),
+        pre=pre,
+        post={relay_contract: Account(balance=0)},
+        blocks=[
+            Block(
+                txs=txs,
+                header_verify=Header(
+                    requests_hash=Requests(
+                        *[
+                            deposit.copy(index=index)
+                            for index in range(deposit_count)
+                        ]
+                    ),
+                ),
+                # Constrain fixture size.
+                include_receipts_in_output=False,
+            )
+        ],
     )

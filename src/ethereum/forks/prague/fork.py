@@ -20,7 +20,7 @@ Gnosis diff
 """
 
 from dataclasses import dataclass
-from typing import Final, List, Optional, Tuple
+from typing import Final, List, Optional, Tuple, final
 
 from eth_abi import decode, encode
 from ethereum_rlp import rlp
@@ -37,13 +37,8 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 from ethereum.merkle_patricia_trie import root, trie_set
-from ethereum.state import (
-    EMPTY_ACCOUNT,
-    EMPTY_CODE_HASH,
-    Address,
-    State,
-    apply_changes_to_state,
-)
+from ethereum.state import EMPTY_ACCOUNT, EMPTY_CODE_HASH, Address
+from ethereum.state_mpt import State, apply_changes_to_state
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt, Withdrawal, encode_receipt
@@ -55,8 +50,8 @@ from .exceptions import (
     InsufficientMaxFeePerGasError,
     InvalidBlobVersionedHashError,
     NoBlobDataError,
-    PriorityFeeGreaterThanMaxFeeError,
     TransactionTypeContractCreationError,
+    WrongChainIdError,
 )
 from .fork_types import Authorization, VersionedHash
 from .requests import (
@@ -81,10 +76,11 @@ from .state_tracker import (
 )
 from .transactions import (
     BlobTransaction,
-    FeeMarketTransaction,
+    FeeMarketCapableTransaction,
     LegacyTransaction,
     SetCodeTransaction,
     Transaction,
+    chain_id,
     decode_transaction,
     encode_transaction,
     get_transaction_hash,
@@ -123,6 +119,7 @@ BEACON_ROOTS_ADDRESS = hex_to_address(
     "0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02"
 )
 SYSTEM_TRANSACTION_GAS = Uint(30000000)
+BLOCK_REWARD_SYSTEM_TRANSACTION_GAS = Uint(2**64 - 1)
 MAX_BLOB_GAS_PER_BLOCK: Final[U64] = U64(262144)
 VERSIONED_HASH_VERSION_KZG = b"\x01"
 BLOB_FEE_COLLECTOR = hex_to_address(
@@ -139,6 +136,7 @@ HISTORY_STORAGE_ADDRESS = hex_to_address(
 )
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -195,7 +193,6 @@ def get_last_256_block_hashes(chain: BlockChain) -> List[Hash32]:
 
     """
     recent_blocks = chain.blocks[-255:]
-    # TODO: This function has not been tested rigorously
     if len(recent_blocks) == 0:
         return []
 
@@ -263,9 +260,7 @@ def state_transition(chain: BlockChain, block: Block) -> None:
         withdrawals=block.withdrawals,
     )
     block_diff = extract_block_diff(block_state)
-    block_state_root, _ = chain.state.compute_state_root_and_trie_changes(
-        block_diff.account_changes, block_diff.storage_changes
-    )
+    block_state_root = chain.state.compute_state_root(block_diff)
     transactions_root = root(block_output.transactions_trie)
     receipt_root = root(block_output.receipts_trie)
     block_logs_bloom = logs_bloom(block_output.block_logs)
@@ -462,8 +457,6 @@ def check_transaction(
         If the sender's balance is not enough to pay for the transaction.
     InvalidSenderError :
         If the transaction is from an address that does not exist anymore.
-    PriorityFeeGreaterThanMaxFeeError :
-        If the priority fee is greater than the maximum fee per gas.
     InsufficientMaxFeePerGasError :
         If the maximum fee per gas is insufficient for the transaction.
     InsufficientMaxFeePerBlobGasError :
@@ -493,16 +486,17 @@ def check_transaction(
     if tx_blob_gas_used > blob_gas_available:
         raise BlobGasLimitExceededError("blob gas limit exceeded")
 
-    sender_address = recover_sender(block_env.chain_id, tx)
+    tx_chain_id = chain_id(tx)
+    if tx_chain_id is not None and tx_chain_id != block_env.chain_id:
+        raise WrongChainIdError(
+            expected=block_env.chain_id,
+            actual=tx_chain_id,
+        )
+
+    sender_address = recover_sender(tx)
     sender_account = get_account(tx_state, sender_address)
 
-    if isinstance(
-        tx, (FeeMarketTransaction, BlobTransaction, SetCodeTransaction)
-    ):
-        if tx.max_fee_per_gas < tx.max_priority_fee_per_gas:
-            raise PriorityFeeGreaterThanMaxFeeError(
-                "priority fee greater than max fee"
-            )
+    if isinstance(tx, FeeMarketCapableTransaction):
         if tx.max_fee_per_gas < block_env.base_fee_per_gas:
             raise InsufficientMaxFeePerGasError(
                 tx.max_fee_per_gas, block_env.base_fee_per_gas
@@ -671,6 +665,7 @@ def process_unchecked_system_transaction(
     block_env: vm.BlockEnvironment,
     target_address: Address,
     data: Bytes,
+    gas: Uint = SYSTEM_TRANSACTION_GAS,
 ) -> MessageCallOutput:
     """
     Process a system transaction without checking if the contract contains
@@ -684,6 +679,8 @@ def process_unchecked_system_transaction(
         Address of the contract to call.
     data :
         Data to pass to the contract.
+    gas :
+        Gas available to the system call.
 
     Returns
     -------
@@ -692,6 +689,8 @@ def process_unchecked_system_transaction(
 
     """
     system_tx_state = TransactionState(parent=block_env.state)
+    if not account_exists(system_tx_state, SYSTEM_ADDRESS):
+        set_account(system_tx_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
     system_contract_code = get_code(
         system_tx_state,
         get_account(system_tx_state, target_address).code_hash,
@@ -699,8 +698,8 @@ def process_unchecked_system_transaction(
 
     tx_env = vm.TransactionEnvironment(
         origin=SYSTEM_ADDRESS,
-        gas_price=block_env.base_fee_per_gas,
-        gas=SYSTEM_TRANSACTION_GAS,
+        gas_price=Uint(0),
+        gas=gas,
         access_list_addresses=set(),
         access_list_storage_keys=set(),
         state=system_tx_state,
@@ -715,7 +714,7 @@ def process_unchecked_system_transaction(
         tx_env=tx_env,
         caller=SYSTEM_ADDRESS,
         target=target_address,
-        gas=SYSTEM_TRANSACTION_GAS,
+        gas=gas,
         value=U256(0),
         data=data,
         code=system_contract_code,
@@ -769,8 +768,6 @@ def apply_body(
     """
     block_output = vm.BlockOutput()
 
-    process_block_rewards(block_env)
-
     process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BEACON_ROOTS_ADDRESS,
@@ -786,12 +783,14 @@ def apply_body(
     for i, tx in enumerate(map(decode_transaction, transactions)):
         process_transaction(block_env, block_output, tx, Uint(i))
 
-    process_withdrawals(block_env, block_output, withdrawals)
-
     process_general_purpose_requests(
         block_env=block_env,
         block_output=block_output,
     )
+
+    process_block_rewards(block_env)
+
+    process_withdrawals(block_env, block_output, withdrawals)
 
     return block_output
 
@@ -879,7 +878,7 @@ def process_transaction(
         encode_transaction(tx),
     )
 
-    intrinsic_gas, calldata_floor_gas_cost = validate_transaction(tx)
+    intrinsic = validate_transaction(tx)
 
     (
         sender,
@@ -902,7 +901,7 @@ def process_transaction(
 
     effective_gas_fee = tx.gas * effective_gas_price
 
-    gas = tx.gas - intrinsic_gas
+    gas = tx.gas - intrinsic.regular
     increment_nonce(tx_state, sender)
 
     sender_balance_after_gas_fee = (
@@ -951,7 +950,7 @@ def process_transaction(
     # Transactions with less execution_gas_used than the floor pay at the
     # floor cost.
     tx_gas_used_after_refund = max(
-        tx_gas_used_after_refund, calldata_floor_gas_cost
+        tx_gas_used_after_refund, intrinsic.calldata_floor
     )
 
     tx_gas_left = tx.gas - tx_gas_used_after_refund
@@ -1033,13 +1032,6 @@ def process_withdrawals(
     Spec: https://github.com/gnosischain/specs/blob/master/execution/withdrawals.md
     """
     wd_state = TransactionState(parent=block_env.state)
-    deposit_contract = get_account(wd_state, DEPOSIT_CONTRACT_ADDRESS)
-    if deposit_contract.code_hash == EMPTY_CODE_HASH:
-        return
-
-    if not account_exists(wd_state, SYSTEM_ADDRESS):
-        set_account(wd_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
-
     amounts = []
     addresses = []
     for i, wd in enumerate(withdrawals):
@@ -1050,6 +1042,10 @@ def process_withdrawals(
         )
         amounts.append(int(wd.amount))
         addresses.append(wd.address)
+
+    deposit_contract = get_account(wd_state, DEPOSIT_CONTRACT_ADDRESS)
+    if deposit_contract.code_hash == EMPTY_CODE_HASH:
+        return
 
     payload = encode(
         ["uint256", "uint64[]", "address[]"],
@@ -1093,13 +1089,11 @@ def process_block_rewards(
     if account.code_hash == EMPTY_CODE_HASH:
         return
 
-    if not account_exists(reward_state, SYSTEM_ADDRESS):
-        set_account(reward_state, SYSTEM_ADDRESS, EMPTY_ACCOUNT)
-
     out = process_unchecked_system_transaction(
         block_env=block_env,
         target_address=BLOCK_REWARDS_CONTRACT_ADDRESS,
         data=data,
+        gas=BLOCK_REWARD_SYSTEM_TRANSACTION_GAS,
     )
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")

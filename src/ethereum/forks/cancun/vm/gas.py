@@ -12,7 +12,7 @@ EVM gas constants and calculators.
 """
 
 from dataclasses import dataclass
-from typing import Final, List, Tuple
+from typing import Final, List, Tuple, final
 
 from ethereum_types.numeric import U64, U256, Uint, ulen
 
@@ -48,8 +48,8 @@ class GasCosts:
     COLD_STORAGE_WRITE: Final[Uint] = Uint(5000)
 
     # Call
-    CALL_VALUE: Final[Uint] = Uint(9000)
     CALL_STIPEND: Final[Uint] = Uint(2300)
+    CALL_VALUE: Final[Uint] = Uint(9000)
     NEW_ACCOUNT: Final[Uint] = Uint(25000)
 
     # Contract Creation
@@ -145,6 +145,7 @@ class GasCosts:
     OPCODE_PREVRANDAO: Final[Uint] = BASE
     OPCODE_RETURNDATASIZE: Final[Uint] = BASE
     OPCODE_CHAINID: Final[Uint] = BASE
+    OPCODE_SELFBALANCE: Final[Uint] = FAST_STEP
     OPCODE_BASEFEE: Final[Uint] = BASE
     OPCODE_BLOBBASEFEE: Final[Uint] = BASE
     OPCODE_BLOBHASH: Final[Uint] = Uint(3)
@@ -152,6 +153,8 @@ class GasCosts:
     OPCODE_PUSH0: Final[Uint] = BASE
     OPCODE_DUP: Final[Uint] = VERY_LOW
     OPCODE_SWAP: Final[Uint] = VERY_LOW
+    OPCODE_TLOAD: Final[Uint] = WARM_ACCESS
+    OPCODE_TSTORE: Final[Uint] = WARM_ACCESS
 
     # Dynamic Opcodes
     OPCODE_RETURNDATACOPY_BASE: Final[Uint] = VERY_LOW
@@ -167,7 +170,7 @@ class GasCosts:
     OPCODE_EXP_BASE: Final[Uint] = Uint(10)
     OPCODE_EXP_PER_BYTE: Final[Uint] = Uint(50)
     OPCODE_KECCAK256_BASE: Final[Uint] = Uint(30)
-    OPCODE_KECCACK256_PER_WORD: Final[Uint] = Uint(6)
+    OPCODE_KECCAK256_PER_WORD: Final[Uint] = Uint(6)
     OPCODE_LOG_BASE: Final[Uint] = Uint(375)
     OPCODE_LOG_DATA_PER_BYTE: Final[Uint] = Uint(8)
     OPCODE_LOG_TOPIC: Final[Uint] = Uint(375)
@@ -175,6 +178,7 @@ class GasCosts:
     OPCODE_SELFDESTRUCT_NEW_ACCOUNT: Final[Uint] = Uint(25000)
 
 
+@final
 @dataclass
 class ExtendMemory:
     """
@@ -190,6 +194,7 @@ class ExtendMemory:
     expand_by: Uint
 
 
+@final
 @dataclass
 class MessageCallGas:
     """
