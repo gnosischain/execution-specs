@@ -104,7 +104,7 @@ System transactions are special EVM calls made by `SYSTEM_ADDRESS` that bypass n
 > Pre-merge block rewards replace Ethereum's PoW coinbase reward with a system call to `BLOCK_REWARDS_CONTRACT_ADDRESS`.
 > London's `FEE_COLLECTOR_ADDRESS` is `0x1559000000000000000000000000000000000000` (same as all post-merge forks).
 
-### Post-merge forks (Paris → Osaka)
+### Post-merge forks (Paris → Amsterdam)
 
 | Feature | Paris | Shanghai | Cancun | Prague | Osaka |
 |---|---|---|---|---|---|
@@ -136,11 +136,12 @@ Prague and Cancun also override `MAX_BLOB_GAS_PER_BLOCK = U64(262144)`.
 
 ## Block rewards (`process_block_rewards`)
 
-Called at the start of every block before user transactions. Calls `BLOCK_REWARDS_CONTRACT_ADDRESS` with selector `f91c2898` (`reward(address[],uint16[])`). Decodes the return as `(address[], uint256[])` and increases each address's balance by the corresponding amount.
+Called after user transactions when closing every block. Calls `BLOCK_REWARDS_CONTRACT_ADDRESS` with selector `f91c2898` (`reward(address[],uint16[])`). Decodes the return as `(address[], uint256[])` and increases each address's balance by the corresponding amount.
 
 If no contract is deployed at `BLOCK_REWARDS_CONTRACT_ADDRESS`, the call is silently skipped (allows tests with minimal pre-state).
 
-Implementation: `fork.py:process_block_rewards` in ConstantinopleFix through Osaka.
+Implementation: `fork.py:process_block_rewards` in ConstantinopleFix through Amsterdam, matching
+[posdao-post-merge.md](https://github.com/gnosischain/specs/blob/master/execution/posdao-post-merge.md).
 
 ## Withdrawals (`process_withdrawals`)
 
@@ -148,7 +149,7 @@ Called after all user transactions. Calls `DEPOSIT_CONTRACT_ADDRESS` with select
 
 The deposit contract is pre-allocated from Shanghai onwards. If no contract is deployed at `DEPOSIT_CONTRACT_ADDRESS`, the call is skipped and the block remains valid.
 
-Implementation: `fork.py:process_withdrawals` in Shanghai through Osaka.
+Implementation: `fork.py:process_withdrawals` in Shanghai through Amsterdam.
 
 ## Base fee collection
 

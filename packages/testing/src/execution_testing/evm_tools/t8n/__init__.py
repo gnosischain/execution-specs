@@ -393,7 +393,10 @@ class T8N(Load):
                 self.fork.BlockAccessIndex(Uint(len(self.txs)) + Uint(1))
             )
 
-        if not self.fork.proof_of_stake and self.state_reward != -1:
+        # Gnosis AuRa: system call replaces Ethereum PoW coinbase rewards.
+        if self.fork.has_process_block_rewards:
+            self.fork.process_block_rewards(block_env)
+        elif not self.fork.proof_of_stake and self.state_reward != -1:
             # ``-1`` is the sentinel for "skip block rewards entirely"
             # (testing-side ``TransitionToolData.__post_init__`` sets
             # this for genesis blocks; the CLI wrapper resolves a
