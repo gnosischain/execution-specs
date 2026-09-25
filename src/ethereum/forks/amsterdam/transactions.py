@@ -56,7 +56,7 @@ class IntrinsicGasCost:
     """
 
 
-BLOB_COUNT_LIMIT = 6
+BLOB_COUNT_LIMIT = 2
 """
 Maximum number of blobs a single transaction may carry.
 """

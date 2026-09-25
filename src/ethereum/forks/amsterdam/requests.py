@@ -47,7 +47,7 @@ from .utils.hexadecimal import hex_to_address
 from .vm import BlockOutput
 
 DEPOSIT_CONTRACT_ADDRESS = hex_to_address(
-    "0xBABE2BED00000000000000000000000000000003"
+    "0xbabe2bed00000000000000000000000000000003"
 )
 """
 Mainnet address of the beacon chain deposit contract. Scanning block

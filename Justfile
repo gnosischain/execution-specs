@@ -16,7 +16,7 @@ xdist_workers := env("PYTEST_XDIST_AUTO_NUM_WORKERS", "6")
 # `-n auto` mode, does not warn on non-numeric values such as "auto".
 export PYTEST_XDIST_AUTO_NUM_WORKERS := ""
 evm_bin := env("EVM_BIN", "evm")
-latest_fork := "Osaka"
+latest_fork := "Amsterdam"
 
 # Use the faster sys.monitoring coverage core (default on 3.14, opt-in below).
 export COVERAGE_CORE := "sysmon"
@@ -155,6 +155,7 @@ fill *args: (_tmp-logs "fill")
         --basetemp="{{ output_dir }}/fill/tmp" \
         --log-to "{{ output_dir }}/fill/logs" \
         --clean \
+        --from ConstantinopleFix \
         --until "{{ latest_fork }}" \
         --durations=50 \
         "$@" \
@@ -519,15 +520,10 @@ docs *args:
 docs-fast *args:
     FAST_DOCS=True uv run mkdocs build --strict -d "{{ output_dir }}/docs/site" "$@"
 
-# Serve site documentation locally with mkdocs (live reload)
+# Validate docs/CHANGELOG.md entries
 [group('docs')]
-docs-serve *args:
-    uv run mkdocs serve "$@"
-
-# Serve site documentation locally with mkdocs (skip test case reference)
-[group('docs')]
-docs-serve-fast *args:
-    FAST_DOCS=True uv run mkdocs serve "$@"
+changelog:
+    uv run validate_changelog
 
 # Lint markdown files (markdownlint)
 [group('docs')]

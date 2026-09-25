@@ -1441,6 +1441,11 @@ class ConstantinopleFix(
     """Constantinople Fix fork — first active Gnosis mainnet fork."""
 
     @classmethod
+    def empty_block_bal_item_count(cls) -> int:
+        """Count the Gnosis block-reward system call target."""
+        return super().empty_block_bal_item_count() + 1
+
+    @classmethod
     def system_contracts(cls) -> List[Address]:
         """Block rewards contract is present from ConstantinopleFix onwards."""
         return [
@@ -1689,7 +1694,7 @@ class BPO5(
 
 class Amsterdam(
     AmsterdamEIPs,
-    BPO2,
+    Osaka,
     deployed=False,
 ):
     """Amsterdam fork."""

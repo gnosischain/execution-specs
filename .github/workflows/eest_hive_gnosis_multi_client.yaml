@@ -6,7 +6,7 @@ on:
       fork:
         description: "Fork passed to --fork"
         required: true
-        default: "Osaka"
+        default: "Amsterdam"
       test_dir:
         description: "Optional test directory under tests/ (e.g. osaka). Leave empty to fill all tests."
         required: false

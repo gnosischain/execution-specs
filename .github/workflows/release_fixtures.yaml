@@ -141,7 +141,7 @@ jobs:
     name: fill (${{ matrix.label || matrix.feature }})
     needs: setup
     if: needs.setup.outputs.run == 'true'
-    runs-on: [self-hosted-ghr, size-gigachungus-x64]
+    runs-on: self-hosted
     timeout-minutes: 1440
     strategy:
       # A release must be complete, so abort on the first failed range; a

@@ -657,6 +657,9 @@ def test_bal_invalid_missing_account(
 
 @pytest.mark.valid_from("Amsterdam")
 @pytest.mark.exception_test
+@pytest.mark.skip(
+    reason="Gnosis withdrawals are contract calldata, not recipient credits"
+)
 def test_bal_invalid_missing_withdrawal_account(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,
@@ -733,6 +736,9 @@ def test_bal_invalid_missing_withdrawal_account(
 
 @pytest.mark.valid_from("Amsterdam")
 @pytest.mark.exception_test
+@pytest.mark.skip(
+    reason="Gnosis withdrawals are contract calldata, not recipient credits"
+)
 @pytest.mark.parametrize(
     "withdrawal_amount,initial_balance",
     [
@@ -1587,6 +1593,9 @@ def test_bal_invalid_field_entries(
 
 @pytest.mark.valid_from("Amsterdam")
 @pytest.mark.exception_test
+@pytest.mark.skip(
+    reason="Gnosis withdrawals are contract calldata, not recipient credits"
+)
 def test_bal_invalid_withdrawal_balance_value(
     blockchain_test: BlockchainTestFiller,
     pre: Alloc,

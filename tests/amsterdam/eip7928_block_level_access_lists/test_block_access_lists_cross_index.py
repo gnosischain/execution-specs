@@ -748,44 +748,34 @@ def test_bal_withdrawals_and_dequeues_net_balance_at_last_index(
     forwarded_share: str,
 ) -> None:
     """
-    Withdrawals and the post-execution system calls share one block
-    access index, so their balance effects net. A withdrawal credits
-    each predeploy, whose own dequeue call then forwards that balance
-    on: forwarding all of it records no change, forwarding half records
-    the kept half.
+    Gnosis withdrawals and post-execution system calls share one block
+    access index, but withdrawals are calldata for the deposit contract;
+    they do not directly credit their listed recipient. Consequently the
+    custom predeploys have no balance to forward.
     """
     predeploys = _system_contracts_called(
         fork, SystemCallPhase.AFTER_TRANSACTIONS
     )
-    withdrawal_amount_wei = 10**9
     sink = pre.fund_eoa(amount=1)
 
     forwarded_value: Bytecode
     if forwarded_share == "all":
-        forwarded_wei = withdrawal_amount_wei
         forwarded_value = Op.SELFBALANCE
     elif forwarded_share == "half":
-        forwarded_wei = withdrawal_amount_wei // 2
         forwarded_value = Op.DIV(Op.SELFBALANCE, 2)
     else:
         raise ValueError(f"unhandled share: {forwarded_share}")
-    kept_wei = withdrawal_amount_wei - forwarded_wei
-
     for predeploy in predeploys:
         pre[predeploy] = Account(
             code=Op.POP(Op.CALL(address=sink, value=forwarded_value)),
         )
 
     predeploy_expectation = BalAccountExpectation(
-        balance_changes=(
-            [BalBalanceChange(block_access_index=1, post_balance=kept_wei)]
-            if kept_wei
-            else []
-        ),
+        balance_changes=[],
         storage_changes=[],
         storage_reads=[],
     )
-    sink_balance = 1 + forwarded_wei * len(predeploys)
+    sink_balance = 1
 
     blockchain_test(
         pre=pre,
@@ -805,22 +795,14 @@ def test_bal_withdrawals_and_dequeues_net_balance_at_last_index(
                     account_expectations={
                         **dict.fromkeys(predeploys, predeploy_expectation),
                         sink: BalAccountExpectation(
-                            balance_changes=[
-                                BalBalanceChange(
-                                    block_access_index=1,
-                                    post_balance=sink_balance,
-                                )
-                            ],
+                            balance_changes=[],
                         ),
                     }
                 ),
             )
         ],
         post={
-            **{
-                predeploy: Account(balance=kept_wei)
-                for predeploy in predeploys
-            },
+            **{predeploy: Account(balance=0) for predeploy in predeploys},
             sink: Account(balance=sink_balance),
         },
     )

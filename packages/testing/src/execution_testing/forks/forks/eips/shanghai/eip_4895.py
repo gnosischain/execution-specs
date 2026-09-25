@@ -34,6 +34,11 @@ class EIP4895(
         return True
 
     @classmethod
+    def empty_block_bal_item_count(cls) -> int:
+        """Count the Gnosis withdrawal system call target."""
+        return super(EIP4895, cls).empty_block_bal_item_count() + 1
+
+    @classmethod
     def system_contracts(cls) -> List[Address]:
         """Deposit contract is present from Shanghai onwards."""
         return [
@@ -45,12 +50,12 @@ class EIP4895(
 
     @classmethod
     def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
-        """Never call the deposit contract; deposits are read from its logs."""
+        """Call the Gnosis deposit contract after the transactions."""
         return {
             Address(
                 DEPOSIT_CONTRACT_ADDRESS,
                 label="DEPOSIT_CONTRACT_ADDRESS",
-            ): SystemCallPhase.NONE,
+            ): SystemCallPhase.AFTER_TRANSACTIONS,
             **super(EIP4895, cls).system_contract_call_phases(),
         }
 

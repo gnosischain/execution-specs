@@ -145,8 +145,6 @@ def test_fee_getter(
             storage_reads=[
                 request_class.excess_slot,
                 request_class.count_slot,
-                request_class.queue_head_slot,
-                request_class.queue_tail_slot,
             ],
             storage_changes=[],
         )

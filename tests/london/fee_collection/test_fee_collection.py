@@ -42,8 +42,9 @@ def test_base_fee_sent_to_fee_collector(
     Test that the base fee is sent to FEE_COLLECTOR_ADDRESS rather than
     burned.
 
-    A simple ETH transfer uses 21000 gas, so with base_fee_per_gas = 1 gwei,
-    the fee collector should receive exactly 21000 * 1 gwei = 21000 gwei.
+    The fee collector receives the base fee for the gas the transaction
+    actually uses. This is 21000 gas before Amsterdam and the fork-specific
+    EIP-2780 intrinsic cost from Amsterdam onward.
     """
     gas_limit = 21000
     sender = pre.fund_eoa(amount=10**18)
@@ -63,7 +64,8 @@ def test_base_fee_sent_to_fee_collector(
         parent_gas_used=0,
         parent_gas_limit=env.gas_limit,
     )
-    expected_fee = gas_limit * base_fee_per_gas
+    expected_gas_used = fork.transaction_intrinsic_cost_calculator()()
+    expected_fee = expected_gas_used * base_fee_per_gas
 
     blockchain_test(
         pre=pre,
@@ -107,7 +109,8 @@ def test_fee_collector_accumulates_across_txs(
         parent_gas_used=0,
         parent_gas_limit=env.gas_limit,
     )
-    expected_fee = gas_limit * base_fee_per_gas * len(txs)
+    expected_gas_used = fork.transaction_intrinsic_cost_calculator()()
+    expected_fee = expected_gas_used * base_fee_per_gas * len(txs)
 
     blockchain_test(
         pre=pre,
