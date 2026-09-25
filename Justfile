@@ -218,6 +218,7 @@ fill-pypy *args: (_tmp-logs "fill-pypy")
 json-loader *args: (_tmp "json-loader")
     uv run fill \
         -m "eels_base_coverage and primary_format" \
+        --from ConstantinopleFix \
         --until "{{ latest_fork }}" \
         -n {{ xdist_workers }} --dist=loadgroup \
         --skip-index \

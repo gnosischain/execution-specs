@@ -132,7 +132,15 @@ def add_block_to_chain(
             "validate_proof_of_work",
             autospec=True,
         ) as mocked_pow_validator:
-            load.fork.state_transition(chain, block)
+            if load.fork.is_aura:
+                with patch.object(
+                    fork_module,
+                    "calculate_block_difficulty",
+                    return_value=Uint((1 << 128) - 2),
+                ):
+                    load.fork.state_transition(chain, block)
+            else:
+                load.fork.state_transition(chain, block)
             mocked_pow_validator.assert_has_calls(
                 [call(block.header)],
                 any_order=False,

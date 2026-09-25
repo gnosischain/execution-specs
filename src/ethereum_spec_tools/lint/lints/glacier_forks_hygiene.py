@@ -27,6 +27,14 @@ EXCEPTIONAL_DIFFS = [
     # graffiti near the fork block.
     ("dao_fork", ".fork", "apply_fork"),
     ("dao_fork", ".fork", "validate_header"),
+    # Gnosis skips the glacier forks, so its active pre-merge forks use AuRa
+    # header fields while the inactive glacier forks retain Ethereum PoW.
+    ("muir_glacier", ".blocks", "Header.mix_digest"),
+    ("muir_glacier", ".blocks", "Header.nonce"),
+    ("muir_glacier", ".fork", "validate_proof_of_work"),
+    ("arrow_glacier", ".blocks", "Header.mix_digest"),
+    ("arrow_glacier", ".blocks", "Header.nonce"),
+    ("arrow_glacier", ".fork", "validate_proof_of_work"),
     # There are some differences between london and arrow_glacier
     # in terms of how the fork block is handled.
     ("arrow_glacier", ".fork", "calculate_base_fee_per_gas"),
