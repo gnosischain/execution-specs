@@ -818,9 +818,6 @@ def process_block_rewards(
     if out.error:
         raise InvalidBlock(f"Block rewards system call failed: {out.error}")
 
-    if len(out.return_data) == 0:
-        return
-
     addresses, amounts = decode(["address[]", "uint256[]"], out.return_data)
     for addr, amount in zip(addresses, amounts, strict=True):
         address = hex_to_address(addr)

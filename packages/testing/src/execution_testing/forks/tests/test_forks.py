@@ -56,7 +56,6 @@ from ..helpers import (
     transition_fork_from_to,
     transition_fork_to,
 )
-from ..requests import FeeSystemContractRequest
 from ..transition_base_fork import TransitionBaseClass, transition_fork
 
 FIRST_DEPLOYED = Frontier
@@ -423,11 +422,10 @@ def test_system_contract_call_phases(fork: Fork) -> None:
     phases = fork.system_contract_call_phases()
     assert set(phases) == set(fork.system_contracts())
     for request_class in fork.system_contract_request_types():
-        if issubclass(request_class, FeeSystemContractRequest):
-            assert (
-                phases[request_class.system_contract_address]
-                is SystemCallPhase.AFTER_TRANSACTIONS
-            )
+        assert (
+            phases[request_class.system_contract_address]
+            is SystemCallPhase.AFTER_TRANSACTIONS
+        )
 
 
 def test_tx_types() -> None:  # noqa: D103

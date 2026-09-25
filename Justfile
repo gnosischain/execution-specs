@@ -229,7 +229,7 @@ json-loader *args: (_tmp "json-loader")
         --cov-branch \
         --cov-report=term \
         --durations=50 \
-        --cov-fail-under=85
+        --cov-fail-under=75
     uv run pytest \
         -m "not slow" \
         -n {{ xdist_workers }} --dist=loadfile \

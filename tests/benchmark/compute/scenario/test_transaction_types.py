@@ -19,7 +19,6 @@ from execution_testing import (
     Hash,
     Op,
     RecipientType,
-    RefundTypes,
     Transaction,
     compute_create_address,
 )
@@ -653,21 +652,7 @@ def test_auth_transaction(
         # frame (rolling back every delegation) and fails the post
         # check.
         tx_gas = auth_tx_gas(auths_in_this_tx)
-        if (
-            RefundTypes.AUTHORIZATION_EXISTING_AUTHORITY in fork.refund_types()
-            and not empty_authority
-        ):
-            authorization_refund = (
-                auths_in_this_tx
-                * fork.gas_costs().REFUND_AUTH_PER_EXISTING_ACCOUNT
-            )
-            authorization_refund = min(
-                authorization_refund,
-                tx_gas // fork.max_refund_quotient(),
-            )
-        else:
-            authorization_refund = 0
-        expected_gas_usage += tx_gas - authorization_refund
+        expected_gas_usage += tx_gas
 
         receiver = pre.fund_eoa(0 if empty_account else 1)
 
