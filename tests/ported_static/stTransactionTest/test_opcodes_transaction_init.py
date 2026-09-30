@@ -393,7 +393,14 @@ CASES: dict[Opcodes, Case] = {
     Op.COINBASE: Case(Op.COINBASE, _address_word(COINBASE)),
     Op.NUMBER: Case(Op.NUMBER, BLOCK_NUMBER),
     Op.TIMESTAMP: Case(Op.TIMESTAMP, BLOCK_TIMESTAMP),
-    Op.PREVRANDAO: Case(Op.PREVRANDAO, PREV_RANDAO),
+    Op.PREVRANDAO: Case(
+        Op.PREVRANDAO,
+        lambda c: (
+            PREV_RANDAO
+            if c.fork.header_prev_randao_required()
+            else (1 << 128) - 2
+        ),
+    ),
     Op.BASEFEE: Case(Op.BASEFEE, BASE_FEE_PER_GAS),
     Op.GASLIMIT: Case(Op.GASLIMIT, lambda c: int(c.env.gas_limit)),
     Op.SLOTNUM: Case(Op.SLOTNUM, SLOT_NUMBER),

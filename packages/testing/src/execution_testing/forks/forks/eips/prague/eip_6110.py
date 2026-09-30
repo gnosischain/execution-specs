@@ -9,7 +9,6 @@ https://eips.ethereum.org/EIPS/eip-6110
 
 from functools import cached_property
 from hashlib import sha256
-from pathlib import Path
 from typing import ClassVar, List, Mapping, Self, Type
 
 from execution_testing.base_types import (
@@ -22,12 +21,10 @@ from execution_testing.base_types import (
 
 from ....base_fork import BaseFork, SystemCallPhase
 from ....requests import SystemContractRequest
-
-CONTRACTS_DIR = Path(__file__).parent.parent.parent / "contracts"
-DEPOSIT_CONTRACT_ADDRESS = 0xBABE2BED00000000000000000000000000000003
-DEPOSIT_CONTRACT_BYTECODE = (
-    CONTRACTS_DIR / "deposit_contract.bin"
-).read_bytes()
+from ..shanghai.eip_4895 import (
+    DEPOSIT_CONTRACT_ADDRESS,
+    DEPOSIT_CONTRACT_BYTECODE,
+)
 
 
 def _sha256(*args: bytes) -> bytes:
@@ -268,9 +265,11 @@ class EIP6110(BaseFork):
 
     @classmethod
     def system_contract_call_phases(cls) -> Mapping[Address, SystemCallPhase]:
-        """Never call the deposit contract; deposits are read from its logs."""
+        """Call the deposit contract for withdrawals after transactions."""
         return {
-            DepositRequest.system_contract_address: SystemCallPhase.NONE,
+            DepositRequest.system_contract_address: (
+                SystemCallPhase.AFTER_TRANSACTIONS
+            ),
             **super(EIP6110, cls).system_contract_call_phases(),
         }
 
