@@ -12,7 +12,7 @@ Entry point for the Ethereum specification.
 """
 
 from dataclasses import dataclass
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, final
 
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes32
@@ -28,12 +28,8 @@ from ethereum.exceptions import (
     NonceMismatchError,
 )
 from ethereum.merkle_patricia_trie import root, trie_set
-from ethereum.state import (
-    EMPTY_CODE_HASH,
-    Address,
-    State,
-    apply_changes_to_state,
-)
+from ethereum.state import EMPTY_CODE_HASH, Address
+from ethereum.state_mpt import State, apply_changes_to_state
 
 from . import vm
 from .blocks import Block, Header, Log, Receipt
@@ -64,6 +60,7 @@ MINIMUM_DIFFICULTY = Uint(131072)
 MAX_OMMER_DEPTH = Uint(6)
 
 
+@final
 @dataclass
 class BlockChain:
     """
@@ -120,7 +117,6 @@ def get_last_256_block_hashes(chain: BlockChain) -> List[Hash32]:
 
     """
     recent_blocks = chain.blocks[-255:]
-    # TODO: This function has not been tested rigorously
     if len(recent_blocks) == 0:
         return []
 
@@ -184,11 +180,7 @@ def state_transition(chain: BlockChain, block: Block) -> None:
         ommers=block.ommers,
     )
     block_diff = extract_block_diff(block_state)
-    block_state_root, _ = chain.state.compute_state_root_and_trie_changes(
-        block_diff.account_changes,
-        block_diff.storage_changes,
-        block_diff.storage_clears,
-    )
+    block_state_root = chain.state.compute_state_root(block_diff)
     transactions_root = root(block_output.transactions_trie)
     receipt_root = root(block_output.receipts_trie)
     block_logs_bloom = logs_bloom(block_output.block_logs)
@@ -696,12 +688,8 @@ def process_transaction(
 
     block_state = block_env.state
     block_diff = extract_block_diff(block_state)
-    intermediate_state_root, _ = (
-        block_state.pre_state.compute_state_root_and_trie_changes(
-            block_diff.account_changes,
-            block_diff.storage_changes,
-            block_diff.storage_clears,
-        )
+    intermediate_state_root = block_state.pre_state.compute_state_root(
+        block_diff
     )
 
     receipt = make_receipt(

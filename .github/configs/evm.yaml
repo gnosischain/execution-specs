@@ -1,13 +1,25 @@
+benchmark:
+  impl: geth
+  repo: gnosischain/go-ethereum
+  ref: release-1.17.5-gc
+  evm-bin: evm
+  xdist: auto
 eels:
   impl: eels
   repo: null
   ref: null
-static:
+  evm-bin: null
+  xdist: auto
+evmone:
   impl: evmone
   repo: ethereum/evmone
   ref: master
-  targets: ["evmone-t8n"]
-benchmark:
-  impl: geth
-  repo: gnosischain/go-ethereum
-  ref: release-1.17.4-gc
+  evm-bin: evmone
+  xdist: auto
+  targets: ["evmone-cli"]
+besu:
+  impl: besu
+  repo: hyperledger/besu
+  ref: main
+  evm-bin: evmtool
+  xdist: 0

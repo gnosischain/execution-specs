@@ -18,8 +18,18 @@ from execution_testing.cli.pytest_commands.plugins.shared.fixture_output import 
     format_fork_subdir,
 )
 
-# EVM binary for fill tests; defaults to geth evm
-BENCHMARK_EVM_T8N = os.environ.get("EVM_BIN", "evm")
+# EVM binary for fill tests. Unset (or empty) -> the in-repo EELS t8n
+# (fill's default when --evm-bin is omitted). Set EVM_BIN to fill
+# against a specific binary, e.g. geth's `evm`.
+BENCHMARK_EVM_T8N = os.environ.get("EVM_BIN") or None
+
+
+def _evm_bin_args() -> List[str]:
+    """Return `--evm-bin` args, or none to use fill's EELS default."""
+    if BENCHMARK_EVM_T8N is None:
+        return []
+    return [f"--evm-bin={BENCHMARK_EVM_T8N}"]
+
 
 test_module_dummy = textwrap.dedent(
     """\
@@ -27,7 +37,6 @@ test_module_dummy = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
-    @pytest.mark.benchmark
     def test_dummy_benchmark_test(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
@@ -42,7 +51,6 @@ test_module_without_fixture = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
-    @pytest.mark.benchmark
     def test_dummy_no_benchmark_test(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
@@ -57,7 +65,6 @@ test_module_with_repricing = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
-    @pytest.mark.benchmark
     @pytest.mark.repricing
     def test_benchmark_with_repricing(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
@@ -80,14 +87,12 @@ test_module_without_benchmark_test_fixture = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
-    @pytest.mark.benchmark
     def test_with_gas_benchmark_value(state_test, gas_benchmark_value: int) -> None:
         # This test intentionally uses state_test instead of benchmark_test
         # to verify that --fixed-opcode-count filters it out
         state_test(pre={}, post={}, tx=None)
 
     @pytest.mark.valid_at("Prague")
-    @pytest.mark.benchmark
     def test_with_benchmark_test(benchmark_test: BenchmarkTestFiller) -> None:
         benchmark_test(
             target_opcode=Op.JUMPDEST,
@@ -102,7 +107,6 @@ test_module_with_repricing_kwargs = textwrap.dedent(
     from execution_testing import BenchmarkTestFiller, JumpLoopGenerator, Op
 
     @pytest.mark.valid_at("Prague")
-    @pytest.mark.benchmark
     @pytest.mark.repricing(opcode=Op.ADD)
     @pytest.mark.parametrize("opcode", [Op.ADD, Op.SUB, Op.MUL])
     def test_parametrized_with_repricing_kwargs(
@@ -115,7 +119,6 @@ test_module_with_repricing_kwargs = textwrap.dedent(
         )
 
     @pytest.mark.valid_at("Prague")
-    @pytest.mark.benchmark
     @pytest.mark.repricing
     @pytest.mark.parametrize("opcode", [Op.ADD, Op.SUB])
     def test_parametrized_with_repricing_no_kwargs(
@@ -243,7 +246,7 @@ def test_benchmark_gas_values_split_into_subdirs(
         "--gas-benchmark-values",
         "1,2",
         "-m",
-        "blockchain_test and not derived_test",
+        "blockchain_test and primary_format",
         "--no-html",
         "--skip-index",
         f"--output={output_dir}",
@@ -324,11 +327,11 @@ def test_fixed_opcode_count_split_into_subdirs(
         "Prague",
         "--fixed-opcode-count=1,2",
         "-m",
-        "blockchain_test and not derived_test",
+        "blockchain_test and primary_format",
         "--no-html",
         "--skip-index",
         f"--output={output_dir}",
-        f"--evm-bin={BENCHMARK_EVM_T8N}",
+        *_evm_bin_args(),
         "tests/benchmark/dummy_test_module/",
         "-q",
     )
@@ -944,7 +947,7 @@ def test_fixed_opcode_count_config_file_parametrized(
         "--fork",
         "Prague",
         "tests/benchmark/dummy_test_module/",
-        f"--evm-bin={BENCHMARK_EVM_T8N}",
+        *_evm_bin_args(),
         "--fixed-opcode-count",
         "-v",
     )
@@ -1076,7 +1079,7 @@ def test_fixed_opcode_count_per_parameter_patterns(
         "--fork",
         "Prague",
         "tests/benchmark/dummy_test_module/",
-        f"--evm-bin={BENCHMARK_EVM_T8N}",
+        *_evm_bin_args(),
         "--fixed-opcode-count",
         "-v",
     )
@@ -1116,7 +1119,7 @@ def test_cli_mode_ignores_per_parameter_patterns(
         "Prague",
         "--fixed-opcode-count=1,5",
         "tests/benchmark/dummy_test_module/",
-        f"--evm-bin={BENCHMARK_EVM_T8N}",
+        *_evm_bin_args(),
         "-v",
     )
 

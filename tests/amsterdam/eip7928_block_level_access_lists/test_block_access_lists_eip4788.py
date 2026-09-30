@@ -113,7 +113,6 @@ def build_beacon_root_setup_block(
 def test_bal_4788_simple(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
 ) -> None:
     """
     Ensure BAL captures beacon root storage writes during pre-execution
@@ -132,19 +131,9 @@ def test_bal_4788_simple(
 
     transfer_value = 10
 
-    tx1 = Transaction(
-        sender=alice,
-        to=charlie,
-        value=transfer_value,
-        gas_limit=fork.transaction_gas_limit_cap(),
-    )
+    tx1 = Transaction(sender=alice, to=charlie, value=transfer_value)
 
-    tx2 = Transaction(
-        sender=bob,
-        to=charlie,
-        value=transfer_value,
-        gas_limit=fork.transaction_gas_limit_cap(),
-    )
+    tx2 = Transaction(sender=bob, to=charlie, value=transfer_value)
 
     # Build BAL expectations starting with system call
     account_expectations = beacon_root_system_call_expectations(
@@ -243,7 +232,6 @@ def test_bal_4788_empty_block(
 def test_bal_4788_query(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
     timestamp: int,
     beacon_root: Hash,
     query_timestamp: int,
@@ -295,7 +283,6 @@ def test_bal_4788_query(
         to=query_contract,
         data=Hash(query_timestamp),
         value=value,
-        gas_limit=fork.transaction_gas_limit_cap(),
     )
 
     # Build BAL expectations for block 2
@@ -406,7 +393,6 @@ def test_bal_4788_query(
 def test_bal_4788_invalid_calldata_size(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
     calldata_size: int,
     value: int,
 ) -> None:
@@ -451,7 +437,6 @@ def test_bal_4788_invalid_calldata_size(
         to=query_contract,
         data=calldata,
         value=value,
-        gas_limit=fork.transaction_gas_limit_cap(),
     )
 
     account_expectations = beacon_root_system_call_expectations(
@@ -505,7 +490,6 @@ def test_bal_4788_invalid_calldata_size(
 def test_bal_4788_selfdestruct_to_beacon_root(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
 ) -> None:
     """
     Ensure BAL captures SELFDESTRUCT to beacon root address alongside
@@ -530,11 +514,7 @@ def test_bal_4788_selfdestruct_to_beacon_root(
         balance=contract_balance,
     )
 
-    tx = Transaction(
-        sender=alice,
-        to=selfdestruct_contract,
-        gas_limit=fork.transaction_gas_limit_cap(),
-    )
+    tx = Transaction(sender=alice, to=selfdestruct_contract)
 
     # Build BAL expectations starting with system call
     account_expectations = beacon_root_system_call_expectations(
@@ -571,5 +551,93 @@ def test_bal_4788_selfdestruct_to_beacon_root(
         post={
             alice: Account(nonce=1),
             BEACON_ROOTS_ADDRESS: Account(balance=contract_balance),
+        },
+    )
+
+
+@pytest.mark.pre_alloc_mutable()
+def test_bal_4788_absent_contract(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+) -> None:
+    """
+    Ensure an undeployed beacon root contract is still recorded in the BAL.
+
+    Overriding the genesis contract with an empty account drops it from the
+    pre-state. The block-start system call reads the now-absent account
+    (recording it) and finds no code to run, so the address is in the BAL
+    with an empty AccountChanges. Unreachable on mainnet,
+    consensus-relevant on custom or test chains.
+    """
+    pre[BEACON_ROOTS_ADDRESS] = Account(code=b"", nonce=0, balance=0)
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[],
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations={
+                        BEACON_ROOTS_ADDRESS: BalAccountExpectation.empty(),
+                    }
+                ),
+            )
+        ],
+        post={BEACON_ROOTS_ADDRESS: Account.NONEXISTENT},
+    )
+
+
+@pytest.mark.pre_alloc_mutable()
+def test_bal_4788_noop_writes_are_reads(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+    fork: Fork,
+) -> None:
+    """
+    The beacon roots system call writes both ring-buffer slots with the
+    values they already hold. A write that leaves a slot unchanged is a
+    read, so the contract enters the block access list with two storage
+    reads and no changes.
+    """
+    block_timestamp = 12
+    beacon_root = Hash(0xABCDEF)
+    timestamp_slot, root_slot = get_beacon_root_slots(block_timestamp)
+
+    # EIP-4788 lets a client write these slots without running the
+    # contract; either way an unchanged value must surface as a read.
+    predeploy = Alloc.model_validate(fork.pre_allocation_blockchain())[
+        BEACON_ROOTS_ADDRESS
+    ]
+    assert predeploy is not None
+    pre[BEACON_ROOTS_ADDRESS] = Account(
+        nonce=predeploy.nonce,
+        code=predeploy.code,
+        storage={timestamp_slot: block_timestamp, root_slot: beacon_root},
+    )
+
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[],
+                timestamp=block_timestamp,
+                parent_beacon_block_root=beacon_root,
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations={
+                        BEACON_ROOTS_ADDRESS: BalAccountExpectation(
+                            storage_changes=[],
+                            storage_reads=[timestamp_slot, root_slot],
+                        ),
+                        SYSTEM_ADDRESS: None,
+                    }
+                ),
+            )
+        ],
+        post={
+            BEACON_ROOTS_ADDRESS: Account(
+                storage={
+                    timestamp_slot: block_timestamp,
+                    root_slot: beacon_root,
+                },
+            ),
         },
     )

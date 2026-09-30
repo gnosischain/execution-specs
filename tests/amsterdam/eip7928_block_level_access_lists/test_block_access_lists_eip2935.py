@@ -8,11 +8,11 @@ from execution_testing import (
     BalAccountExpectation,
     BalBalanceChange,
     BalNonceChange,
+    BalStorageChange,
     BalStorageSlot,
     Block,
     BlockAccessListExpectation,
     BlockchainTestFiller,
-    Fork,
     Hash,
     Op,
     Transaction,
@@ -56,7 +56,6 @@ def block_hash_system_call_expectations(block_number: int) -> dict:
 def test_bal_2935_simple(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
 ) -> None:
     """
     Ensure BAL captures history storage writes during system call.
@@ -71,19 +70,9 @@ def test_bal_2935_simple(
 
     transfer_value = 10
 
-    tx1 = Transaction(
-        sender=alice,
-        to=charlie,
-        value=transfer_value,
-        gas_limit=fork.transaction_gas_limit_cap(),
-    )
+    tx1 = Transaction(sender=alice, to=charlie, value=transfer_value)
 
-    tx2 = Transaction(
-        sender=bob,
-        to=charlie,
-        value=transfer_value,
-        gas_limit=fork.transaction_gas_limit_cap(),
-    )
+    tx2 = Transaction(sender=bob, to=charlie, value=transfer_value)
 
     account_expectations = block_hash_system_call_expectations(0)
 
@@ -148,7 +137,17 @@ def test_bal_2935_empty_block(
 @pytest.mark.parametrize(
     "query_block_number,is_valid",
     [
-        pytest.param(0, True, id="valid_block_number"),
+        pytest.param(
+            0,
+            True,
+            id="valid_block_number",
+            marks=pytest.mark.pre_alloc_group(
+                "separate",
+                reason="Queries the genesis hash from the history "
+                "contract and stores it, so the BAL contains the genesis "
+                "hash itself, which changes under any shared genesis.",
+            ),
+        ),
         pytest.param(1042, False, id="block_number_out_of_range"),
     ],
 )
@@ -162,7 +161,6 @@ def test_bal_2935_empty_block(
 def test_bal_2935_query(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
     query_block_number: int,
     is_valid: bool,
     value: int,
@@ -204,7 +202,6 @@ def test_bal_2935_query(
         to=oracle,
         data=Hash(query_block_number),
         value=value,
-        gas_limit=fork.transaction_gas_limit_cap(),
     )
 
     # A setup up block that writes genesis block-hash
@@ -291,7 +288,6 @@ def test_bal_2935_query(
 def test_bal_2935_selfdestruct_to_history_storage(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
 ) -> None:
     """
     Ensure BAL captures SELFDESTRUCT to history storage address alongside
@@ -314,11 +310,7 @@ def test_bal_2935_selfdestruct_to_history_storage(
         balance=contract_balance,
     )
 
-    tx = Transaction(
-        sender=alice,
-        to=selfdestruct_contract,
-        gas_limit=fork.transaction_gas_limit_cap(),
-    )
+    tx = Transaction(sender=alice, to=selfdestruct_contract)
 
     account_expectations = block_hash_system_call_expectations(0)
 
@@ -372,7 +364,6 @@ def test_bal_2935_selfdestruct_to_history_storage(
 def test_bal_2935_invalid_calldata_size(
     pre: Alloc,
     blockchain_test: BlockchainTestFiller,
-    fork: Fork,
     calldata_size: int,
     value: int,
 ) -> None:
@@ -409,13 +400,7 @@ def test_bal_2935_invalid_calldata_size(
     # Pad calldata to requested size
     calldata = b"\x00" * calldata_size
 
-    tx = Transaction(
-        sender=alice,
-        to=oracle,
-        data=calldata,
-        value=value,
-        gas_limit=fork.transaction_gas_limit_cap(),
-    )
+    tx = Transaction(sender=alice, to=oracle, data=calldata, value=value)
 
     # Block 1: Setup block that writes genesis block-hash via system call
     block_1 = Block(
@@ -466,4 +451,100 @@ def test_bal_2935_invalid_calldata_size(
         pre=pre,
         blocks=[block_1, block_2],
         post=post_state,
+    )
+
+
+@pytest.mark.pre_alloc_mutable()
+def test_bal_2935_absent_contract(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+) -> None:
+    """
+    Ensure an undeployed history contract is still recorded in the BAL.
+
+    Overriding the genesis contract with an empty account drops it from the
+    pre-state. The block-start system call reads the now-absent account
+    (recording it) and finds no code to run, so the address is in the BAL
+    with an empty AccountChanges. Unreachable on mainnet,
+    consensus-relevant on custom or test chains.
+    """
+    pre[HISTORY_STORAGE_ADDRESS] = Account(code=b"", nonce=0, balance=0)
+    blockchain_test(
+        pre=pre,
+        blocks=[
+            Block(
+                txs=[],
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations={
+                        HISTORY_STORAGE_ADDRESS: BalAccountExpectation.empty(),
+                    }
+                ),
+            )
+        ],
+        post={HISTORY_STORAGE_ADDRESS: Account.NONEXISTENT},
+    )
+
+
+def test_bal_2935_blockhash_does_not_read_history(
+    pre: Alloc,
+    blockchain_test: BlockchainTestFiller,
+) -> None:
+    """
+    Ensure `BLOCKHASH` leaves no read on the history contract.
+
+    EIP-2935 lets a client answer `BLOCKHASH` out of this contract's
+    storage, but the block access list commits to the reads a block
+    makes, so taking that route would add an entry the spec does not
+    produce. The ancestor queried here is not the parent, whose slot the
+    pre-execution system call writes anyway.
+    """
+    alice = pre.fund_eoa()
+
+    witness_slot = 0
+    # Offset by one so an untouched slot cannot pass for a hash that
+    # came back zero.
+    querier = pre.deploy_contract(
+        code=Op.SSTORE(witness_slot, Op.ADD(Op.ISZERO(Op.BLOCKHASH(0)), 1))
+    )
+
+    parent_number = 1
+    blockchain_test(
+        pre=pre,
+        # The first block seeds the genesis hash the second one asks for.
+        blocks=[
+            Block(txs=[]),
+            Block(
+                txs=[Transaction(sender=alice, to=querier)],
+                expected_block_access_list=BlockAccessListExpectation(
+                    account_expectations={
+                        HISTORY_STORAGE_ADDRESS: BalAccountExpectation(
+                            storage_changes=[
+                                BalStorageSlot(
+                                    slot=parent_number
+                                    % Spec.HISTORY_SERVE_WINDOW,
+                                    validate_any_change=True,
+                                )
+                            ],
+                            # The queried ancestor's slot would land here.
+                            storage_reads=[],
+                        ),
+                        querier: BalAccountExpectation(
+                            storage_changes=[
+                                BalStorageSlot(
+                                    slot=witness_slot,
+                                    slot_changes=[
+                                        BalStorageChange(
+                                            block_access_index=1,
+                                            post_value=1,
+                                        )
+                                    ],
+                                )
+                            ],
+                        ),
+                        SYSTEM_ADDRESS: None,
+                    }
+                ),
+            ),
+        ],
+        post={querier: Account(storage={witness_slot: 1})},
     )

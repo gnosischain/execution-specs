@@ -26,16 +26,11 @@ from execution_testing.forks import (
     Constantinople,
     ConstantinopleFix,
     Fork,
-    Frontier,
     GrayGlacier,
-    Homestead,
-    Istanbul,
     London,
     MuirGlacier,
     Paris,
     Prague,
-    SpuriousDragon,
-    TangerineWhistle,
     get_deployed_forks,
 )
 from execution_testing.specs import Block, BlockchainTest
@@ -51,7 +46,7 @@ from execution_testing.vm import Op
 
 BLOB_COMMITMENT_VERSION_KZG = 1
 
-fork_set = set(get_deployed_forks())
+fork_set = {fork for fork in get_deployed_forks() if fork >= ConstantinopleFix}
 fork_set.add(Prague)
 
 
@@ -83,23 +78,15 @@ def test_t8n_support(fork: Fork, installed_t8n: TransitionTool) -> None:
         pytest.skip("EvmOneTransitionTool skipped for now")
     if fork in [MuirGlacier, ArrowGlacier, GrayGlacier]:
         return
-    if isinstance(installed_t8n, ExecutionSpecsTransitionTool) and fork in [
-        Frontier,
-        Homestead,
-        TangerineWhistle,
-        SpuriousDragon,
-        Byzantium,
-        Constantinople,
-        ConstantinopleFix,
-        Istanbul,
-        Berlin,
-        London,
-    ]:
+    if isinstance(
+        installed_t8n, (ExecutionSpecsTransitionTool, EvmOneTransitionTool)
+    ) and fork in [Constantinople]:
         return
     env = Environment()
     sender = TestAddress
     storage_1 = Storage()
     storage_2 = Storage()
+    difficulty_reference = (1 << 128) - 2 if fork < Paris else 0x20000
 
     code_account_1 = Address(0x1001)
     code_account_2 = Address(0x1002)
@@ -119,8 +106,8 @@ def test_t8n_support(fork: Fork, installed_t8n: TransitionTool) -> None:
                         1 if fork < Paris else 0, "difficulty_1_is_near_20000"
                     ),
                     Op.AND(
-                        Op.GT(Op.PREVRANDAO(), 0x19990),
-                        Op.LT(Op.PREVRANDAO(), 0x20100),
+                        Op.GT(Op.PREVRANDAO(), difficulty_reference - 1),
+                        Op.LT(Op.PREVRANDAO(), difficulty_reference + 1),
                     ),
                 )
             ),
@@ -134,8 +121,8 @@ def test_t8n_support(fork: Fork, installed_t8n: TransitionTool) -> None:
                         1 if fork < Paris else 0, "difficulty_2_is_near_20000"
                     ),
                     Op.AND(
-                        Op.GT(Op.PREVRANDAO(), 0x19990),
-                        Op.LT(Op.PREVRANDAO(), 0x20100),
+                        Op.GT(Op.PREVRANDAO(), difficulty_reference - 1),
+                        Op.LT(Op.PREVRANDAO(), difficulty_reference + 1),
                     ),
                 )
             ),

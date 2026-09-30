@@ -166,7 +166,16 @@ def scenarios(
         ProgramReturnDataSize(),
         ProgramReturnDataCopy(),
         ProgramExtCodehash(),
-        ProgramBlockhash(),
+        pytest.param(
+            ProgramBlockhash(),
+            marks=pytest.mark.pre_alloc_group(
+                "separate",
+                reason="The program feeds BLOCKHASH(0), the genesis hash, "
+                "to the gas-hash contract, so gas usage depends on the "
+                "exact genesis pre-allocation; sharing a genesis with any "
+                "other test changes the execution.",
+            ),
+        ),
         ProgramCoinbase(),
         ProgramTimestamp(),
         ProgramNumber(),
@@ -224,25 +233,24 @@ def test_scenarios(
         tx_max_gas = 1_000_000
         if test_program.id == ProgramInvalidOpcode().id:
             tx_max_gas = 10_000_000 if fork.is_eip_enabled(8037) else 7_000_000
+        if (
+            test_program.id == ProgramAllFrontierOpcodes().id
+            and fork.is_eip_enabled(8037)
+        ):
+            tx_max_gas = 10_000_000
         if scenario.category == "double_call_combinations":
             tx_max_gas *= 2
 
         tx_gasprice: int = 10
-        block_number = len(blocks) + 1
-        block_fee_recipient = (
-            Environment(number=block_number)
-            .set_fork_requirements(fork)
-            .fee_recipient
-        )
         exec_env = ExecutionEnvironment(
             fork=fork,
             origin=tx_origin,
             gasprice=tx_gasprice,
             timestamp=tx_env.timestamp,  # we can't know timestamp before head,
             # use gas hash
-            number=block_number,
+            number=len(blocks) + 1,
             gaslimit=tx_env.gas_limit,
-            coinbase=block_fee_recipient,
+            coinbase=tx_env.fee_recipient,
         )
 
         def make_result(

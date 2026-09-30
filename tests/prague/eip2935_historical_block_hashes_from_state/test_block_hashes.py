@@ -104,10 +104,6 @@ def generate_block_check_code(
     return code
 
 
-# TODO: Test at transition: `BLOCKHASH_OLD_WINDOW + 1` blocks before transition
-# TODO: Test post fork: `HISTORY_SERVE_WINDOW` + 1 blocks after transition
-
-
 @pytest.mark.parametrize(
     "blocks_before_fork, blocks_after_fork",
     [
@@ -136,7 +132,7 @@ def test_block_hashes_history_at_transition(
     blocks: List[Block] = []
     assert blocks_before_fork >= 1 and blocks_before_fork < Spec.FORK_TIMESTAMP
 
-    sender = pre.fund_eoa(10_000_000_000)
+    sender = pre.fund_eoa()
     post: Dict[Address, Account] = {}
     current_block_number = 1
     fork_block_number = current_block_number + blocks_before_fork
@@ -176,7 +172,6 @@ def test_block_hashes_history_at_transition(
             txs.append(
                 Transaction(
                     to=check_blocks_before_fork_address,
-                    gas_limit=10_000_000,
                     sender=sender,
                 )
             )
@@ -208,7 +203,6 @@ def test_block_hashes_history_at_transition(
         txs.append(
             Transaction(
                 to=check_blocks_after_fork_address,
-                gas_limit=10_000_000,
                 sender=sender,
             )
         )
@@ -258,7 +252,7 @@ def test_block_hashes_history(
     """
     blocks: List[Block] = []
 
-    sender = pre.fund_eoa(10_000_000_000)
+    sender = pre.fund_eoa()
     post: Dict[Address, Account] = {}
     current_block_number = 1
     fork_block_number = 0  # We fork at genesis
@@ -328,7 +322,6 @@ def test_block_hashes_history(
     txs.append(
         Transaction(
             to=check_blocks_after_fork_address,
-            gas_limit=10_000_000,
             sender=sender,
         )
     )
@@ -383,7 +376,6 @@ def test_block_hashes_call_opcodes(
             txs=[
                 Transaction(
                     to=contract_address,
-                    gas_limit=10_000_000,
                     sender=pre.fund_eoa(),
                 )
             ]
@@ -452,7 +444,6 @@ def test_invalid_history_contract_calls(
     txs = [
         Transaction(
             to=check_contract_address,
-            gas_limit=10_000_000,
             sender=pre.fund_eoa(),
         )
     ]
@@ -515,7 +506,6 @@ def test_invalid_history_contract_calls_input_size(
     txs = [
         Transaction(
             to=check_contract_address,
-            gas_limit=10_000_000,
             sender=pre.fund_eoa(),
         )
     ]

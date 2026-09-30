@@ -5,9 +5,8 @@ from typing import Callable
 
 from _pytest.config.argparsing import Parser
 from _pytest.nodes import Item
+from execution_testing.evm_tools.t8n import ForkCache
 from pytest import Collector, Config, Session, fixture
-
-from ethereum_spec_tools.evm_tools.t8n import ForkCache
 
 from . import FORKS
 from .helpers import FixturesFile, FixtureTestItem
@@ -94,6 +93,20 @@ def pytest_addoption(parser: Parser) -> None:
         help="Path to a file containing test ids, one per line",
     )
 
+    parser.addoption(
+        "--allow-post-state-hash",
+        dest="allow_post_state_hash",
+        default=False,
+        action="store_const",
+        const=True,
+        help=(
+            "Verify blockchain fixtures that only include `postStateHash` "
+            "(not the full `postState` dict). The EELS state transition's "
+            "internal state-root check plus the `lastblockhash` assertion "
+            "are cryptographically sufficient."
+        ),
+    )
+
 
 def pytest_configure(config: Config) -> None:
     """
@@ -105,10 +118,11 @@ def pytest_configure(config: Config) -> None:
         ethereum_optimized.monkey_patch(None)
 
     if config.getoption("evm_trace"):
-        import ethereum.trace
-        from ethereum_spec_tools.evm_tools.t8n.evm_trace.eip3155 import (
+        from execution_testing.evm_tools.t8n.evm_trace.eip3155 import (
             Eip3155Tracer,
         )
+
+        import ethereum.trace
 
         # Replace the function in the module
         ethereum.trace.set_evm_trace(Eip3155Tracer())

@@ -3,7 +3,7 @@ State Tracking for Block Execution.
 
 Track state changes on top of a read-only ``PreState``.  At block end,
 accumulated diffs feed into
-``PreState.compute_state_root_and_trie_changes()``.
+``PreState.compute_state_root()``.
 
 .. contents:: Table of Contents
     :backlinks: none
@@ -19,7 +19,7 @@ within a single transaction and supports copy-on-write rollback.
 """
 
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Optional, Set, Tuple
+from typing import Callable, Dict, Optional, Set, Tuple, final
 
 from ethereum_types.bytes import Bytes, Bytes32
 from ethereum_types.frozen import modify
@@ -36,6 +36,7 @@ from ethereum.state import (
 )
 
 
+@final
 @dataclass
 class BlockState:
     """
@@ -59,6 +60,7 @@ class BlockState:
     storage_clears: Set[Address] = field(default_factory=set)
 
 
+@final
 @dataclass
 class TransactionState:
     """
@@ -274,56 +276,15 @@ def account_exists(tx_state: TransactionState, address: Address) -> bool:
     return get_account_optional(tx_state, address) is not None
 
 
-def account_has_code_or_nonce(
-    tx_state: TransactionState, address: Address
-) -> bool:
+def account_deployable(tx_state: TransactionState, address: Address) -> bool:
     """
-    Check if an account has non-zero nonce or non-empty code.
-
-    Parameters
-    ----------
-    tx_state :
-        The transaction state.
-    address :
-        Address of the account that needs to be checked.
-
-    Returns
-    -------
-    has_code_or_nonce : ``bool``
-        True if the account has non-zero nonce or non-empty code,
-        False otherwise.
-
+    Check if an account's code can be written to.
     """
     account = get_account(tx_state, address)
-    return account.nonce != Uint(0) or account.code_hash != EMPTY_CODE_HASH
-
-
-def account_has_storage(tx_state: TransactionState, address: Address) -> bool:
-    """
-    Check if an account has storage.
-
-    Parameters
-    ----------
-    tx_state :
-        The transaction state.
-    address :
-        Address of the account that needs to be checked.
-
-    Returns
-    -------
-    has_storage : ``bool``
-        True if the account has storage, False otherwise.
-
-    """
-    if tx_state.storage_writes.get(address):
-        return True
-    if address in tx_state.storage_clears:
+    if account.nonce != Uint(0) or account.code_hash != EMPTY_CODE_HASH:
         return False
-    if tx_state.parent.storage_writes.get(address):
-        return True
-    if address in tx_state.parent.storage_clears:
-        return False
-    return tx_state.parent.pre_state.account_has_storage(address)
+
+    return True
 
 
 def account_exists_and_is_empty(
